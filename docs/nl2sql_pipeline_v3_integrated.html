@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>统一架构 - NL2SQL多步骤查询处理（整合版v3）</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-bottom: 30px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 5px;
+            flex-wrap: wrap;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .legend-box {
+            width: 40px;
+            height: 30px;
+            border-radius: 5px;
+            border: 2px solid #333;
+        }
+        .agent-box { background-color: #ffcccc; }
+        .tool-box { background-color: #ccffcc; }
+        .decision-box { background-color: #ffffcc; }
+        .subgraph-box { background-color: #e1bee7; }
+        .mermaid {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        .section-title {
+            background: #2196F3;
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            font-size: 20px;
+            font-weight: bold;
+        }
+        .notes {
+            margin-top: 30px;
+            padding: 20px;
+            background: #e3f2fd;
+            border-left: 4px solid #2196F3;
+            border-radius: 5px;
+        }
+        .notes h3 {
+            margin-top: 0;
+            color: #1976D2;
+        }
+        .notes ul {
+            margin: 10px 0;
+        }
+        .notes li {
+            margin: 8px 0;
+        }
+        .highlight {
+            background: #fff3cd;
+            padding: 15px;
+            border-left: 4px solid #ffc107;
+            margin-top: 20px;
+            border-radius: 5px;
+        }
+        .architecture-summary {
+            background: #e8f5e9;
+            border-left: 4px solid #4caf50;
+            padding: 20px;
+            margin-top: 20px;
+            border-radius: 5px;
+        }
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        .comparison-table th {
+            background: #2196F3;
+            color: white;
+            padding: 12px;
+            text-align: left;
+        }
+        .comparison-table td {
+            padding: 10px;
+            border: 1px solid #ddd;
+        }
+        .comparison-table tr:nth-child(even) {
+            background: #f5f5f5;
+        }
+        .new-feature {
+            background: #c8e6c9;
+            padding: 15px;
+            border-left: 4px solid #4caf50;
+            margin-top: 20px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏗️ 统一架构 - NL2SQL多步骤查询处理（整合版v3）</h1>
+        <div class="subtitle">新增：数据库范围判断 + 聊天Agent路由 + SQL执行失败Fallback</div>
+        
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-box agent-box"></div>
+                <span><strong>Agent</strong> (调用LLM)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-box tool-box"></div>
+                <span><strong>Tool</strong> (确定性函数)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-box decision-box"></div>
+                <span><strong>决策点</strong></span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-box subgraph-box"></div>
+                <span><strong>子图</strong> (可复用的子流程)</span>
+            </div>
+        </div>
+
+        <div class="section-title">📊 主流程图 - 整合数据库范围判断和聊天路由</div>
+
+        <div class="mermaid">
+graph TB
+    Start([👤 用户输入查询]) --> DiagnoseAgent
+    
+    DiagnoseAgent[🧠 诊断和拆解Agent<br/><b>🆕 第1步: 判断数据库范围</b><br/><b>第2步: 分析并拆解查询</b><br/>输出JSON执行计划<br/><b>Agent 1</b>]
+    style DiagnoseAgent fill:#ffcccc,stroke:#ff6666,stroke-width:3px
+    
+    DiagnoseAgent --> RouteDecision{🔀 路由判断<br/>in_database_scope?}
+    style RouteDecision fill:#ffffcc,stroke:#ffcc00,stroke-width:2px
+    
+    RouteDecision -->|❌ 不在DB范围<br/>route_to=chat| ChatAgent
+    RouteDecision -->|✅ 在DB范围<br/>route_to=sql| ExecutionPlan
+    
+    ExecutionPlan[📋 执行计划Tool<br/>解析执行计划<br/>初始化state<br/>Tool]
+    style ExecutionPlan fill:#ccffcc,stroke:#66cc66,stroke-width:2px
+    
+    ExecutionPlan --> FindBatch[🔍 查找当前批次Tool<br/>找出依赖已满足的<br/>子查询<br/>Tool]
+    style FindBatch fill:#ccffcc,stroke:#66cc66,stroke-width:2px
+    
+    FindBatch --> HasQueries{有待处理<br/>子查询?}
+    style HasQueries fill:#ffffcc,stroke:#ffcc00,stroke-width:2px
+    
+    HasQueries -->|否<br/>全部完成| AggregateResults
+    HasQueries -->|是<br/>处理当前批次| GenerateBatch
+    
+    GenerateBatch[📝 批次SQL生成<br/><b>集中式生成</b><br/>为当前批次每个子查询<br/>调用SQL生成子图<br/>收集所有SQL]
+    style GenerateBatch fill:#e1bee7,stroke:#9c27b0,stroke-width:3px
+    
+    GenerateBatch --> BatchSuccess{批次SQL<br/>全部成功?}
+    style BatchSuccess fill:#ffffcc,stroke:#ffcc00,stroke-width:2px
+    
+    BatchSuccess -->|❌ 任何一个失败<br/>超过3次重试| ChatFallback[💬 聊天Agent降级<br/>SQL生成失败<br/>尝试自然语言回答<br/><b>Agent 4</b>]
+    style ChatFallback fill:#ffcccc,stroke:#ff6666,stroke-width:3px
+    
+    BatchSuccess -->|✅ 全部成功| ExecuteBatch
+    
+    ExecuteBatch[⚡ 并行执行批次SQL<br/>解析SQL JSON<br/>并发执行所有SQL<br/>Tool]
+    style ExecuteBatch fill:#ccffcc,stroke:#66cc66,stroke-width:2px
+    
+    ExecuteBatch --> ExecErrorCheck{执行<br/>成功?}
+    style ExecErrorCheck fill:#ffffcc,stroke:#ffcc00,stroke-width:2px
+    
+    ExecErrorCheck -->|❌ 失败| ErrorTypeCheck{🆕 错误<br/>类型?}
+    style ErrorTypeCheck fill:#ffffcc,stroke:#ffcc00,stroke-width:2px
+    
+    ErrorTypeCheck -->|🔵 可恢复<br/>表/字段不存在<br/>数据超出范围| ChatFallback2[💬 聊天Agent Fallback<br/>诊断Agent可能判断错误<br/>尝试用其他方式回答<br/><b>Agent 4</b>]
+    style ChatFallback2 fill:#ffcccc,stroke:#ff6666,stroke-width:3px
+    
+    ErrorTypeCheck -->|🔴 不可恢复<br/>连接失败/超时<br/>权限不足| SystemError([⚠️ 返回系统错误<br/>数据库连接失败/<br/>查询超时等<br/><b>不降级</b>])
+    style SystemError fill:#ffcccc,stroke:#ff0000,stroke-width:3px
+    
+    ExecErrorCheck -->|✅ 成功| StoreResults[📦 存储结果Tool<br/>绑定query_id<br/>存储到state<br/>Tool]
+    style StoreResults fill:#ccffcc,stroke:#66cc66,stroke-width:2px
+    
+    StoreResults --> FindBatch
+    
+    ChatFallback --> Return
+    ChatFallback2 --> Return
+    
+    AggregateResults[📊 结果聚合Tool<br/>根据执行计划<br/>query_id匹配<br/>JOIN/UNION/自定义<br/>Tool]
+    style AggregateResults fill:#ccffcc,stroke:#66cc66,stroke-width:2px
+    
+    AggregateResults --> SummaryAgent[📝 Summary Agent<br/>格式化结果<br/>生成用户友好摘要<br/><b>Agent 5</b>]
+    style SummaryAgent fill:#ffcccc,stroke:#ff6666,stroke-width:3px
+    
+    SummaryAgent --> Return
+    SystemError --> End
+    
+    ChatAgent[💬 聊天Agent<br/><b>🆕 配备search_tool</b><br/>处理非DB范围问题<br/>自主决定是否搜索<br/><b>Agent 4</b>]
+    style ChatAgent fill:#ffcccc,stroke:#ff6666,stroke-width:3px
+    
+    ChatAgent --> Return
+    
+    Return([✅ 返回答案给用户])
+    End([结束])
+    
+    style Return fill:#90EE90,stroke:#228B22,stroke-width:3px
+    style End fill:#ddd,stroke:#999,stroke-width:2px
+        </div>
+
+        <div class="section-title">🔧 SQL生成子图 - 可复用的独立流程（未变更）</div>
+
+        <div class="mermaid">
+graph TB
+    SubStart([子图输入<br/>query文本<br/>query_id<br/>dependencies_results]) --> SchemaRetrieval
+    
+    SchemaRetrieval[🔍 Schema检索Tool<br/>1.向量检索相关表/列<br/>2.图检索JOIN路径<br/>3.历史成功SQL<br/>Tool]
+    style SchemaRetrieval fill:#ccffcc,stroke:#66cc66,stroke-width:2px
+    
+    SchemaRetrieval --> SQLGenAgent[🔧 SQL生成Agent<br/>基于Schema上下文<br/>基于依赖结果数据<br/>生成单条SQL<br/><b>Agent 2</b>]
+    style SQLGenAgent fill:#ffcccc,stroke:#ff6666,stroke-width:3px
+    
+    SQLGenAgent --> Validation[✅ 三层验证Tool<br/><b>第1层: 语法检查</b><br/><b>第2层: 安全验证</b><br/><b>第3层: 语义验证</b><br/>Tool]
+    style Validation fill:#ccffcc,stroke:#66cc66,stroke-width:2px
+    
+    Validation --> ValidCheck{验证<br/>通过?}
+    style ValidCheck fill:#ffffcc,stroke:#ffcc00,stroke-width:2px
+    
+    ValidCheck -->|✅ 通过| SubSuccess([子图输出<br/>validated_sql])
+    style SubSuccess fill:#90EE90,stroke:#228B22,stroke-width:3px
+    
+    ValidCheck -->|❌ 失败| IterCheck{迭代次数<br/><3?}
+    style IterCheck fill:#ffffcc,stroke:#ffcc00,stroke-width:2px
+    
+    IterCheck -->|是<br/>继续重试| SQLGenAgent
+    IterCheck -->|否<br/>超过3次| SubFail([子图失败<br/>返回错误])
+    style SubFail fill:#ffcccc,stroke:#ff0000,stroke-width:3px
+        </div>
+
+        <div class="new-feature">
+            <h3>🆕 本版本新增功能</h3>
+            <table class="comparison-table">
+                <tr>
+                    <th style="width:25%">新增功能</th>
+                    <th style="width:75%">说明</th>
+                </tr>
+                <tr>
+                    <td><strong>数据库范围判断</strong></td>
+                    <td>
+                        诊断和拆解Agent在拆解前先判断问题是否在数据库范围内<br/>
+                        <b>不在范围</b> → 直接路由到聊天Agent<br/>
+                        <b>在范围内</b> → 继续原有的SQL流程
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>聊天Agent路由</strong></td>
+                    <td>
+                        增加聊天Agent分支，配备search_tool<br/>
+                        处理：概念解释、天气查询、新闻搜索等非DB问题<br/>
+                        Agent自主决定是否需要调用search_tool
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>SQL执行失败Fallback</strong></td>
+                    <td>
+                        SQL执行失败后，根据错误类型决定是否fallback：<br/>
+                        <b>🔵 可恢复错误</b>（表不存在、字段不存在、数据超出范围）→ Fallback到聊天Agent<br/>
+                        <b>🔴 不可恢复错误</b>（连接失败、超时、权限）→ 返回系统错误信息（不降级）
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="architecture-summary">
+            <h3>🎯 完整架构说明</h3>
+            
+            <h4>📌 5个Agent（调用LLM）：</h4>
+            <table class="comparison-table">
+                <tr>
+                    <th>Agent</th>
+                    <th>职责</th>
+                    <th>输入</th>
+                    <th>输出</th>
+                </tr>
+                <tr>
+                    <td><strong>Agent 1</strong><br/>诊断和拆解Agent</td>
+                    <td>
+                        <b>🆕 第1步：</b>判断是否在数据库范围内<br/>
+                        <b>第2步：</b>分析查询复杂度并拆解为子查询
+                    </td>
+                    <td>用户原始查询</td>
+                    <td>JSON执行计划<br/>（包含route_to和queries）</td>
+                </tr>
+                <tr>
+                    <td><strong>Agent 2</strong><br/>SQL生成Agent</td>
+                    <td>为单个子查询生成SQL<br/>（在子图内，可能被调用N次）</td>
+                    <td>子查询文本<br/>Schema上下文<br/>依赖结果</td>
+                    <td>单条SQL语句</td>
+                </tr>
+                <tr>
+                    <td><strong>Agent 3</strong><br/>（预留）</td>
+                    <td>未来可用于更复杂的场景</td>
+                    <td>-</td>
+                    <td>-</td>
+                </tr>
+                <tr>
+                    <td><strong>Agent 4</strong><br/>聊天Agent<br/>🆕</td>
+                    <td>
+                        处理非DB范围问题<br/>
+                        配备search_tool，自主决定是否搜索<br/>
+                        <b>三个入口：</b><br/>
+                        1. 诊断Agent判断不在DB范围<br/>
+                        2. SQL生成失败降级<br/>
+                        3. SQL执行失败（可恢复错误）fallback
+                    </td>
+                    <td>用户查询</td>
+                    <td>自然语言回答</td>
+                </tr>
+                <tr>
+                    <td><strong>Agent 5</strong><br/>Summary Agent</td>
+                    <td>格式化SQL执行结果<br/>生成用户友好的摘要</td>
+                    <td>聚合后的查询结果</td>
+                    <td>格式化的答案</td>
+                </tr>
+            </table>
+
+            <h4>📌 核心Tool（不调用LLM）：</h4>
+            <ul>
+                <li><strong>执行计划Tool：</strong>解析诊断Agent输出的JSON，初始化state</li>
+                <li><strong>查找当前批次Tool：</strong>根据依赖关系，找出可以并行执行的子查询</li>
+                <li><strong>Schema检索Tool：</strong>向量检索+图检索，获取相关表、列、JOIN路径</li>
+                <li><strong>三层验证Tool：</strong>语法、安全、语义三层验证SQL</li>
+                <li><strong>并行执行批次SQL Tool：</strong>并发执行当前批次的所有SQL</li>
+                <li><strong>存储结果Tool：</strong>将执行结果绑定到query_id，存储到state</li>
+                <li><strong>结果聚合Tool：</strong>根据执行计划，对结果进行JOIN/UNION/自定义聚合</li>
+            </ul>
+        </div>
+
+        <div class="notes">
+            <h3>📋 完整执行流程</h3>
+            
+            <h4>🔹 主流程：</h4>
+            <ol>
+                <li><strong>用户输入查询</strong> → 进入诊断和拆解Agent</li>
+                
+                <li><strong>诊断和拆解Agent（🆕 增强）：</strong>
+                    <ul>
+                        <li><b>步骤1：判断数据库范围</b>
+                            <ul>
+                                <li>问题在DB范围内 → 输出 route_to="sql"，继续步骤2</li>
+                                <li>问题不在DB范围内 → 输出 route_to="chat"，直接路由到聊天Agent</li>
+                            </ul>
+                        </li>
+                        <li><b>步骤2：分析并拆解查询</b>（仅当route_to="sql"时）
+                            <ul>
+                                <li>普通查询 → 1个子查询</li>
+                                <li>复杂查询 → 多个子查询（带依赖关系）</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </li>
+                
+                <li><strong>路由决策：</strong>
+                    <ul>
+                        <li>route_to="chat" → 聊天Agent（配备search_tool）</li>
+                        <li>route_to="sql" → SQL流程</li>
+                    </ul>
+                </li>
+                
+                <li><strong>SQL流程（route_to="sql"时）：</strong>
+                    <ul>
+                        <li>解析执行计划 → 初始化state</li>
+                        <li>循环处理批次：
+                            <ul>
+                                <li>查找当前批次（依赖已满足的子查询）</li>
+                                <li>批次SQL生成（调用SQL生成子图N次）</li>
+                                <li>验证：所有SQL都成功？
+                                    <ul>
+                                        <li>❌ 任何一个失败（超过3次重试）→ <b>降级到聊天Agent</b></li>
+                                        <li>✅ 全部成功 → 并行执行批次SQL</li>
+                                    </ul>
+                                </li>
+                                <li><b>🆕 SQL执行结果检查：</b>
+                                    <ul>
+                                        <li>✅ 成功 → 存储结果，继续下一批次</li>
+                                        <li>❌ 失败 → 判断错误类型：
+                                            <ul>
+                                                <li><b>🔵 可恢复错误</b>（表不存在、字段不存在、数据超出范围）→ <b>Fallback到聊天Agent</b></li>
+                                                <li><b>🔴 不可恢复错误</b>（连接失败、超时、权限）→ <b>返回系统错误</b>（不降级）</li>
+                                            </ul>
+                                        </li>
+                                    </ul>
+                                </li>
+                            </ul>
+                        </li>
+                        <li>所有批次完成 → 结果聚合 → Summary Agent → 返回答案</li>
+                    </ul>
+                </li>
+                
+                <li><strong>🆕 聊天Agent流程：</strong>
+                    <ul>
+                        <li>聊天Agent分析问题</li>
+                        <li>自主决定：
+                            <ul>
+                                <li>需要搜索 → 调用search_tool → 基于结果回答</li>
+                                <li>不需要搜索 → 直接基于知识回答</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </li>
+            </ol>
+        </div>
+
+        <div class="notes" style="background: #e1f5fe; border-left-color: #0288d1;">
+            <h3>💡 诊断和拆解Agent - Prompt示例</h3>
+            <pre style="background:#f5f5f5;padding:15px;border-radius:5px;overflow-x:auto;">
+你是一个查询诊断和拆解Agent。
+
+【第一步：判断数据库范围】
+
+<b>数据库覆盖范围：</b>
+- 电商订单数据（2020年1月 - 2025年1月）
+- 涵盖内容：用户信息、商品信息、订单信息、销售数据、库存数据
+- 不包括：天气信息、新闻资讯、概念解释、行业分析、宏观经济、未来预测
+
+<b>判断标准：</b>
+1. 如果问题明确涉及上述数据范围 → 在数据库范围内
+2. 如果问题明确不涉及上述数据（如天气、新闻、概念解释）→ 不在数据库范围内
+3. 如果边界模糊但可能相关（如"2030年销售预测"需要历史数据）→ 在数据库范围内（先尝试，失败会自动处理）
+
+【第二步：分析并拆解查询】（仅当在数据库范围内时执行）
+
+分析查询复杂度：
+- <b>普通查询：</b>单个聚合、简单筛选 → 输出1个子查询
+- <b>复杂查询：</b>多时间段对比、多维度分析 → 拆分为多个子查询
+
+<b>拆分原则：</b>
+- 每个子查询应该是独立的、可单独执行的SQL查询
+- 明确依赖关系：如果子查询需要使用其他子查询的结果，在dependencies中标注
+- 按批次执行：无依赖的可以并行执行
+
+【输出格式】
+
+<b>情况1：不在数据库范围内</b>
+{
+  "in_database_scope": false,
+  "route_to": "chat",
+  "reason": "问题涉及天气信息，不在电商数据库范围内"
+}
+
+<b>情况2：在数据库范围内 - 普通查询</b>
+{
+  "in_database_scope": true,
+  "route_to": "sql",
+  "queries": [
+    {
+      "query_id": "q1",
+      "query": "查询2024年总销售额",
+      "dependencies": []
+    }
+  ]
+}
+
+<b>情况3：在数据库范围内 - 复杂查询</b>
+{
+  "in_database_scope": true,
+  "route_to": "sql",
+  "queries": [
+    {
+      "query_id": "q1",
+      "query": "查询2023年各季度销售额",
+      "dependencies": []
+    },
+    {
+      "query_id": "q2",
+      "query": "查询2024年各季度销售额",
+      "dependencies": []
+    },
+    {
+      "query_id": "q3",
+      "query": "基于q1和q2的结果，计算同比增长率",
+      "dependencies": ["q1", "q2"]
+    }
+  ]
+}
+
+【边界案例示例】
+
+输入："今天天气怎么样？"
+输出：{"in_database_scope": false, "route_to": "chat", "reason": "天气查询不在电商数据库范围"}
+
+输入："什么是转化率？"
+输出：{"in_database_scope": false, "route_to": "chat", "reason": "概念解释，不需要查询数据库"}
+
+输入："去年销售额是多少？"
+输出：{"in_database_scope": true, "route_to": "sql", "queries": [...]}
+
+输入："2030年销售额预测"
+输出：{"in_database_scope": true, "route_to": "sql", "queries": [...]}
+（注：虽然2030年超出范围，但可能需要历史数据，先尝试SQL，执行失败会自动fallback）
+
+输入："对比2023和2024年Q1销售额，计算增长率"
+输出：{"in_database_scope": true, "route_to": "sql", "queries": [q1, q2, q3]}
+            </pre>
+        </div>
+
+        <div class="notes" style="background: #f3e5f5; border-left-color: #9c27b0;">
+            <h3>💡 聊天Agent - 配备search_tool（ReAct模式）</h3>
+            <pre style="background:#f5f5f5;padding:15px;border-radius:5px;overflow-x:auto;">
+from langgraph.prebuilt import create_react_agent
+from langchain_core.tools import tool
+from duckduckgo_search import DDGS
+
+@tool
+def search_tool(query: str) -> str:
+    """搜索网络获取最新信息"""
+    with DDGS() as ddgs:
+        results = list(ddgs.text(query, max_results=3))
+    return format_results(results)
+
+# 创建聊天Agent（配备search_tool）
+chat_agent = create_react_agent(
+    model=ChatOpenAI(model="deepseek-chat", base_url="https://api.deepseek.com"),
+    tools=[search_tool],  # 给Agent配备工具
+    state_modifier="""
+    你是一个友好的助手，可以回答各种问题。
+    
+    当你需要最新信息、实时数据或不确定的信息时，可以使用search_tool搜索网络。
+    
+    自主决策示例：
+    - "什么是机器学习？" → 不搜索（知识库有答案）
+    - "今天北京天气？" → 调用search_tool
+    - "最新AI新闻？" → 调用search_tool
+    - "解释量子计算" → 不搜索（概念解释）
+    - "SpaceX最新发射" → 调用search_tool（实时事件）
+    """
+)
+
+# Agent自主决策，你只需要调用：
+response = chat_agent.invoke({"messages": [user_query]})
+            </pre>
+        </div>
+
+        <div class="notes" style="background: #ffebee; border-left-color: #f44336;">
+            <h3>⚠️ 完整错误处理策略</h3>
+            
+            <h4>1️⃣ SQL生成/验证失败（在子图内）：</h4>
+            <ul>
+                <li><strong>单个子查询失败：</strong>
+                    <ul>
+                        <li>子图内部最多重试3次</li>
+                        <li>超过3次 → 子图返回失败</li>
+                    </ul>
+                </li>
+                <li><strong>批次SQL生成失败：</strong>
+                    <ul>
+                        <li>任何一个子查询的SQL生成失败 → 整个批次失败</li>
+                        <li>整个查询失败 → <b>降级到聊天Agent</b></li>
+                    </ul>
+                </li>
+            </ul>
+            
+            <h4>2️⃣ SQL执行失败（🆕 区分错误类型）：</h4>
+            <table class="comparison-table">
+                <tr>
+                    <th>错误类型</th>
+                    <th>具体情况</th>
+                    <th>处理方式</th>
+                    <th>原因</th>
+                </tr>
+                <tr>
+                    <td><strong>🔵 可恢复错误</strong></td>
+                    <td>
+                        • 表不存在<br/>
+                        • 字段不存在<br/>
+                        • 数据超出范围<br/>
+                        • 语义错误（运行时才发现）
+                    </td>
+                    <td><b>✅ Fallback到聊天Agent</b></td>
+                    <td>
+                        可能是诊断Agent判断错误<br/>
+                        或SQL生成时信息不足<br/>
+                        聊天Agent可以尝试其他方式回答
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>🔴 不可恢复错误</strong></td>
+                    <td>
+                        • 数据库连接失败<br/>
+                        • 查询超时<br/>
+                        • 权限不足（运行时）<br/>
+                        • 资源不足
+                    </td>
+                    <td><b>❌ 返回系统错误信息<br/>（不降级）</b></td>
+                    <td>
+                        这是系统/基础设施问题<br/>
+                        聊天Agent无法解决<br/>
+                        需要运维人员介入
+                    </td>
+                </tr>
+            </table>
+
+            <h4>3️⃣ 错误判断逻辑示例：</h4>
+            <pre style="background:#f5f5f5;padding:15px;border-radius:5px;overflow-x:auto;">
+def classify_sql_execution_error(error):
+    """分类SQL执行错误"""
+    
+    # 🔵 可恢复错误 - fallback到聊天Agent
+    recoverable_errors = [
+        "table does not exist",
+        "column does not exist", 
+        "no such table",
+        "no such column",
+        "unknown table",
+        "unknown column",
+        "out of range",
+        "invalid date range"
+    ]
+    
+    # 🔴 不可恢复错误 - 返回系统错误
+    system_errors = [
+        "connection refused",
+        "connection timeout",
+        "access denied",
+        "permission denied",
+        "out of memory",
+        "too many connections",
+        "database is locked",
+        "execution timeout"
+    ]
+    
+    error_message = str(error).lower()
+    
+    for pattern in recoverable_errors:
+        if pattern in error_message:
+            return "recoverable"  # Fallback到聊天Agent
+    
+    for pattern in system_errors:
+        if pattern in error_message:
+            return "system"  # 返回系统错误
+    
+    # 默认作为系统错误处理（保守策略）
+    return "system"
+            </pre>
+        </div>
+
+        <div class="notes" style="background: #fff3e0; border-left-color: #ff9800;">
+            <h3>🎯 设计优势</h3>
+            <table class="comparison-table">
+                <tr>
+                    <th style="width:25%">特性</th>
+                    <th style="width:75%">说明</th>
+                </tr>
+                <tr>
+                    <td><strong>智能路由</strong></td>
+                    <td>诊断Agent在开始就判断问题类型，避免不必要的SQL生成</td>
+                </tr>
+                <tr>
+                    <td><strong>统一简洁</strong></td>
+                    <td>所有DB范围内的查询走同一流程，不区分普通/复杂</td>
+                </tr>
+                <tr>
+                    <td><strong>高度复用</strong></td>
+                    <td>SQL生成子图可复用，每个子查询都调用相同逻辑</td>
+                </tr>
+                <tr>
+                    <td><strong>优雅降级</strong></td>
+                    <td>SQL生成失败 → 聊天Agent<br/>SQL执行失败（可恢复）→ 聊天Agent</td>
+                </tr>
+                <tr>
+                    <td><strong>错误透明</strong></td>
+                    <td>SQL执行失败（不可恢复）→ 明确系统错误，不误导用户</td>
+                </tr>
+                <tr>
+                    <td><strong>Agent自主性</strong></td>
+                    <td>聊天Agent自己决定何时搜索，符合ReAct理念</td>
+                </tr>
+                <tr>
+                    <td><strong>容错可控</strong></td>
+                    <td>集中式生成，错误早期发现，避免资源浪费</td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="notes" style="background: #e8f5e9; border-left-color: #4caf50;">
+            <h3>🚀 实施建议（更新）</h3>
+            
+            <h4>Phase 1（第1-3周）：核心功能 + 聊天路由</h4>
+            <ul>
+                <li>✅ 实现诊断和拆解Agent（<b>增加数据库范围判断</b>）</li>
+                <li>✅ 实现聊天Agent（配备search_tool，ReAct模式）</li>
+                <li>✅ 实现SQL生成子图
+                    <ul>
+                        <li>Schema检索Tool</li>
+                        <li>SQL生成Agent</li>
+                        <li>三层验证Tool</li>
+                    </ul>
+                </li>
+                <li>✅ 实现简单主流程（单个子查询场景）</li>
+                <li><strong>目标：</strong>
+                    <ul>
+                        <li>非DB问题可以路由到聊天Agent</li>
+                        <li>DB范围内的普通查询可以正常工作</li>
+                    </ul>
+                </li>
+            </ul>
+            
+            <h4>Phase 2（第4-5周）：批次执行 + 错误分类</h4>
+            <ul>
+                <li>✅ 实现查找当前批次Tool（依赖分析）</li>
+                <li>✅ 实现批次SQL生成逻辑</li>
+                <li>✅ 实现并行执行批次SQL Tool</li>
+                <li>✅ <b>实现SQL执行错误分类逻辑</b></li>
+                <li>✅ <b>实现fallback到聊天Agent的路径</b></li>
+                <li><strong>目标：</strong>复杂查询可以正常工作，错误处理健全</li>
+            </ul>
+            
+            <h4>Phase 3（第6周）：聚合和Summary</h4>
+            <ul>
+                <li>✅ 实现结果聚合Tool</li>
+                <li>✅ 实现Summary Agent</li>
+                <li>✅ 完善所有降级和fallback路径</li>
+                <li><strong>目标：</strong>端到端流程完整</li>
+            </ul>
+            
+            <h4>Phase 4（第7-8周）：测试和优化</h4>
+            <ul>
+                <li>✅ 集成LangSmith追踪</li>
+                <li>✅ 建立测试用例库
+                    <ul>
+                        <li>DB范围内：普通查询 + 复杂查询</li>
+                        <li>DB范围外：概念解释 + 实时信息</li>
+                        <li>边界案例：时间超出范围、数据不存在</li>
+                    </ul>
+                </li>
+                <li>✅ 性能优化（并行执行、缓存）</li>
+                <li>✅ 提示词调优</li>
+            </ul>
+        </div>
+
+        <div class="highlight">
+            <h3>📊 完整流程图总结</h3>
+            <p><strong>核心改进点：</strong></p>
+            <ul>
+                <li>✅ <strong>诊断Agent增强：</strong>先判断DB范围，再拆解查询</li>
+                <li>✅ <strong>智能路由：</strong>不在DB范围 → 直接聊天Agent</li>
+                <li>✅ <strong>聊天Agent配备工具：</strong>search_tool，自主决定何时搜索</li>
+                <li>✅ <strong>三层降级/Fallback：</strong>
+                    <ul>
+                        <li>层1：SQL生成失败 → 聊天Agent</li>
+                        <li>层2：SQL执行失败（可恢复）→ 聊天Agent</li>
+                        <li>层3：SQL执行失败（不可恢复）→ 系统错误</li>
+                    </ul>
+                </li>
+                <li>✅ <strong>统一架构保持：</strong>所有DB范围内查询走相同流程</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        mermaid.initialize({ 
+            startOnLoad: true,
+            theme: 'default',
+            flowchart: {
+                curve: 'basis',
+                padding: 20,
+                nodeSpacing: 50,
+                rankSpacing: 80
+            }
+        });
+    </script>
+</body>
+</html>
