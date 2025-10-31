@@ -135,7 +135,7 @@ from langgraph.managed import IsLastStep
 
 # Python 3.12+ 使用 type 语句定义类型别名
 type QueryID = str
-type QueryStatus = "pending" | "ready" | "running" | "success" | "failed"
+type QueryStatus = "pending" | "running" | "success" | "failed"
 type RouteType = "sql" | "chat"
 
 class MainState(MessagesState):
@@ -160,6 +160,7 @@ class MainState(MessagesState):
     # 最终输出
     final_result: dict | None
     error: str | None
+    fallback_reason: str | None
     
     # 元信息
     iteration_count: int
@@ -227,17 +228,19 @@ class SQLGenerationState(MessagesState):
 ```python
 DIAGNOSE_AGENT_PROMPT = """
 你是一个查询诊断和拆解Agent。
+你的任务是判断用户查询是否与我们提供的数据域相关。
 
 【第一步：判断数据库范围】
-数据库覆盖范围：
-- 电商订单数据（2020-2025年1月）
-- 用户、商品、订单、销售、库存信息
-- 不包括：天气、新闻、概念解释、行业分析
+
+数据库覆盖范围（从配置文件加载）：
+- 业务领域：零售业务
+- 核心内容：各类零售连锁店的销售情况，包括商品、订单、销售、库存、用户信息
+- 不包括：天气、新闻、概念解释、行业分析等通用信息。
 
 判断标准：
-1. 明确涉及上述数据 → 在数据库范围内
-2. 明确不涉及（天气、新闻、概念）→ 不在数据库范围内
-3. 边界模糊但可能需要历史数据 → 在数据库范围内（先尝试）
+1. 如果问题明确涉及上述数据域 → 在数据库范围内
+2. 如果问题明确不涉及（如天气、新闻、通用概念解释）→ 不在数据库范围内
+3. 如果边界模糊但可能需要历史数据进行分析 → 在数据库范围内（先尝试SQL）
 
 【第二步：分析并拆解查询】（仅当在数据库范围内时）
 - 普通查询：单个聚合/筛选 → 1个子查询
@@ -259,7 +262,7 @@ DIAGNOSE_AGENT_PROMPT = """
 from langchain_community.chat_models import ChatTongyi
 from langgraph.graph import StateGraph
 
-def create_diagnose_agent():
+def create_diagnose_agent(data_domain_description: str):
     """创建诊断和拆解Agent - 使用Qwen-Plus"""
     # 通义千问API（Qwen-Plus）
     llm = ChatTongyi(
@@ -272,8 +275,11 @@ def create_diagnose_agent():
         """诊断和拆解节点"""
         from langchain_core.messages import SystemMessage, HumanMessage
         
+        # 动态填充Prompt
+        prompt = DIAGNOSE_AGENT_PROMPT.format(data_domain_description=data_domain_description)
+        
         response = llm.invoke([
-            SystemMessage(content=DIAGNOSE_AGENT_PROMPT),
+            SystemMessage(content=prompt),
             HumanMessage(content=state["user_query"])
         ])
         
@@ -788,7 +794,8 @@ def create_main_graph():
     workflow.add_node("aggregate_results", aggregate_results_node)
     workflow.add_node("summary", summary_agent_node)
     workflow.add_node("chat", chat_agent_node)
-    workflow.add_node("chat_fallback", chat_fallback_node)
+    workflow.add_node("chat_fallback_generation", chat_fallback_generation_node)
+    workflow.add_node("chat_fallback_execution", chat_fallback_execution_node)
     
     # v1.0+ 使用 START 常量替代 set_entry_point
     workflow.add_edge(START, "diagnose")
@@ -822,7 +829,7 @@ def create_main_graph():
         check_batch_success,
         {
             "success": "execute_batch",
-            "failed": "chat_fallback"
+            "failed": "chat_fallback_generation"
         }
     )
     
@@ -832,7 +839,7 @@ def create_main_graph():
         check_execution_result,
         {
             "success": "store_results",
-            "recoverable": "chat_fallback",
+            "recoverable": "chat_fallback_execution",
             "system_error": END
         }
     )
@@ -841,7 +848,8 @@ def create_main_graph():
     workflow.add_edge("aggregate_results", "summary")
     workflow.add_edge("summary", END)
     workflow.add_edge("chat", END)
-    workflow.add_edge("chat_fallback", END)
+    workflow.add_edge("chat_fallback_generation", END)
+    workflow.add_edge("chat_fallback_execution", END)
     
     # v1.0+ 编译时可选添加checkpointer（支持持久化）
     checkpointer = MemorySaver()
@@ -986,7 +994,7 @@ def check_execution_result(state: MainState) -> str:
     """检查SQL执行结果并决定下一步"""
     
     # 没有错误，成功
-    if "execution_error" not in state:
+    if "execution_error" not in state or state["execution_error"] is None:
         return "success"
     
     error = state["execution_error"]
@@ -999,6 +1007,23 @@ def check_execution_result(state: MainState) -> str:
         # 系统错误：连接失败、超时等
         return "system_error"
 ```
+
+#### 4.3.5 降级节点 (新增)
+
+def chat_fallback_generation_node(state: MainState) -> dict:
+    """SQL生成失败的降级节点"""
+    # 更新状态，标记降级原因
+    state["fallback_reason"] = "SQL_GENERATION_FAILED"
+    # 调用通用聊天Agent处理
+    return {"messages": [("system", "抱歉，我无法生成有效的SQL查询来回答您的问题。让我尝试用其他方式为您解答。"), *state["messages"]]}
+
+def chat_fallback_execution_node(state: MainState) -> dict:
+    """SQL执行失败的降级节点"""
+    # 更新状态，标记降级原因
+    state["fallback_reason"] = "SQL_EXECUTION_RECOVERABLE_ERROR"
+    error_msg = state.get("execution_error", {}).get("error_message", "未知数据库错误")
+    # 调用通用聊天Agent处理
+    return {"messages": [("system", f"抱歉，在查询数据库时遇到了一个问题（{error_msg}），导致无法完成操作。让我尝试用其他方式为您解答。"), *state["messages"]]}
 
 ---
 
