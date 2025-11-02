@@ -1,0 +1,161 @@
+# ==============================================================================
+# NL2SQL v3 系统级配置文件
+# ==============================================================================
+#
+# 说明：
+# - 使用 ${VAR_NAME:default} 语法引用环境变量，支持默认值
+# - 敏感信息（密码、API Key）通过 .env 文件加载
+# - 本文件可提交到 Git，不包含敏感信息
+#
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 数据库配置（PostgreSQL + pgvector）
+# ------------------------------------------------------------------------------
+database:
+  host: ${DB_HOST:localhost}
+  port: ${DB_PORT:5432}
+  database: ${DB_NAME:nl2sql}
+  user: ${DB_USER:postgres}
+  password: ${DB_PASSWORD}           # 从 .env 加载
+  schema: public                     # 默认 schema
+
+  # 连接池配置
+  pool_min_size: 5                   # 最小连接数
+  pool_max_size: 20                  # 最大连接数
+  pool_timeout: 30                   # 连接超时（秒）
+  command_timeout: 60                # 命令执行超时（秒）
+
+  # 重试配置
+  max_retries: 3                     # 最大重试次数
+  retry_delay: 1                     # 重试延迟（秒）
+
+# ------------------------------------------------------------------------------
+# Neo4j 图数据库配置
+# ------------------------------------------------------------------------------
+neo4j:
+  uri: ${NEO4J_URI:bolt://localhost:7687}
+  user: ${NEO4J_USER:neo4j}
+  password: ${NEO4J_PASSWORD}        # 从 .env 加载
+  database: ${NEO4J_DATABASE:neo4j}
+
+  # 连接池配置
+  max_connection_lifetime: 3600      # 连接最大生命周期（秒）
+  max_connection_pool_size: 50       # 最大连接池大小
+  connection_timeout: 30             # 连接超时（秒）
+
+  # 查询配置
+  max_transaction_retry_time: 30     # 事务最大重试时间（秒）
+
+# ------------------------------------------------------------------------------
+# Embedding 服务配置（Qwen）
+# ------------------------------------------------------------------------------
+embedding:
+  provider: qwen                     # 提供商：qwen
+  model: text-embedding-v3           # 模型名称
+  api_key: ${DASHSCOPE_API_KEY}      # 从 .env 加载
+  base_url: https://dashscope.aliyuncs.com/api/v1
+  dimensions: 1024                   # 向量维度（必须与数据库一致）
+  timeout: 30                        # API 超时（秒）
+  max_retries: 3                     # 最大重试次数
+
+  # 批处理配置
+  batch_size: 20                     # 批处理大小
+
+  # 缓存配置（可选）
+  cache_enabled: false               # 是否启用缓存
+  cache_ttl: 3600                    # 缓存过期时间（秒）
+
+# ------------------------------------------------------------------------------
+# SQL 生成子图配置
+# ------------------------------------------------------------------------------
+sql_generation:
+  # 子图配置文件路径（相对于项目根目录）
+  subgraph_config_path: src/modules/sql_generation/config/sql_generation_subgraph.yaml
+
+  # 全局开关
+  enabled: true                      # 是否启用 SQL 生成子图
+
+  # 超时配置
+  timeout: 60                        # 子图总超时（秒）
+
+  # 提示词路径
+  prompt_path: src/prompts/sql_generation/generator_prompt.txt
+
+# ------------------------------------------------------------------------------
+# 日志配置
+# ------------------------------------------------------------------------------
+logging:
+  level: ${LOG_LEVEL:INFO}           # 日志级别：DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "%(asctime)s [%(levelname)s] %(name)s:%(lineno)d - %(message)s"
+
+  # 文件日志配置
+  file:
+    enabled: true
+    path: ${LOG_FILE:logs/nl2sql.log}
+    max_bytes: 10485760              # 10MB
+    backup_count: 5                  # 保留5个备份文件
+
+  # 控制台日志配置
+  console:
+    enabled: true
+    colored: true                    # 是否启用彩色输出
+
+  # 第三方库日志级别
+  third_party_level: WARNING         # 第三方库日志级别
+
+# ------------------------------------------------------------------------------
+# 监控配置（LangSmith）
+# ------------------------------------------------------------------------------
+monitoring:
+  enabled: false                     # 是否启用 LangSmith 监控
+  api_key: ${LANGSMITH_API_KEY}      # LangSmith API Key
+  project: ${LANGSMITH_PROJECT:nl2sql-v3}
+  endpoint: https://api.smith.langchain.com
+
+  # 追踪配置
+  tracing:
+    enabled: false                   # 是否启用追踪
+    sample_rate: 1.0                 # 采样率（0.0-1.0）
+
+  # 指标配置
+  metrics:
+    enabled: false                   # 是否启用指标收集
+    flush_interval: 60               # 指标推送间隔（秒）
+
+# ------------------------------------------------------------------------------
+# 缓存配置（Redis，可选）
+# ------------------------------------------------------------------------------
+cache:
+  enabled: false                     # 是否启用 Redis 缓存
+  backend: redis                     # 缓存后端：redis
+
+  redis:
+    host: ${REDIS_HOST:localhost}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD}
+    db: ${REDIS_DB:0}
+    socket_timeout: 5                # Socket 超时（秒）
+    socket_connect_timeout: 5        # 连接超时（秒）
+
+  # 默认 TTL
+  default_ttl: 3600                  # 1小时
+
+# ------------------------------------------------------------------------------
+# 性能配置
+# ------------------------------------------------------------------------------
+performance:
+  # 并发配置
+  max_concurrent_queries: 10         # 最大并发查询数
+
+  # 查询限制
+  query_result_max_rows: 10000       # 查询结果最大行数
+  query_timeout: 300                 # 查询超时（秒）
+
+# ------------------------------------------------------------------------------
+# 开发/调试配置
+# ------------------------------------------------------------------------------
+development:
+  debug: ${DEBUG:false}              # 是否启用调试模式
+  reload: false                      # 是否启用热重载
+  profiling: false                   # 是否启用性能分析

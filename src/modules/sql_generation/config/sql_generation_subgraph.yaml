@@ -1,0 +1,229 @@
+# ==============================================================================
+# SQL 生成子图配置文件
+# ==============================================================================
+#
+# 说明：
+# - 本文件定义 SQL 生成子图的所有参数
+# - 基于 docs/sql_generation_subgraph_design.md v1.2
+# - 所有参数都可以通过环境变量覆盖
+#
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Schema 检索配置
+# ------------------------------------------------------------------------------
+schema_retrieval:
+  # 向量检索配置
+  topk_tables: 10                    # 表向量检索 Top-K（system.sem_object_vec）
+  topk_columns: 10                   # 列向量检索 Top-K（system.sem_object_vec）
+  similarity_threshold: 0.45         # 相似度阈值（0.0-1.0）
+
+  # 维度值检索配置
+  dim_index_topk: 5                  # 维度值检索 Top-K（system.dim_value_index）
+  dim_value_min_score: 0.5           # 维度值匹配最小分数
+
+  # 历史 SQL 检索配置
+  sql_embedding_top_k: 3             # 历史 SQL 相似案例数量（system.sql_embedding）
+  sql_similarity_threshold: 0.6      # SQL 相似度阈值
+
+  # Neo4j JOIN 路径配置
+  join_max_hops: 5                   # 最大跳数（1..5）
+  join_strategy: apoc_dijkstra       # 策略：apoc_dijkstra | shortest_path | both
+  join_fallback_enabled: true        # 是否启用回退策略
+  
+  # 维度表优化配置
+  similarity_gap_threshold: 0.05     # 相似度差距阈值（用于判断是否使用维度表优化）
+
+  # 超时配置
+  vector_search_timeout: 5           # 向量检索超时（秒）
+  graph_search_timeout: 5            # 图检索超时（秒）
+  total_timeout: 15                  # Schema 检索总超时（秒）
+
+# ------------------------------------------------------------------------------
+# SQL 生成配置
+# ------------------------------------------------------------------------------
+sql_generation:
+  # LLM 配置
+  llm_model: qwen-max               # 模型：qwen-plus, qwen-max, qwen-turbo
+  api_key: ${DASHSCOPE_API_KEY}      # 从环境变量加载
+  temperature: 0                     # 温度（0=确定性输出）
+  max_tokens: 2000                   # 最大 token 数
+  timeout: 30                        # LLM 调用超时（秒）
+  
+  # 历史 SQL 检索配置（在生成阶段使用）
+  sql_similarity_threshold: 0.6      # SQL 相似度阈值
+
+  # 提示词配置
+  prompt:
+    # 提示词模板路径（相对于项目根目录）
+    template_path: src/prompts/sql_generation/generator_prompt.txt
+
+    # 上下文控制
+    max_table_cards: 10              # 最多包含的表卡片数量
+    max_join_plans: 3                # 最多包含的 JOIN 计划数量
+    max_similar_sqls: 2              # 最多包含的相似 SQL 案例数量
+    max_dim_value_matches: 10        # 最多包含的维度值匹配数量
+
+    # 提示词增强
+    include_schema_hints: true       # 是否包含 Schema 提示（粒度、时间列等）
+    include_history_examples: true   # 是否包含历史案例
+    include_dim_value_hints: true    # 是否包含维度值提示
+
+  # SQL 生成策略
+  strategy:
+    prefer_explicit_joins: true      # 优先显式 JOIN
+    require_schema_prefix: true      # 强制表名包含 schema 前缀
+    use_half_open_interval: true     # 时间过滤使用半开区间（>= start AND < end）
+
+  # 重试配置（针对 LLM 调用失败）
+  max_llm_retries: 2                 # LLM 调用失败最大重试次数
+  llm_retry_delay: 1                 # 重试延迟（秒）
+
+# ------------------------------------------------------------------------------
+# SQL 验证配置
+# ------------------------------------------------------------------------------
+validation:
+  # 三层验证开关
+  enable_syntax_check: true          # 第1层：语法检查
+  enable_security_check: true        # 第2层：安全检查
+  enable_semantic_check: true        # 第3层：语义检查（EXPLAIN）
+
+  # 语法检查配置
+  syntax:
+    allowed_statement_types:         # 允许的 SQL 类型
+      - SELECT
+      - WITH                         # CTE
+      - UNKNOWN                      # WITH...SELECT 的解析结果
+    strict_mode: false               # 严格模式：true=拒绝所有非 SELECT, false=警告
+
+  # 安全检查配置
+  security:
+    # 禁止的关键字（使用词边界匹配）
+    forbidden_keywords:
+      - DROP
+      - DELETE
+      - TRUNCATE
+      - ALTER
+      - CREATE
+      - INSERT
+      - UPDATE
+      - GRANT
+      - REVOKE
+      - EXEC
+      - EXECUTE
+
+    # 注释检查
+    allow_comments: false            # 是否允许 SQL 注释（防注入）
+
+    # 多语句检查
+    allow_multiple_statements: false # 是否允许多条 SQL（防注入）
+
+  # 语义检查配置
+  semantic:
+    # EXPLAIN 配置
+    explain_timeout: 5               # EXPLAIN 超时（秒）
+    explain_analyze: false           # 是否使用 EXPLAIN ANALYZE（实际执行）
+
+    # 性能警告阈值
+    warnings:
+      seq_scan_warn: true            # 顺序扫描警告
+      nested_loop_warn: true         # 嵌套循环警告
+      estimated_rows_threshold: 100000  # 预估行数阈值
+
+  # 验证失败处理
+  on_validation_failure:
+    include_explain_plan: true       # 是否在错误信息中包含 EXPLAIN 结果
+    include_suggestions: true        # 是否包含修复建议
+
+  # 超时配置
+  total_timeout: 10                  # 验证总超时（秒）
+
+# ------------------------------------------------------------------------------
+# 重试机制配置
+# ------------------------------------------------------------------------------
+retry:
+  # 重试配置（针对验证失败后的 SQL 重新生成）
+  max_iterations: 3                  # 最大迭代次数（包含首次生成）
+  include_error_in_prompt: true      # 是否将错误信息反馈给 LLM
+
+  # 重试策略
+  strategy:
+    accumulate_errors: true          # 是否累积所有历史错误
+    max_errors_in_prompt: 5          # 提示词中最多包含的错误数量
+
+  # 早停配置
+  early_stop:
+    enabled: true                    # 是否启用早停
+    conditions:                      # 早停条件（满足任一即停止）
+      - same_sql_twice                # 生成了两次相同的 SQL
+      - same_error_twice              # 出现了两次相同的错误
+
+# ------------------------------------------------------------------------------
+# 缓存配置（可选）
+# ------------------------------------------------------------------------------
+cache:
+  enabled: false                     # 是否启用缓存
+  backend: memory                    # 缓存后端：memory | redis
+
+  # 缓存策略
+  strategy:
+    cache_schema_context: true       # 是否缓存 Schema 上下文
+    cache_sql_result: false          # 是否缓存 SQL 生成结果（不推荐）
+
+  # TTL 配置
+  ttl:
+    schema_context: 300              # Schema 上下文缓存过期时间（秒）
+    sql_result: 60                   # SQL 结果缓存过期时间（秒）
+
+# ------------------------------------------------------------------------------
+# 日志和监控配置
+# ------------------------------------------------------------------------------
+logging:
+  # 日志级别
+  level: INFO                        # DEBUG | INFO | WARNING | ERROR | CRITICAL
+
+  # 详细日志开关
+  log_schema_context: false          # 是否记录完整 Schema 上下文（大对象）
+  log_generated_sql: true            # 是否记录生成的 SQL
+  log_validation_details: true       # 是否记录验证详情
+  log_prompts: false                 # 是否记录完整提示词（调试用）
+
+  # 性能日志
+  log_timing: true                   # 是否记录各阶段耗时
+
+# 监控配置
+monitoring:
+  # 指标收集
+  collect_metrics: true              # 是否收集指标
+  metrics:
+    - iteration_count                # 迭代次数
+    - schema_retrieval_time          # Schema 检索耗时
+    - sql_generation_time            # SQL 生成耗时
+    - validation_time                # 验证耗时
+    - total_time                     # 总耗时
+
+  # 告警配置
+  alerts:
+    enabled: false                   # 是否启用告警
+    conditions:
+      max_iteration_exceeded: true   # 超过最大迭代次数
+      timeout_exceeded: true         # 超时
+
+# ------------------------------------------------------------------------------
+# 调试配置
+# ------------------------------------------------------------------------------
+debug:
+  enabled: false                     # 是否启用调试模式
+  save_intermediate_results: false   # 是否保存中间结果（到文件）
+  output_dir: logs/debug             # 中间结果保存目录
+# ------------------------------------------------------------------------------
+# 问题解析配置
+# ------------------------------------------------------------------------------
+question_parsing:
+  parser_model: qwen-plus
+  api_key: ${DASHSCOPE_API_KEY}
+  temperature: 0
+  max_tokens: 1500
+  timeout: 20
+  enable_internal_parser: true      # 为 false 时跳过 LLM 解析
+  fallback_to_empty: true           # 解析失败时是否返回空结构继续流程
