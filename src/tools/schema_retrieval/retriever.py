@@ -289,8 +289,9 @@ class SchemaRetriever:
             parent_id = col.get("parent_id")
             if not parent_id:
                 continue
-            category = (col.get("table_category") or col.get("parent_category") or "dimension").lower()
-            target_list = fact_from_columns if category == "fact" else dim_from_columns
+            category = col.get("table_category") or col.get("parent_category") or "维度表"
+            # 判断是否为事实表（兼容中英文值：fact 或 事实表）
+            target_list = fact_from_columns if category in ["fact", "事实表"] else dim_from_columns
             if parent_id not in target_list:
                 target_list.append(parent_id)
 
@@ -307,8 +308,9 @@ class SchemaRetriever:
             if similarity is not None:
                 table_similarities[table_id] = float(similarity)
 
-            category = (table.get("table_category") or table.get("category") or "dimension").lower()
-            if category == "fact":
+            category = table.get("table_category") or table.get("category") or "维度表"
+            # 判断是否为事实表（兼容中英文值：fact 或 事实表）
+            if category in ["fact", "事实表"]:
                 if table_id not in semantic_fact_tables:
                     semantic_fact_tables.append(table_id)
             else:

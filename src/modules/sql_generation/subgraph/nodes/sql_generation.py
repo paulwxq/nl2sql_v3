@@ -127,7 +127,8 @@ class SQLGenerationAgent:
         errors_text = self._format_errors(validation_errors)
 
         # 组装完整提示词
-        prompt = f"""你是 PostgreSQL SQL 生成专家。根据以下上下文生成 SQL。
+        prompt = f"""
+你是 PostgreSQL SQL 生成专家。根据以下上下文生成 SQL。
 
 要求：
 1. 仅输出 SQL，不附加说明。
@@ -135,7 +136,6 @@ class SQLGenerationAgent:
 3. 时间过滤使用指定列，并遵循 >= start AND < end 的半开区间。
 4. JOIN 条件必须严格按照 ON 模板，用实际别名替换 SRC/DST。
 5. 以下提供的表结构、JOIN 计划和时间列为参考，你可以选择性使用它们，但不得使用未列出的字段。
-6. **重要**：如果提供了维度值匹配，优先使用主键过滤（如 store_id = '12345'）而非文本匹配。
 
 ---
 
@@ -161,14 +161,15 @@ JOIN 计划：
 {time_columns_text}
 
 ---
+"""
 
-维度值匹配（用于 WHERE 条件）：
-{dim_values_text}
-
----
-
+        # 仅在有相似案例时添加历史 SQL 部分
+        if similar_sqls:
+            prompt += f"""
 历史成功SQL案例（参考）：
 {similar_sqls_text}
+
+---
 """
 
         final_prompt = prompt.strip()
