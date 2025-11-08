@@ -1,0 +1,31 @@
+我要增加一个需求：
+1.需要在提示词中，在提示词的内容，原有的"表结构："的前面增加一组提示：
+表类型：
+  - 维度表： table1,table2
+  - 交易表： table3,table4
+  - 事实表： table5
+  - 桥接表： table6
+2.我要在 sql_generation_subgraph.yaml 中增加配置选项：
+ table_category_mapping:
+    fact:                                     # 归类为事实表
+      - "fact"
+      - "事实表"
+      - "交易表"
+      - "明细表"
+      - "流水表"
+      - "快照表"
+      - "汇总表"
+    dimension:                                # 归类为维度表
+      - "dimension"
+      - "维度表"
+      - "实体表"
+      - "枚举表"
+      - "查找表"
+    bridge:                                   # 归类为桥接表
+      - "bridge"
+      - "桥接表"
+      - "关联表"
+3.在通过Neo4j获取表关联关系的时候，我们需要按照表的类型选择base表，这是需要使用上面的mapping获取三类表 fact/dimension/bridge，其中brige不会被作为base表。请注意在获取表之间join关系的时候，使用的是三类 fact/dimension/bridge，但是在提示词中使用的类型是表system.sem_object_vec.table_category字段的具体类型。
+4.通过 system.sem_object_vec表的查询table_category字段时，要使用 object_type=table 这个条件。
+----
+为了满足上面的需求，我写了一个改造方案，请分析这个改造方案是否能完全满足上面的需求？

@@ -37,27 +37,51 @@ class QuestionParsingAgent:
         system_prompt = """You are a Chinese business intelligence analyst who extracts structured intents from natural language questions.
 Follow these rules strictly:
 1. IMPORTANT: Time field handling:
-   - If the question does NOT explicitly mention any time constraint, the time field MUST be null.
-   - Do NOT infer, guess, or create default time ranges when no time is mentioned.
+   - If the question does NOT explicitly mention any date/time constraint, the "time" field MUST be null.
+   - Do NOT infer, guess, or create default time ranges when no date/time constraint is mentioned.
+   - When a date/time constraint is present, fill:
+     * time.start and/or time.end as raw strings: "YYYY-MM-DD" or "YYYY-MM-DD HH:MM:SS" (do NOT add missing parts).
+     * time.grain_inferred as one of: year|quarter|month|week|day|hour (choose the SMALLEST grain implied by the question):
+       - If exact clock time appears (e.g., "12:00", "12点"), choose hour.
+       - If a day-of-month appears and no clock time (e.g., "2025-11-08", "11月8日"), choose day.
+       - If only month-level wording appears (e.g., "September", "9月/9月份", "this month/本月/上月"), choose month.
+       - If quarter wording appears (e.g., "Q1", "第一季度"), choose quarter.
+       - If only year-level wording appears (e.g., "2025年", "今年", "上一年"), choose year.
+     * time.is_full_period:
+       - true ONLY if the question explicitly implies a full natural period for the inferred grain (e.g., "this month", "September", "this week", "Q1", "this year", "today/whole day").
+       - false otherwise (including single-sided constraints like "since X" or "until Y", or explicit start/end that are not stated as a full period).
+   - Week semantics MUST follow ISO-8601 (week starts on Monday). Do NOT compute or align calendar boundaries in this step.
+   - Timezone context: Asia/Shanghai. Do NOT convert or normalize; just reflect the user's wording.
 2. Always emit valid JSON that matches the QueryParseResult schema.
 3. Classify each dimension as either a column name candidate (column) or a literal value (value).
 4. Supported intent.task values: plain_agg, topn, rank, compare_yoy, compare_mom.
 """
 
         user_prompt = (
-            "今天的日期是: {current_date} (Asia/Shanghai 时区)\n\n"
-            "请分析下述问题, 给出严格 JSON 输出。\n"
-            "问题: {query}\n\n"
+            "Today's date is: {current_date} (Asia/Shanghai timezone)\n\n"
+            "Please analyze the question below and return a strict JSON output.\n"
+            "Question: {query}\n\n"
             "JSON schema:\n{{\n"
             "  \"keywords\": [str],\n"
-            "  \"time\": {{\"start\": \"YYYY-MM-DD\", \"end\": \"YYYY-MM-DD\", \"grain_inferred\": str, \"is_full_period\": bool}} | null,\n"
+            "  \"time\": {{\n"
+            "    \"start\": \"YYYY-MM-DD\" or \"YYYY-MM-DD HH:MM:SS\",\n"
+            "    \"end\":   \"YYYY-MM-DD\" or \"YYYY-MM-DD HH:MM:SS\",\n"
+            "    \"grain_inferred\": \"year|quarter|month|week|day|hour\",\n"
+            "    \"is_full_period\": bool\n"
+            "  }} | null,\n"
             "  \"metric\": {{\"text\": str, \"is_aggregate_candidate\": bool}},\n"
             "  \"dimensions\": [{{\"text\": str, \"role\": \"column|value\", \"evidence\": str}}],\n"
             "  \"intent\": {{\"task\": \"plain_agg|topn|rank|compare_yoy|compare_mom\", \"topn\": int|null}},\n"
             "  \"signals\": [str]\n"
             "}}\n"
-            "注意: time 字段仅在问题中明确提及时间约束时才填充, 否则必须为 null。\n"
-            "输出要求: 仅输出 JSON, 不要额外说明。"
+            "Notes:\n"
+            "- Populate \"time\" ONLY when the question explicitly mentions a date/time constraint; otherwise \"time\" MUST be null.\n"
+            "- Choose grain_inferred as the SMALLEST grain implied by the wording (e.g., time-of-day → hour; date with no time → day; month wording → month; quarter wording → quarter; year wording → year).\n"
+            "- Set is_full_period=true ONLY for explicit full-period phrases (e.g., \"this month\", \"September\", \"this week\", \"Q1\", \"this year\", \"today/whole day\"); otherwise false.\n"
+            "- Single-sided constraints: \"since X\" → only time.start (is_full_period=false); \"until Y\" → only time.end (is_full_period=false).\n"
+            "- Week semantics follow ISO-8601 (week starts on Monday). Do NOT compute calendar boundaries here.\n"
+            "- Timezone context: Asia/Shanghai. Do NOT convert or normalize; do NOT add missing parts.\n"
+            "Output requirement: Return JSON only, without any extra explanations."
         ).format(current_date=current_date, query=query)
 
         response = self._llm.invoke(

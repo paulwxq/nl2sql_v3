@@ -1,0 +1,1243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SQL生成子图 - 完整处理流程（基于实际代码）</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-bottom: 30px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 5px;
+            flex-wrap: wrap;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .legend-box {
+            width: 40px;
+            height: 30px;
+            border-radius: 5px;
+            border: 2px solid #333;
+        }
+        .agent-box { background-color: #ffcccc; }
+        .tool-box { background-color: #ccffcc; }
+        .decision-box { background-color: #ffffcc; }
+        .input-box { background-color: #cce5ff; }
+        .output-box { background-color: #d4edda; }
+        .substep-box { background-color: #e8f4f8; }
+        .mermaid {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        .section-title {
+            background: #2196F3;
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            font-size: 20px;
+            font-weight: bold;
+        }
+        .notes {
+            margin-top: 30px;
+            padding: 20px;
+            background: #e3f2fd;
+            border-left: 4px solid #2196F3;
+            border-radius: 5px;
+        }
+        .notes h3 {
+            margin-top: 0;
+            color: #1976D2;
+        }
+        .notes ul {
+            margin: 10px 0;
+        }
+        .notes li {
+            margin: 8px 0;
+        }
+        .highlight {
+            background: #fff3cd;
+            padding: 15px;
+            border-left: 4px solid #ffc107;
+            margin-top: 20px;
+            border-radius: 5px;
+        }
+        .code-ref {
+            background: #f8f9fa;
+            padding: 15px;
+            border-left: 4px solid #6c757d;
+            margin-top: 20px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+        .detail-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        .detail-table th {
+            background: #2196F3;
+            color: white;
+            padding: 12px;
+            text-align: left;
+        }
+        .detail-table td {
+            padding: 10px;
+            border: 1px solid #ddd;
+        }
+        .detail-table tr:nth-child(even) {
+            background: #f5f5f5;
+        }
+        .state-field {
+            background: #e1f5fe;
+            border-left: 4px solid #0288d1;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 5px;
+        }
+        .input-format {
+            background: #f3e5f5;
+            border-left: 4px solid #9c27b0;
+            padding: 20px;
+            margin-top: 20px;
+            border-radius: 5px;
+        }
+        .example-box {
+            background: white;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin-top: 15px;
+        }
+        pre {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 SQL生成子图 - 完整处理流程</h1>
+        <div class="subtitle">基于实际代码: src/modules/sql_generation/subgraph/</div>
+
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-box input-box"></div>
+                <span><strong>输入</strong></span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-box agent-box"></div>
+                <span><strong>Agent</strong> (调用LLM)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-box tool-box"></div>
+                <span><strong>Tool</strong> (确定性函数)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-box substep-box"></div>
+                <span><strong>子步骤</strong></span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-box decision-box"></div>
+                <span><strong>决策点</strong></span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-box output-box"></div>
+                <span><strong>输出</strong></span>
+            </div>
+        </div>
+
+        <div class="section-title">📊 SQL生成子图主流程</div>
+
+        <div class="mermaid">
+graph TB
+    Start([📥 子图输入<br/>query, query_id<br/>user_query<br/>dependencies_results<br/>parse_hints])
+    style Start fill:#cce5ff,stroke:#0066cc,stroke-width:3px
+
+    Start --> QuestionParsing
+
+    QuestionParsing[🧠 问题解析节点<br/>question_parsing<br/><b>LLM解析问题结构</b><br/>提取时间/维度/指标/意图<br/><b>Agent</b>]
+    style QuestionParsing fill:#ffcccc,stroke:#ff6666,stroke-width:3px
+
+    QuestionParsing --> ParsingCheck{解析是否<br/>失败?}
+    style ParsingCheck fill:#ffffcc,stroke:#ffcc00,stroke-width:2px
+
+    ParsingCheck -->|❌ 失败<br/>parsing_failed| FailEnd1
+    ParsingCheck -->|✅ 成功或<br/>fallback| SchemaRetrieval
+
+    SchemaRetrieval[🔍 Schema检索节点<br/>schema_retrieval<br/><b>见详细流程图 ↓</b><br/><b>Tool</b>]
+    style SchemaRetrieval fill:#ccffcc,stroke:#66cc66,stroke-width:3px
+
+    SchemaRetrieval --> SQLGeneration
+
+    SQLGeneration[🔧 SQL生成节点<br/>sql_generation<br/><b>基于Schema上下文</b><br/><b>基于解析结果</b><br/><b>基于历史SQL案例</b><br/>调用LLM生成SQL<br/><b>Agent</b>]
+    style SQLGeneration fill:#ffcccc,stroke:#ff6666,stroke-width:3px
+
+    SQLGeneration --> Validation
+
+    Validation[✅ 三层验证节点<br/>validation<br/><b>第1层: 语法检查</b><br/><b>第2层: 安全检查</b><br/><b>第3层: 语义检查</b><br/>EXPLAIN分析<br/><b>Tool</b>]
+    style Validation fill:#ccffcc,stroke:#66cc66,stroke-width:3px
+
+    Validation --> RetryDecision{重试判断<br/>should_retry}
+    style RetryDecision fill:#ffffcc,stroke:#ffcc00,stroke-width:2px
+
+    RetryDecision -->|✅ validated_sql<br/>存在| Success
+    RetryDecision -->|❌ 不可恢复错误<br/>schema/generation<br/>_failed| FailEnd2
+    RetryDecision -->|🔄 验证失败<br/>iteration < 3| SQLGeneration
+    RetryDecision -->|❌ 验证失败<br/>iteration >= 3| FailEnd3
+
+    Success([✅ 成功输出<br/>validated_sql<br/>schema_context<br/>validation_history<br/>iteration_count<br/>execution_time])
+    style Success fill:#d4edda,stroke:#28a745,stroke-width:3px
+
+    FailEnd1([❌ 失败输出<br/>error: parsing_failed])
+    style FailEnd1 fill:#f8d7da,stroke:#dc3545,stroke-width:3px
+
+    FailEnd2([❌ 失败输出<br/>error: schema/generation<br/>_retrieval_failed])
+    style FailEnd2 fill:#f8d7da,stroke:#dc3545,stroke-width:3px
+
+    FailEnd3([❌ 失败输出<br/>error: validation_failed<br/>max_iterations_exceeded])
+    style FailEnd3 fill:#f8d7da,stroke:#dc3545,stroke-width:3px
+        </div>
+
+        <div class="section-title">🔍 Schema检索节点 - 详细流程（5个步骤）</div>
+
+        <div class="mermaid">
+graph TB
+    SchemaStart([Schema检索开始<br/>输入: query, parse_result])
+    style SchemaStart fill:#cce5ff,stroke:#0066cc,stroke-width:3px
+
+    SchemaStart --> Step1
+
+    Step1[步骤1️⃣: 生成查询向量<br/>embedding_client.embed_query<br/>复用已有向量或新生成]
+    style Step1 fill:#e8f4f8,stroke:#0288d1,stroke-width:2px
+
+    Step1 --> Step2
+
+    Step2[步骤2️⃣: 向量检索<br/>PostgreSQL + pgvector]
+    style Step2 fill:#e8f4f8,stroke:#0288d1,stroke-width:2px
+
+    Step2 --> Step2a
+    Step2 --> Step2b
+
+    Step2a[2a. 检索相关表<br/>search_semantic_tables<br/>topk=10, threshold=0.45<br/>system.sem_object_vec]
+    style Step2a fill:#e1f5fe,stroke:#039be5,stroke-width:1px
+
+    Step2b[2b. 检索相关列<br/>search_semantic_columns<br/>topk=10, threshold=0.45<br/>system.sem_object_vec]
+    style Step2b fill:#e1f5fe,stroke:#039be5,stroke-width:1px
+
+    Step2a --> Step3
+    Step2b --> Step3
+
+    Step3[步骤3️⃣: 分类与匹配]
+    style Step3 fill:#e8f4f8,stroke:#0288d1,stroke-width:2px
+
+    Step3 --> Step3a
+    Step3 --> Step3b
+
+    Step3a[3a. 维度值检索<br/>search_dim_values<br/>基于parse_result.dimensions<br/>topk=5<br/>system.dim_value_index]
+    style Step3a fill:#e1f5fe,stroke:#039be5,stroke-width:1px
+
+    Step3b[3b. 分类事实表/维度表<br/>基于table_category<br/>合并来源:<br/>• 向量检索<br/>• 列的父表<br/>• 维度值命中]
+    style Step3b fill:#e1f5fe,stroke:#039be5,stroke-width:1px
+
+    Step3a --> Step4
+    Step3b --> Step4
+
+    Step4[步骤4️⃣: JOIN路径规划<br/>Neo4j图检索]
+    style Step4 fill:#e8f4f8,stroke:#0288d1,stroke-width:2px
+
+    Step4 --> Step4Check{维度表<br/>优化?}
+    style Step4Check fill:#fff9c4,stroke:#fbc02d,stroke-width:2px
+
+    Step4Check -->|是<br/>单维度表| Step4Simple[返回单表计划<br/>无需JOIN]
+    style Step4Simple fill:#e1f5fe,stroke:#039be5,stroke-width:1px
+
+    Step4Check -->|否<br/>需要JOIN| Step4Complex
+
+    Step4Complex[4a. 选择Base表<br/>• 有事实表: 最高相似度<br/>• 纯维度: 连通性分析]
+    style Step4Complex fill:#e1f5fe,stroke:#039be5,stroke-width:1px
+
+    Step4Complex --> Step4Neo4j
+
+    Step4Neo4j[4b. Neo4j查询JOIN路径<br/>plan_join_paths<br/>base → targets<br/>max_hops=5<br/>strategy=apoc_dijkstra]
+    style Step4Neo4j fill:#e1f5fe,stroke:#039be5,stroke-width:1px
+
+    Step4Simple --> Step5
+    Step4Neo4j --> Step5
+
+    Step5[步骤5️⃣: 获取表卡片<br/>fetch_table_cards<br/>表的完整字段描述]
+    style Step5 fill:#e8f4f8,stroke:#0288d1,stroke-width:2px
+
+    Step5 --> SchemaEnd
+
+    SchemaEnd([Schema检索完成<br/>输出: schema_context<br/>包含表/列/JOIN计划/<br/>维度值/表卡片])
+    style SchemaEnd fill:#d4edda,stroke:#28a745,stroke-width:3px
+        </div>
+
+        <div class="section-title">📝 子图输入格式说明</div>
+
+        <div class="input-format">
+            <h3>必需输入字段</h3>
+            <table class="detail-table">
+                <tr>
+                    <th style="width:20%">字段名</th>
+                    <th style="width:15%">类型</th>
+                    <th style="width:15%">必需</th>
+                    <th style="width:50%">说明</th>
+                </tr>
+                <tr>
+                    <td><strong>query</strong></td>
+                    <td>str</td>
+                    <td>✅ 必需</td>
+                    <td>子查询文本（自然语言问题）</td>
+                </tr>
+                <tr>
+                    <td><strong>query_id</strong></td>
+                    <td>str</td>
+                    <td>✅ 必需</td>
+                    <td>查询唯一标识符（用于日志追踪）</td>
+                </tr>
+                <tr>
+                    <td><strong>user_query</strong></td>
+                    <td>str</td>
+                    <td>✅ 必需</td>
+                    <td>用户原始查询（可能与query相同）</td>
+                </tr>
+                <tr>
+                    <td><strong>dependencies_results</strong></td>
+                    <td>Dict[str, Any]</td>
+                    <td>可选</td>
+                    <td>依赖查询的结果（如果当前查询依赖其他查询）<br/>格式: {"q1": [结果数据], "q2": {...}}</td>
+                </tr>
+                <tr>
+                    <td><strong>parse_hints</strong></td>
+                    <td>Optional[Dict]</td>
+                    <td>可选</td>
+                    <td>外部传入的解析提示（如果提供，跳过内部LLM解析）</td>
+                </tr>
+            </table>
+
+            <h3 style="margin-top: 30px;">parse_hints / parse_result 结构（可选，但推荐）</h3>
+            <p>如果提供 parse_hints，子图会跳过问题解析步骤，直接使用提供的结构化信息。</p>
+
+            <div class="example-box">
+                <h4>parse_hints 完整结构示例：</h4>
+                <pre>{
+  "keywords": ["销售额", "2024年", "总计"],
+
+  "time": {
+    "start": "2024-01-01",
+    "end": "2025-01-01",
+    "grain_inferred": "年",
+    "is_full_period": true
+  },
+
+  "metric": {
+    "text": "销售额",
+    "is_aggregate_candidate": true
+  },
+
+  "dimensions": [
+    {
+      "text": "区域",
+      "role": "column",
+      "evidence": "问题中提到区域分组"
+    },
+    {
+      "text": "华东",
+      "role": "value",
+      "evidence": "具体区域名称"
+    }
+  ],
+
+  "intent": {
+    "task": "plain_agg",
+    "topn": null
+  },
+
+  "signals": ["聚合查询", "时间过滤"]
+}</pre>
+            </div>
+
+            <h4 style="margin-top: 20px;">字段说明：</h4>
+            <ul>
+                <li><strong>keywords</strong>: 提取的关键词列表</li>
+                <li><strong>time</strong>: 时间约束（如果问题不涉及时间，设为 null）
+                    <ul>
+                        <li>start: 开始日期（YYYY-MM-DD）</li>
+                        <li>end: 结束日期（YYYY-MM-DD）</li>
+                        <li>grain_inferred: 时间粒度（年/季/月/日）</li>
+                        <li>is_full_period: 是否完整周期</li>
+                    </ul>
+                </li>
+                <li><strong>metric</strong>: 指标信息
+                    <ul>
+                        <li>text: 指标名称（销售额、订单数等）</li>
+                        <li>is_aggregate_candidate: 是否需要聚合</li>
+                    </ul>
+                </li>
+                <li><strong>dimensions</strong>: 维度列表
+                    <ul>
+                        <li>text: 维度文本</li>
+                        <li>role: "column"（列名候选）或 "value"（字面值）</li>
+                        <li>evidence: 判断依据</li>
+                    </ul>
+                </li>
+                <li><strong>intent</strong>: 查询意图
+                    <ul>
+                        <li>task: plain_agg（普通聚合）| topn（排名）| rank（排序）| compare_yoy（同比）| compare_mom（环比）</li>
+                        <li>topn: Top-N 数量（如果是 topn 任务）</li>
+                    </ul>
+                </li>
+                <li><strong>signals</strong>: 语义信号列表</li>
+            </ul>
+        </div>
+
+        <div class="section-title">📚 完整调用示例</div>
+
+        <div class="code-ref">
+            <h3>示例 1: 简单查询（不提供 parse_hints）</h3>
+            <pre>from src.modules.sql_generation.subgraph.create_subgraph import (
+    run_sql_generation_subgraph
+)
+
+# 让子图内部进行问题解析
+output = run_sql_generation_subgraph(
+    query="查询2024年总销售额",
+    query_id="q1",
+    user_query="查询2024年总销售额",
+    dependencies_results={},  # 无依赖
+    parse_hints=None,  # 使用内部LLM解析
+)
+
+# 检查结果
+if output["validated_sql"]:
+    print(f"✅ SQL: {output['validated_sql']}")
+    print(f"迭代: {output['iteration_count']}次")
+    print(f"耗时: {output['execution_time']:.2f}秒")
+else:
+    print(f"❌ 失败: {output['error']}")
+    print(f"类型: {output['error_type']}")</pre>
+
+            <h3 style="margin-top: 30px;">示例 2: 提供 parse_hints（跳过内部解析）</h3>
+            <pre>output = run_sql_generation_subgraph(
+    query="查询华东区域2024年销售额",
+    query_id="q2",
+    user_query="查询华东区域2024年销售额",
+    dependencies_results={},
+    parse_hints={
+        "keywords": ["华东", "2024年", "销售额"],
+        "time": {
+            "start": "2024-01-01",
+            "end": "2025-01-01",
+            "grain_inferred": "年",
+            "is_full_period": True
+        },
+        "metric": {
+            "text": "销售额",
+            "is_aggregate_candidate": True
+        },
+        "dimensions": [
+            {
+                "text": "区域",
+                "role": "column",
+                "evidence": "分组维度"
+            },
+            {
+                "text": "华东",
+                "role": "value",
+                "evidence": "具体区域值"
+            }
+        ],
+        "intent": {
+            "task": "plain_agg",
+            "topn": None
+        },
+        "signals": ["聚合", "时间过滤", "维度过滤"]
+    }
+)</pre>
+
+            <h3 style="margin-top: 30px;">示例 3: 复杂查询（带依赖）</h3>
+            <pre># 假设 q1 已经执行完毕，返回了 2024年销售额
+q1_result = [{"year": 2024, "sales": 1000000}]
+
+# q2 依赖 q1 的结果来计算增长率
+output = run_sql_generation_subgraph(
+    query="计算相比2023年的增长率",
+    query_id="q2",
+    user_query="对比2023和2024年销售额，计算增长率",
+    dependencies_results={
+        "q1": q1_result  # q2 可以使用 q1 的结果
+    },
+    parse_hints={
+        "keywords": ["2023年", "增长率"],
+        "time": {
+            "start": "2023-01-01",
+            "end": "2024-01-01",
+            "grain_inferred": "年",
+            "is_full_period": True
+        },
+        "metric": {
+            "text": "销售额",
+            "is_aggregate_candidate": True
+        },
+        "dimensions": [],
+        "intent": {
+            "task": "compare_yoy",
+            "topn": None
+        },
+        "signals": ["同比对比", "计算增长"]
+    }
+)</pre>
+
+            <h3 style="margin-top: 30px;">示例 4: 无时间约束查询</h3>
+            <pre>output = run_sql_generation_subgraph(
+    query="查询所有商品类别",
+    query_id="q3",
+    user_query="查询所有商品类别",
+    dependencies_results={},
+    parse_hints={
+        "keywords": ["商品类别"],
+        "time": None,  # 重要：无时间约束时设为 null
+        "metric": {
+            "text": "商品类别",
+            "is_aggregate_candidate": False
+        },
+        "dimensions": [
+            {
+                "text": "商品类别",
+                "role": "column",
+                "evidence": "查询维度"
+            }
+        ],
+        "intent": {
+            "task": "plain_agg",
+            "topn": None
+        },
+        "signals": ["维度查询"]
+    }
+)</pre>
+        </div>
+
+        <div class="section-title">📋 节点详细说明</div>
+
+        <div class="notes">
+            <h3>1️⃣ 问题解析节点 (question_parsing_node)</h3>
+            <table class="detail-table">
+                <tr>
+                    <th style="width:20%">属性</th>
+                    <th style="width:80%">说明</th>
+                </tr>
+                <tr>
+                    <td><strong>代码位置</strong></td>
+                    <td>src/modules/sql_generation/subgraph/nodes/question_parsing.py</td>
+                </tr>
+                <tr>
+                    <td><strong>类型</strong></td>
+                    <td>Agent（调用LLM）</td>
+                </tr>
+                <tr>
+                    <td><strong>实现类</strong></td>
+                    <td>QuestionParsingAgent</td>
+                </tr>
+                <tr>
+                    <td><strong>使用模型</strong></td>
+                    <td>qwen-plus（通义千问）</td>
+                </tr>
+                <tr>
+                    <td><strong>主要功能</strong></td>
+                    <td>
+                        将自然语言问题解析为结构化的 parse_result，包括：<br/>
+                        • <strong>keywords</strong>: 关键词列表<br/>
+                        • <strong>time</strong>: 时间窗口（start, end, grain_inferred, is_full_period）<br/>
+                        • <strong>metric</strong>: 指标信息（text, is_aggregate_candidate）<br/>
+                        • <strong>dimensions</strong>: 维度列表（text, role, evidence）<br/>
+                        • <strong>intent</strong>: 意图（task, topn）<br/>
+                        • <strong>signals</strong>: 信号列表
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>处理逻辑</strong></td>
+                    <td>
+                        1. 优先使用外部传入的 parse_hints（parsing_source="external"）<br/>
+                        2. 如果配置禁用内部解析，返回空结果（parsing_source="disabled"）<br/>
+                        3. 调用LLM进行问题解析（parsing_source="llm"）<br/>
+                        4. 解析失败时，如果允许fallback，返回空结果继续流程（parsing_source="fallback"）
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>输出字段</strong></td>
+                    <td>
+                        • parse_result: Dict[str, Any]<br/>
+                        • parsing_source: "external" | "llm" | "disabled" | "fallback"<br/>
+                        • error (可选): 错误信息<br/>
+                        • error_type (可选): "parsing_failed"
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>配置参数</strong></td>
+                    <td>
+                        • parser_model: qwen-plus<br/>
+                        • temperature: 0<br/>
+                        • max_tokens: 1500<br/>
+                        • timeout: 20s<br/>
+                        • enable_internal_parser: true<br/>
+                        • fallback_to_empty: true
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="notes" style="background: #e8f5e9; border-left-color: #4caf50;">
+            <h3>2️⃣ Schema检索节点 (schema_retrieval_node) - 详细流程</h3>
+            <table class="detail-table">
+                <tr>
+                    <th style="width:20%">属性</th>
+                    <th style="width:80%">说明</th>
+                </tr>
+                <tr>
+                    <td><strong>代码位置</strong></td>
+                    <td>
+                        • 节点: src/modules/sql_generation/subgraph/nodes/schema_retrieval.py<br/>
+                        • 实现: src/tools/schema_retrieval/retriever.py
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>类型</strong></td>
+                    <td>Tool（确定性函数，不调用LLM）</td>
+                </tr>
+                <tr>
+                    <td><strong>实现类</strong></td>
+                    <td>SchemaRetriever</td>
+                </tr>
+            </table>
+
+            <h4 style="margin-top: 20px;">🔍 步骤1: 生成查询向量</h4>
+            <ul>
+                <li><strong>实现：</strong>embedding_client.embed_query(query)</li>
+                <li><strong>逻辑：</strong>如果输入已包含 query_embedding，则复用；否则调用嵌入服务生成</li>
+                <li><strong>输出：</strong>向量（List[float]，通常768或1024维）</li>
+            </ul>
+
+            <h4 style="margin-top: 20px;">🔍 步骤2: 向量检索（PostgreSQL + pgvector）</h4>
+            <table class="detail-table">
+                <tr>
+                    <th style="width:25%">子步骤</th>
+                    <th style="width:25%">方法</th>
+                    <th style="width:25%">数据源</th>
+                    <th style="width:25%">参数</th>
+                </tr>
+                <tr>
+                    <td><strong>2a. 检索相关表</strong></td>
+                    <td>search_semantic_tables</td>
+                    <td>system.sem_object_vec<br/>（表的语义向量）</td>
+                    <td>
+                        • topk: 10<br/>
+                        • threshold: 0.45
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>2b. 检索相关列</strong></td>
+                    <td>search_semantic_columns</td>
+                    <td>system.sem_object_vec<br/>（列的语义向量）</td>
+                    <td>
+                        • topk: 10<br/>
+                        • threshold: 0.45
+                    </td>
+                </tr>
+            </table>
+            <p><strong>返回数据包含：</strong>object_id（表/列名）、similarity（相似度）、table_category（事实表/维度表）、grain_hint（粒度）、time_col_hint（时间列）等元信息</p>
+
+            <h4 style="margin-top: 20px;">🔍 步骤3: 分类与维度值匹配</h4>
+            <table class="detail-table">
+                <tr>
+                    <th style="width:25%">子步骤</th>
+                    <th style="width:75%">说明</th>
+                </tr>
+                <tr>
+                    <td><strong>3a. 维度值检索</strong></td>
+                    <td>
+                        <strong>条件：</strong>parse_result.dimensions 中包含 role="value" 的维度<br/>
+                        <strong>方法：</strong>search_dim_values(query_value, topk=5)<br/>
+                        <strong>数据源：</strong>system.dim_value_index（维度值索引表）<br/>
+                        <strong>输出：</strong>维度值命中列表，包含：<br/>
+                        &nbsp;&nbsp;• query_value: 查询中的原始值（如"华东"）<br/>
+                        &nbsp;&nbsp;• matched_text: 匹配到的值（如"华东地区"）<br/>
+                        &nbsp;&nbsp;• dim_table: 所属维度表（如"public.dim_region"）<br/>
+                        &nbsp;&nbsp;• score: 匹配分数<br/>
+                        &nbsp;&nbsp;• source_index: 在原问题中的位置
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>3b. 分类事实表/维度表</strong></td>
+                    <td>
+                        <strong>合并多个来源：</strong><br/>
+                        1. <strong>向量检索的表</strong>（基于 table_category）<br/>
+                        &nbsp;&nbsp;• category="事实表" 或 "fact" → candidate_fact_tables<br/>
+                        &nbsp;&nbsp;• 其他 → candidate_dim_tables<br/>
+                        2. <strong>列的父表</strong>（基于 parent_category）<br/>
+                        3. <strong>维度值命中的表</strong>（dim_table）→ candidate_dim_tables<br/><br/>
+                        <strong>输出：</strong><br/>
+                        • candidate_fact_tables: 候选事实表列表<br/>
+                        • candidate_dim_tables: 候选维度表列表<br/>
+                        • table_similarities: 表相似度字典<br/>
+                        • dim_value_hits: 维度值匹配结果
+                    </td>
+                </tr>
+            </table>
+
+            <h4 style="margin-top: 20px;">🔍 步骤4: JOIN路径规划（Neo4j图检索）</h4>
+            <p><strong>代码位置：</strong>retriever.py:333-437 (_retrieve_join_plans)</p>
+
+            <table class="detail-table">
+                <tr>
+                    <th style="width:30%">子步骤</th>
+                    <th style="width:70%">说明</th>
+                </tr>
+                <tr>
+                    <td><strong>4.0 维度表优化判断</strong></td>
+                    <td>
+                        <strong>方法：</strong>_should_use_dimension_only()<br/>
+                        <strong>规则：</strong><br/>
+                        1. 有时间约束 → 不优化（需要事实表）<br/>
+                        2. 没有维度表候选 → 不优化<br/>
+                        3. 只有1个维度表 + 无事实表 → 使用单表，跳过JOIN<br/>
+                        4. 维度表相似度 > 事实表相似度 + 阈值（0.05）→ 使用单维度表<br/><br/>
+                        <strong>如果优化：</strong>返回单表计划，不调用Neo4j
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>4.1 选择Base表</strong></td>
+                    <td>
+                        <strong>有事实表：</strong>选择相似度最高的事实表作为Base<br/>
+                        <strong>纯维度表：</strong>通过连通性分析选择Base<br/>
+                        &nbsp;&nbsp;• 遍历每个维度表作为候选Base<br/>
+                        &nbsp;&nbsp;• 查询它能连接到多少个其他表（连通性）<br/>
+                        &nbsp;&nbsp;• 选择连接数最多的；如果相同，选择相似度最高的
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>4.2 Neo4j查询JOIN路径</strong></td>
+                    <td>
+                        <strong>方法：</strong>neo4j_client.plan_join_paths()<br/>
+                        <strong>参数：</strong><br/>
+                        • base_tables: [选中的Base表]<br/>
+                        • target_tables: [其他所有候选表]<br/>
+                        • max_hops: 5（最大跳数）<br/>
+                        • strategy: "apoc_dijkstra"（最短路径算法）<br/><br/>
+                        <strong>返回：</strong>JOIN计划，包含：<br/>
+                        • base: Base表<br/>
+                        • targets: 目标表列表<br/>
+                        • edges: JOIN边列表，每条边包含：<br/>
+                        &nbsp;&nbsp;- src_table: 源表<br/>
+                        &nbsp;&nbsp;- dst_table: 目标表<br/>
+                        &nbsp;&nbsp;- on_clause: JOIN条件（如 "SRC.id = DST.fk_id"）
+                    </td>
+                </tr>
+            </table>
+
+            <h4 style="margin-top: 20px;">🔍 步骤5: 获取表卡片</h4>
+            <ul>
+                <li><strong>方法：</strong>pg_client.fetch_table_cards(all_table_ids)</li>
+                <li><strong>输入：</strong>所有候选表的ID列表（事实表 + 维度表）</li>
+                <li><strong>输出：</strong>表卡片字典，包含每个表的详细信息：
+                    <ul>
+                        <li>text_raw: 表的文本描述（包含所有字段）</li>
+                        <li>grain_hint: 粒度提示</li>
+                        <li>time_col_hint: 时间列提示</li>
+                        <li>table_category: 表类别</li>
+                    </ul>
+                </li>
+            </ul>
+
+            <h4 style="margin-top: 20px;">📦 最终输出 (schema_context)</h4>
+            <pre>{
+  "tables": [...],                   # 候选表名列表
+  "columns": [...],                  # 候选列列表
+  "join_plans": [...],               # JOIN计划
+  "table_cards": {...},              # 表卡片字典
+  "dim_value_hits": [...],           # 维度值匹配结果
+  "candidate_fact_tables": [...],    # 候选事实表
+  "candidate_dim_tables": [...],     # 候选维度表
+  "table_similarities": {...},       # 表相似度
+  "metadata": {
+    "retrieval_time": 2.35,
+    "table_count": 5,
+    "column_count": 20,
+    "join_plan_count": 1,
+    "dim_match_count": 3
+  }
+}</pre>
+
+            <h4 style="margin-top: 20px;">⚙️ 配置参数</h4>
+            <table class="detail-table">
+                <tr>
+                    <th>类别</th>
+                    <th>参数</th>
+                    <th>默认值</th>
+                </tr>
+                <tr>
+                    <td rowspan="3"><strong>向量检索</strong></td>
+                    <td>topk_tables</td>
+                    <td>10</td>
+                </tr>
+                <tr>
+                    <td>topk_columns</td>
+                    <td>10</td>
+                </tr>
+                <tr>
+                    <td>similarity_threshold</td>
+                    <td>0.45</td>
+                </tr>
+                <tr>
+                    <td rowspan="2"><strong>维度值检索</strong></td>
+                    <td>dim_index_topk</td>
+                    <td>5</td>
+                </tr>
+                <tr>
+                    <td>dim_value_min_score</td>
+                    <td>0.5</td>
+                </tr>
+                <tr>
+                    <td rowspan="3"><strong>图检索</strong></td>
+                    <td>join_max_hops</td>
+                    <td>5</td>
+                </tr>
+                <tr>
+                    <td>join_strategy</td>
+                    <td>apoc_dijkstra</td>
+                </tr>
+                <tr>
+                    <td>similarity_gap_threshold</td>
+                    <td>0.05</td>
+                </tr>
+                <tr>
+                    <td rowspan="3"><strong>超时</strong></td>
+                    <td>vector_search_timeout</td>
+                    <td>5s</td>
+                </tr>
+                <tr>
+                    <td>graph_search_timeout</td>
+                    <td>5s</td>
+                </tr>
+                <tr>
+                    <td>total_timeout</td>
+                    <td>15s</td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="notes" style="background: #fff3e0; border-left-color: #ff9800;">
+            <h3>3️⃣ SQL生成节点 (sql_generation_node)</h3>
+            <table class="detail-table">
+                <tr>
+                    <th style="width:20%">属性</th>
+                    <th style="width:80%">说明</th>
+                </tr>
+                <tr>
+                    <td><strong>代码位置</strong></td>
+                    <td>src/modules/sql_generation/subgraph/nodes/sql_generation.py</td>
+                </tr>
+                <tr>
+                    <td><strong>类型</strong></td>
+                    <td>Agent（调用LLM）</td>
+                </tr>
+                <tr>
+                    <td><strong>实现类</strong></td>
+                    <td>SQLGenerationAgent</td>
+                </tr>
+                <tr>
+                    <td><strong>使用模型</strong></td>
+                    <td>qwen-max（通义千问）</td>
+                </tr>
+                <tr>
+                    <td><strong>主要功能</strong></td>
+                    <td>
+                        基于多种上下文生成PostgreSQL SQL：<br/>
+                        <strong>1. Schema上下文</strong>：<br/>
+                        &nbsp;&nbsp;• 表卡片（table_cards）<br/>
+                        &nbsp;&nbsp;• JOIN计划（join_plans）<br/>
+                        &nbsp;&nbsp;• 时间列提示（time_col_hint）<br/>
+                        &nbsp;&nbsp;• 维度值匹配（dim_value_hits）<br/>
+                        <strong>2. 解析结果</strong>（parse_result）：<br/>
+                        &nbsp;&nbsp;• 时间窗口（time.start, time.end）<br/>
+                        &nbsp;&nbsp;• 维度过滤（dimensions）<br/>
+                        &nbsp;&nbsp;• 指标提示（metric）<br/>
+                        <strong>3. 历史SQL案例</strong>（similar_sqls）：<br/>
+                        &nbsp;&nbsp;• 复用 query_embedding 检索相似SQL<br/>
+                        &nbsp;&nbsp;• 最多2个相似案例<br/>
+                        &nbsp;&nbsp;• 包含：相似度、问题、SQL<br/>
+                        <strong>4. 依赖结果</strong>（dependencies_results）<br/>
+                        <strong>5. 验证错误</strong>（重试时）
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>提示词要求</strong></td>
+                    <td>
+                        1. 所有表必须包含schema前缀（例如 public.table）<br/>
+                        2. 时间过滤使用半开区间（>= start AND < end）<br/>
+                        3. JOIN条件必须严格按照ON模板<br/>
+                        4. 仅输出SQL，不附加说明
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>输出字段</strong></td>
+                    <td>
+                        • generated_sql: 生成的SQL字符串<br/>
+                        • iteration_count: 当前迭代次数（自动+1）<br/>
+                        • error (可选): "generation_failed"
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>配置参数</strong></td>
+                    <td>
+                        • llm_model: qwen-max<br/>
+                        • temperature: 0<br/>
+                        • max_tokens: 2000<br/>
+                        • timeout: 30s<br/>
+                        • sql_similarity_threshold: 0.6<br/>
+                        • max_similar_sqls: 2
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="notes" style="background: #f3e5f5; border-left-color: #9c27b0;">
+            <h3>4️⃣ 三层验证节点 (validation_node)</h3>
+            <table class="detail-table">
+                <tr>
+                    <th style="width:20%">属性</th>
+                    <th style="width:80%">说明</th>
+                </tr>
+                <tr>
+                    <td><strong>代码位置</strong></td>
+                    <td>src/modules/sql_generation/subgraph/nodes/validation.py</td>
+                </tr>
+                <tr>
+                    <td><strong>类型</strong></td>
+                    <td>Tool（确定性函数，不调用LLM）</td>
+                </tr>
+                <tr>
+                    <td><strong>实现类</strong></td>
+                    <td>SQLValidationTool（src/tools/validation/sql_validation.py）</td>
+                </tr>
+                <tr>
+                    <td><strong>三层验证</strong></td>
+                    <td>
+                        <strong>第1层：语法检查</strong><br/>
+                        &nbsp;&nbsp;• 使用 sqlparse 解析SQL<br/>
+                        &nbsp;&nbsp;• 允许的语句类型：SELECT, WITH, UNKNOWN<br/>
+                        &nbsp;&nbsp;• 检查SQL是否可解析<br/><br/>
+                        <strong>第2层：安全检查</strong><br/>
+                        &nbsp;&nbsp;• 禁止关键字：DROP, DELETE, TRUNCATE, ALTER, CREATE, INSERT, UPDATE, GRANT, REVOKE, EXEC, EXECUTE<br/>
+                        &nbsp;&nbsp;• 禁止SQL注释（防注入）<br/>
+                        &nbsp;&nbsp;• 禁止多条SQL语句（防注入）<br/><br/>
+                        <strong>第3层：语义检查（EXPLAIN）</strong><br/>
+                        &nbsp;&nbsp;• 执行 EXPLAIN 分析SQL执行计划<br/>
+                        &nbsp;&nbsp;• 检查表是否存在<br/>
+                        &nbsp;&nbsp;• 检查字段是否存在<br/>
+                        &nbsp;&nbsp;• 性能警告：顺序扫描、嵌套循环、预估行数阈值
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>输出字段</strong></td>
+                    <td>
+                        • <strong>validation_result</strong>:<br/>
+                        &nbsp;&nbsp;- valid: bool（是否通过验证）<br/>
+                        &nbsp;&nbsp;- errors: List[str]（错误列表）<br/>
+                        &nbsp;&nbsp;- warnings: List[str]（警告列表）<br/>
+                        &nbsp;&nbsp;- layer: "syntax" | "security" | "semantic" | "all_passed"<br/>
+                        &nbsp;&nbsp;- explain_plan: Optional[str]（EXPLAIN结果）<br/>
+                        • <strong>validation_history</strong>: 验证历史记录（自动追加）<br/>
+                        • <strong>validated_sql</strong>: 如果验证通过，设置此字段<br/>
+                        • error (可选): "validation_failed"
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>配置参数</strong></td>
+                    <td>
+                        • enable_syntax_check: true<br/>
+                        • enable_security_check: true<br/>
+                        • enable_semantic_check: true<br/>
+                        • explain_timeout: 5s<br/>
+                        • explain_analyze: false<br/>
+                        • seq_scan_warn: true<br/>
+                        • nested_loop_warn: true<br/>
+                        • estimated_rows_threshold: 100000<br/>
+                        • total_timeout: 10s
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="section-title">🔄 重试机制详解</div>
+
+        <div class="highlight">
+            <h3>重试判断逻辑 (should_retry)</h3>
+            <p><strong>代码位置：</strong>src/modules/sql_generation/subgraph/create_subgraph.py:24-77</p>
+
+            <table class="detail-table">
+                <tr>
+                    <th style="width:25%">条件</th>
+                    <th style="width:25%">返回值</th>
+                    <th style="width:50%">说明</th>
+                </tr>
+                <tr>
+                    <td>validated_sql 存在</td>
+                    <td><strong>"success"</strong></td>
+                    <td>验证通过，流程成功结束 → END</td>
+                </tr>
+                <tr>
+                    <td>error_type 为 "schema_retrieval_failed"</td>
+                    <td><strong>"fail"</strong></td>
+                    <td>Schema检索失败，不可恢复 → END</td>
+                </tr>
+                <tr>
+                    <td>error_type 为 "generation_failed"</td>
+                    <td><strong>"fail"</strong></td>
+                    <td>SQL生成失败，不可恢复 → END</td>
+                </tr>
+                <tr>
+                    <td>iteration_count < 3</td>
+                    <td><strong>"retry"</strong></td>
+                    <td>验证失败但未超过最大迭代次数 → 回到 sql_generation</td>
+                </tr>
+                <tr>
+                    <td>iteration_count >= 3</td>
+                    <td><strong>"fail"</strong></td>
+                    <td>重试次数已达上限 → END</td>
+                </tr>
+            </table>
+
+            <p style="margin-top: 20px;"><strong>重试流程：</strong></p>
+            <ul>
+                <li>第1次生成：iteration_count=0 → 生成SQL → 验证失败 → iteration_count=1</li>
+                <li>第2次生成：iteration_count=1 → 重新生成（包含上次错误）→ 验证失败 → iteration_count=2</li>
+                <li>第3次生成：iteration_count=2 → 重新生成（包含所有错误）→ 验证失败 → iteration_count=3</li>
+                <li>第4次检查：iteration_count=3 → 达到上限 → 返回 "fail"</li>
+            </ul>
+
+            <p style="margin-top: 15px;"><strong>错误反馈：</strong></p>
+            <ul>
+                <li>重试时，sql_generation_node 会获取上一次的 validation_result</li>
+                <li>将 validation_result.errors 添加到提示词中</li>
+                <li>LLM基于错误信息生成改进的SQL</li>
+            </ul>
+        </div>
+
+        <div class="section-title">📦 State 结构说明</div>
+
+        <div class="state-field">
+            <h3>SQLGenerationState 完整字段</h3>
+            <p><strong>代码位置：</strong>src/modules/sql_generation/subgraph/state.py</p>
+
+            <table class="detail-table">
+                <tr>
+                    <th style="width:25%">字段类别</th>
+                    <th style="width:25%">字段名</th>
+                    <th style="width:15%">类型</th>
+                    <th style="width:35%">说明</th>
+                </tr>
+                <tr>
+                    <td rowspan="5"><strong>输入字段</strong></td>
+                    <td>query</td>
+                    <td>str</td>
+                    <td>子查询文本</td>
+                </tr>
+                <tr>
+                    <td>query_id</td>
+                    <td>str</td>
+                    <td>查询ID（用于日志追踪）</td>
+                </tr>
+                <tr>
+                    <td>user_query</td>
+                    <td>str</td>
+                    <td>用户原始查询</td>
+                </tr>
+                <tr>
+                    <td>dependencies_results</td>
+                    <td>Dict</td>
+                    <td>依赖查询的结果</td>
+                </tr>
+                <tr>
+                    <td>parse_hints</td>
+                    <td>Optional[Dict]</td>
+                    <td>外部传入的解析提示</td>
+                </tr>
+                <tr>
+                    <td rowspan="3"><strong>解析阶段</strong></td>
+                    <td>parse_result</td>
+                    <td>Optional[Dict]</td>
+                    <td>结构化解析结果</td>
+                </tr>
+                <tr>
+                    <td>parsing_source</td>
+                    <td>Optional[str]</td>
+                    <td>"external" | "llm" | "disabled" | "fallback"</td>
+                </tr>
+                <tr>
+                    <td>query_embedding</td>
+                    <td>Optional[List[float]]</td>
+                    <td>查询向量</td>
+                </tr>
+                <tr>
+                    <td rowspan="1"><strong>Schema检索阶段</strong></td>
+                    <td>schema_context</td>
+                    <td>Optional[Dict]</td>
+                    <td>包含表、列、JOIN计划、维度值等</td>
+                </tr>
+                <tr>
+                    <td rowspan="2"><strong>SQL生成阶段</strong></td>
+                    <td>generated_sql</td>
+                    <td>Optional[str]</td>
+                    <td>当前生成的SQL</td>
+                </tr>
+                <tr>
+                    <td>iteration_count</td>
+                    <td>int</td>
+                    <td>当前迭代次数（0开始）</td>
+                </tr>
+                <tr>
+                    <td rowspan="2"><strong>验证阶段</strong></td>
+                    <td>validation_result</td>
+                    <td>Optional[Dict]</td>
+                    <td>包含 valid, errors, warnings, layer, explain_plan</td>
+                </tr>
+                <tr>
+                    <td>validation_history</td>
+                    <td>List[Dict]</td>
+                    <td>所有验证历史（使用reducer自动追加）</td>
+                </tr>
+                <tr>
+                    <td rowspan="4"><strong>输出字段</strong></td>
+                    <td>validated_sql</td>
+                    <td>Optional[str]</td>
+                    <td>最终验证通过的SQL</td>
+                </tr>
+                <tr>
+                    <td>error</td>
+                    <td>Optional[str]</td>
+                    <td>错误信息</td>
+                </tr>
+                <tr>
+                    <td>error_type</td>
+                    <td>Optional[str]</td>
+                    <td>错误类型</td>
+                </tr>
+                <tr>
+                    <td>execution_time</td>
+                    <td>float</td>
+                    <td>子图执行耗时（秒）</td>
+                </tr>
+                <tr>
+                    <td rowspan="1"><strong>继承字段</strong></td>
+                    <td>messages</td>
+                    <td>List[BaseMessage]</td>
+                    <td>继承自MessagesState，用于LLM交互</td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="section-title">⚙️ 配置文件说明</div>
+
+        <div class="code-ref">
+            <h3>配置文件位置</h3>
+            <p>src/modules/sql_generation/config/sql_generation_subgraph.yaml</p>
+
+            <h4 style="margin-top: 20px;">主要配置项：</h4>
+            <ul style="list-style: none; padding-left: 0;">
+                <li><strong>question_parsing:</strong> 问题解析配置（模型、超时、开关）</li>
+                <li><strong>schema_retrieval:</strong> Schema检索配置（topk、相似度阈值、超时）</li>
+                <li><strong>sql_generation:</strong> SQL生成配置（模型、温度、提示词配置）</li>
+                <li><strong>validation:</strong> 验证配置（三层验证开关、阈值）</li>
+                <li><strong>retry:</strong> 重试配置（最大迭代次数、错误反馈策略）</li>
+                <li><strong>cache:</strong> 缓存配置（开关、TTL）</li>
+                <li><strong>logging:</strong> 日志配置（级别、详细度）</li>
+                <li><strong>monitoring:</strong> 监控配置（指标收集、告警）</li>
+            </ul>
+        </div>
+
+        <div class="notes" style="background: #ffebee; border-left-color: #f44336;">
+            <h3>⚠️ 关键注意事项</h3>
+            <ul>
+                <li><strong>向后兼容：</strong>如果外部传入 parse_hints，会直接使用，不调用内部解析</li>
+                <li><strong>可配置性：</strong>所有参数都可以通过 yaml 配置文件或环境变量覆盖</li>
+                <li><strong>错误处理：</strong>
+                    <ul>
+                        <li>parsing_failed: 问题解析失败（如果不允许fallback）</li>
+                        <li>schema_retrieval_failed: Schema检索失败（不可恢复）</li>
+                        <li>generation_failed: SQL生成失败（不可恢复）</li>
+                        <li>validation_failed: 验证失败且达到最大重试次数</li>
+                    </ul>
+                </li>
+                <li><strong>重试策略：</strong>最多3次迭代（包含首次生成），每次重试都会将上一次的错误反馈给LLM</li>
+                <li><strong>日志追踪：</strong>使用 query_id 进行日志关联，便于追踪整个流程</li>
+                <li><strong>性能监控：</strong>记录每个阶段的耗时，支持指标收集和告警</li>
+            </ul>
+        </div>
+
+        <div class="highlight" style="background: #e8f5e9; border-left-color: #4caf50;">
+            <h3>✨ 子图设计优势</h3>
+            <ul>
+                <li><strong>模块化：</strong>每个节点职责单一，易于测试和维护</li>
+                <li><strong>可复用：</strong>子图可以被主流程多次调用（批次处理）</li>
+                <li><strong>容错性：</strong>多层验证 + 自动重试 + 错误反馈</li>
+                <li><strong>可观测性：</strong>详细的日志记录和验证历史</li>
+                <li><strong>高度配置化：</strong>所有参数都可外部配置</li>
+                <li><strong>向后兼容：</strong>支持外部传入解析结果，兼容旧版本调用方式</li>
+                <li><strong>智能Schema检索：</strong>结合向量、图、维度值多种检索方式，提供全面的Schema上下文</li>
+            </ul>
+        </div>
+
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'default',
+            flowchart: {
+                curve: 'basis',
+                padding: 20,
+                nodeSpacing: 50,
+                rankSpacing: 80
+            }
+        });
+    </script>
+</body>
+</html>

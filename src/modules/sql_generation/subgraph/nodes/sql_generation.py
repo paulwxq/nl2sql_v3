@@ -111,6 +111,7 @@ class SQLGenerationAgent:
         metric_info = self._format_metric_hints(parse_result)
 
         # 格式化 Schema 上下文
+        table_categories_text = self._format_table_categories(schema_context)  # 表类型分组
         table_cards_text = self._format_table_cards(schema_context.get("table_cards", {}))
         join_plans_text = format_join_plan_for_prompt(schema_context.get("join_plans", []))
         time_columns_text = self._format_time_columns(schema_context.get("table_cards", {}))
@@ -133,7 +134,7 @@ class SQLGenerationAgent:
 要求：
 1. 仅输出 SQL，不附加说明。
 2. 所有表必须包含 schema 前缀（例如 public.table）。
-3. 时间过滤使用指定列，并遵循 >= start AND < end 的半开区间。
+3. 日期时间过滤使用指定列：同时具备 start 与 end 时使用 >= start AND < end；仅有 start 时使用 >= start；仅有 end 时使用 < end。
 4. JOIN 条件必须严格按照 ON 模板，用实际别名替换 SRC/DST。
 5. 以下提供的表结构、JOIN 计划和时间列为参考，你可以选择性使用它们，但不得使用未列出的字段。
 
@@ -144,6 +145,11 @@ class SQLGenerationAgent:
 {time_info}
 {dimension_filters}
 {metric_info}{dependencies_text}{errors_text}
+
+---
+
+表类型：
+{table_categories_text}
 
 ---
 
@@ -191,10 +197,26 @@ JOIN 计划：
         time_window = parse_result["time"]
         start = time_window.get("start", "")
         end = time_window.get("end", "")
+        grain = time_window.get("grain_inferred", "")
 
+        lines: List[str] = []
+
+        # 统一输出“日期时间粒度”行（若可用）
+        if grain:
+            lines.append(f"日期时间粒度：{grain}")
+
+        # 根据 start/end 的存在性拼接条件（仅输出“日期时间条件”，不再输出“日期时间窗口”）
         if start and end:
-            return f"时间窗口：{start} ~ {end}"
-        return ""
+            # 区间：半开区间
+            lines.append(f"日期时间条件：>= {start} AND < {end}")
+        elif start:
+            # 仅下界
+            lines.append(f"日期时间条件：>= {start}")
+        elif end:
+            # 仅上界
+            lines.append(f"日期时间条件：< {end}")
+
+        return "\n".join(lines)
 
     def _format_dimension_filters(
         self,
@@ -222,6 +244,41 @@ JOIN 计划：
 
         metric = parse_result["metric"]
         return f"指标：{metric.get('text', '')}"
+
+    def _format_table_categories(self, schema_context: Dict[str, Any]) -> str:
+        """
+        格式化表类型分组
+
+        根据 table_categories 按原始类型分组显示表
+
+        Args:
+            schema_context: Schema上下文，包含 table_categories 字典
+
+        Returns:
+            格式化后的表类型字符串，例如：
+            - 交易表: table1, table2
+            - 维度表: table3
+            - 桥接表: table4
+        """
+        table_categories = schema_context.get("table_categories", {})
+        if not table_categories:
+            return "（无分类信息）"
+
+        # 按类型分组
+        category_groups: Dict[str, List[str]] = {}
+        for table_id, category in table_categories.items():
+            if category not in category_groups:
+                category_groups[category] = []
+            category_groups[category].append(table_id)
+
+        # 格式化输出
+        lines = []
+        for category in sorted(category_groups.keys()):
+            tables = category_groups[category]
+            tables_str = ", ".join(sorted(tables))
+            lines.append(f"  - {category}: {tables_str}")
+
+        return "\n".join(lines) if lines else "（无分类信息）"
 
     def _format_table_cards(self, table_cards: Dict[str, Dict]) -> str:
         """格式化表卡片"""

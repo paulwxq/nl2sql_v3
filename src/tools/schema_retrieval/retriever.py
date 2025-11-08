@@ -41,6 +41,27 @@ class SchemaRetriever:
         self.join_max_hops = retrieval_config.get("join_max_hops", 5)
         self.similarity_threshold = retrieval_config.get("similarity_threshold", 0.45)
 
+        # 性能优化：预处理类型映射表（小写化）
+        category_mapping = retrieval_config.get("table_category_mapping", {})
+        if not category_mapping:
+            raise ValueError(
+                "配置错误：缺少 schema_retrieval.table_category_mapping 配置。"
+                "请在 sql_generation_subgraph.yaml 中添加表分类映射规则。"
+            )
+
+        # 将所有类型值预先转为小写，避免运行时重复转换
+        self._category_mapping_lower = {}
+        for category_group in ["fact", "dimension", "bridge"]:
+            type_list = category_mapping.get(category_group, [])
+            self._category_mapping_lower[category_group] = {t.lower() for t in type_list}
+
+        logger.info(
+            f"表分类映射已加载: "
+            f"fact={len(self._category_mapping_lower['fact'])} 个类型, "
+            f"dimension={len(self._category_mapping_lower['dimension'])} 个类型, "
+            f"bridge={len(self._category_mapping_lower['bridge'])} 个类型"
+        )
+
     def retrieve(
         self,
         query: str,
@@ -138,13 +159,18 @@ class SchemaRetriever:
             parse_result=parse_result,
         )
         qlog.debug(
-            f"✓ 事实表: {len(candidate_set['candidate_fact_tables'])} 个, 维度表: {len(candidate_set['candidate_dim_tables'])} 个, 维度值命中: {len(candidate_set['dim_value_hits'])} 个"
+            f"✓ 事实表: {len(candidate_set['candidate_fact_tables'])} 个, "
+            f"维度表: {len(candidate_set['candidate_dim_tables'])} 个, "
+            f"桥接表: {len(candidate_set['candidate_bridge_tables'])} 个, "
+            f"维度值命中: {len(candidate_set['dim_value_hits'])} 个"
         )
         # 列出详细名单
         if candidate_set.get("candidate_fact_tables"):
             qlog.debug(f"事实表列表: {candidate_set['candidate_fact_tables']}")
         if candidate_set.get("candidate_dim_tables"):
             qlog.debug(f"维度表列表: {candidate_set['candidate_dim_tables']}")
+        if candidate_set.get("candidate_bridge_tables"):
+            qlog.debug(f"桥接表列表: {candidate_set['candidate_bridge_tables']}")
         dim_hits = candidate_set.get("dim_value_hits") or []
         if dim_hits:
             # 输出命中名称清单（query_value -> matched_text [dim_table]）
@@ -164,6 +190,7 @@ class SchemaRetriever:
         join_plans = self._retrieve_join_plans(
             candidate_fact_tables=candidate_set["candidate_fact_tables"],
             candidate_dim_tables=candidate_set["candidate_dim_tables"],
+            candidate_bridge_tables=candidate_set["candidate_bridge_tables"],  # 桥接表
             table_similarities=candidate_set["table_similarities"],
             parse_result=parse_result,
         )
@@ -217,7 +244,9 @@ class SchemaRetriever:
             "dim_value_hits": candidate_set["dim_value_hits"],  # 统一使用此字段
             "candidate_fact_tables": candidate_set["candidate_fact_tables"],
             "candidate_dim_tables": candidate_set["candidate_dim_tables"],
+            "candidate_bridge_tables": candidate_set["candidate_bridge_tables"],  # 桥接表
             "table_similarities": candidate_set["table_similarities"],
+            "table_categories": candidate_set["table_categories"],  # 原始类型
             "metadata": {
                 "retrieval_time": retrieval_time,
                 "table_count": len(table_names),
@@ -257,13 +286,50 @@ class SchemaRetriever:
 
         return sorted(list(table_set))
 
+    def _classify_table_category(self, category: str) -> str:
+        """
+        根据原始 table_category 值归类到 fact/dimension/bridge
+
+        Args:
+            category: 原始 table_category 值（如"事实表"、"交易表"等）
+
+        Returns:
+            归类结果: "fact" | "dimension" | "bridge"
+
+        注意：
+            - 完全依赖配置文件 sql_generation_subgraph.yaml 中的 table_category_mapping
+            - 使用预处理的映射表（_category_mapping_lower），提升性能
+        """
+        if not category:
+            return "dimension"  # 空值默认归为维度表
+
+        # 使用预处理的小写映射表（O(1) 查找）
+        category_lower = category.lower()
+
+        # 检查是否属于事实表
+        if category_lower in self._category_mapping_lower["fact"]:
+            return "fact"
+
+        # 检查是否属于桥接表
+        if category_lower in self._category_mapping_lower["bridge"]:
+            return "bridge"
+
+        # 检查是否属于维度表
+        if category_lower in self._category_mapping_lower["dimension"]:
+            return "dimension"
+
+        # 如果在配置中都找不到，默认归为维度表
+        qlog = with_query_id(logger, "")
+        qlog.warning(f"表类型 '{category}' 未在配置中定义，默认归为维度表")
+        return "dimension"
+
     def _collect_and_classify_tables(
         self,
         semantic_tables: List[Dict[str, Any]],
         semantic_columns: List[Dict[str, Any]],
         parse_result: Optional[Dict[str, Any]],
     ) -> Dict[str, Any]:
-        """构建 CandidateSet，区分事实表/维度表并附加维度值命中"""
+        """构建 CandidateSet，区分事实表/维度表/桥接表并附加维度值命中"""
 
         # 1) 维度值检索
         dim_value_hits = self._retrieve_dim_value_hits(parse_result)
@@ -282,23 +348,45 @@ class SchemaRetriever:
                 dim_tables_from_values.append(table_id)
                 seen_dim_from_values.add(table_id)
 
-        # 3) 通过列命中收集父表
+        # 3) 通过列命中收集父表（三分类）
         fact_from_columns: List[str] = []
         dim_from_columns: List[str] = []
+        bridge_from_columns: List[str] = []  # 桥接表
+
+        # 仅使用表级查询结果获取分类（object_type='table'）
+        table_category_map = {
+            t.get("object_id"): (t.get("table_category") or t.get("category") or "")
+            for t in semantic_tables
+            if t.get("object_id")
+        }
+
         for col in semantic_columns:
             parent_id = col.get("parent_id")
             if not parent_id:
                 continue
-            category = col.get("table_category") or col.get("parent_category") or "维度表"
-            # 判断是否为事实表（兼容中英文值：fact 或 事实表）
-            target_list = fact_from_columns if category in ["fact", "事实表"] else dim_from_columns
-            if parent_id not in target_list:
-                target_list.append(parent_id)
+            # 读取原始 table_category 值（仅从表级别数据获取）
+            category = table_category_map.get(parent_id, "")
 
-        # 4) 语义检索结果分类
+            # 归类逻辑（通过配置映射）
+            category_group = self._classify_table_category(category)
+
+            if category_group == "fact":
+                if parent_id not in fact_from_columns:
+                    fact_from_columns.append(parent_id)
+            elif category_group == "bridge":
+                if parent_id not in bridge_from_columns:
+                    bridge_from_columns.append(parent_id)
+            else:
+                # 默认归为维度表
+                if parent_id not in dim_from_columns:
+                    dim_from_columns.append(parent_id)
+
+        # 4) 语义检索结果分类（三分类）
         semantic_fact_tables: List[str] = []
         semantic_dim_tables: List[str] = []
+        semantic_bridge_tables: List[str] = []  # 桥接表
         table_similarities: Dict[str, float] = {}
+        table_categories: Dict[str, str] = {}  # 保存原始类型
 
         for table in semantic_tables:
             table_id = table.get("object_id")
@@ -308,11 +396,21 @@ class SchemaRetriever:
             if similarity is not None:
                 table_similarities[table_id] = float(similarity)
 
-            category = table.get("table_category") or table.get("category") or "维度表"
-            # 判断是否为事实表（兼容中英文值：fact 或 事实表）
-            if category in ["fact", "事实表"]:
+            # 读取并保存原始 table_category 值
+            # 注意：semantic_tables 来自 search_semantic_tables()，已使用 object_type='table' 条件
+            category = table.get("table_category") or table.get("category") or ""
+            if category:
+                table_categories[table_id] = category
+
+            # 归类逻辑
+            category_group = self._classify_table_category(category)
+
+            if category_group == "fact":
                 if table_id not in semantic_fact_tables:
                     semantic_fact_tables.append(table_id)
+            elif category_group == "bridge":
+                if table_id not in semantic_bridge_tables:
+                    semantic_bridge_tables.append(table_id)
             else:
                 if table_id not in semantic_dim_tables:
                     semantic_dim_tables.append(table_id)
@@ -322,11 +420,14 @@ class SchemaRetriever:
         candidate_dim_tables = list(
             dict.fromkeys(dim_tables_from_values + dim_from_columns + semantic_dim_tables)
         )
+        candidate_bridge_tables = list(dict.fromkeys(semantic_bridge_tables + bridge_from_columns))  # 桥接表
 
         return {
             "candidate_fact_tables": candidate_fact_tables,
             "candidate_dim_tables": candidate_dim_tables,
+            "candidate_bridge_tables": candidate_bridge_tables,  # 桥接表
             "table_similarities": table_similarities,
+            "table_categories": table_categories,  # 原始类型
             "dim_value_hits": dim_value_hits,
         }
 
@@ -334,21 +435,35 @@ class SchemaRetriever:
         self,
         candidate_fact_tables: List[str],
         candidate_dim_tables: List[str],
+        candidate_bridge_tables: List[str],  # 桥接表
         table_similarities: Dict[str, float],
         parse_result: Optional[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
         """
         检索 JOIN 计划
-        
+
         参考 docs/13 第718-900行的 Planner 阶段逻辑
-        
+
         包含三个关键逻辑：
         1. 维度表优化判断（_should_use_dimension_only）
-        2. Base表选择策略
+        2. Base表选择策略（事实表 > 维度表，桥接表不能作为base）
         3. 连通性分析（多维度表场景）
+
+        注意：
+            - 桥接表可以参与 JOIN（在 all_tables 中），但不能作为 base 表
+            - 仅事实表和维度表可以作为 base 表
         """
-        all_tables = list(dict.fromkeys(candidate_fact_tables + candidate_dim_tables))
-        if not all_tables:
+        # 桥接表可以参与 JOIN，但不能作为 base 表
+        all_tables = list(dict.fromkeys(candidate_fact_tables + candidate_dim_tables + candidate_bridge_tables))
+
+        # 检查是否只有桥接表（无法生成 JOIN 计划）
+        if not candidate_fact_tables and not candidate_dim_tables:
+            qlog = with_query_id(logger, "")
+            if candidate_bridge_tables:
+                qlog.warning(
+                    f"仅检测到桥接表 {candidate_bridge_tables}，无法生成JOIN计划。"
+                    "桥接表不能作为 base 表，请检查查询意图或 Schema 设计。"
+                )
             return []
 
         # 1) 维度表优化判断（参考 docs/13:727-784）
