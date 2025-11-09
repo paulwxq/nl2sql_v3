@@ -24,7 +24,6 @@ class SQLGenerationState(MessagesState):
     # ========== 解析阶段 ==========
     parse_result: Optional[Dict[str, Any]] = None  # 内部解析或外部传入的结构化结果
     parsing_source: Optional[str] = None  # "external" | "llm" | "disabled" | "fallback"
-    query_embedding: Optional[List[float]] = None  # 查询向量（用于 schema 检索 / 历史 SQL）
 
     # ========== Schema检索阶段 ==========
     schema_context: Optional[Dict[str, Any]] = None

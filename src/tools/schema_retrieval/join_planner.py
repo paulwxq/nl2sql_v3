@@ -3,36 +3,6 @@
 from typing import Any, Dict, List, Optional
 
 
-def select_base_tables(
-    tables: List[str],
-    table_categories: Dict[str, str],
-) -> List[str]:
-    """
-    从候选表中选择 Base 表（事实表）
-
-    Args:
-        tables: 候选表列表
-        table_categories: 表分类映射 {table_id: category}
-                         category 可能是 "fact"/"事实表" 或 "dimension"/"维度表"
-
-    Returns:
-        Base 表列表（事实表优先）
-    """
-    base_tables = []
-
-    for table in tables:
-        category = table_categories.get(table, "")
-        # 判断是否为事实表（兼容中英文值：fact 或 事实表）
-        if category in ["fact", "事实表"]:
-            base_tables.append(table)
-
-    # 如果没有识别到事实表，使用第一个表作为 Base
-    if not base_tables and tables:
-        base_tables = [tables[0]]
-
-    return base_tables
-
-
 def build_join_plans(
     base_tables: List[str],
     all_tables: List[str],

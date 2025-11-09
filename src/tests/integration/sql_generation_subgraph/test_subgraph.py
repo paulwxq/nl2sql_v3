@@ -47,30 +47,27 @@ def mock_all_dependencies():
 
         # Mock retriever
         mock_retriever_instance = MagicMock()
-        mock_retriever_instance.retrieve.return_value = (
-            {
-                "tables": ["public.orders", "public.customers"],
-                "columns": [],
-                "join_plans": [],
-                "table_cards": {
-                    "public.orders": {
-                        "text_raw": "订单表，包含订单ID、客户ID、金额等字段",
-                        "time_col_hint": "order_date",
-                    }
-                },
-                "similar_sqls": [],
-                "dim_value_matches": [],
-                "candidate_fact_tables": ["public.orders"],
-                "candidate_dim_tables": ["public.customers"],
-                "table_similarities": {
-                    "public.orders": 0.9,
-                    "public.customers": 0.7,
-                },
-                "dim_value_hits": [],
-                "metadata": {"retrieval_time": 0.1},
+        mock_retriever_instance.retrieve.return_value = {
+            "tables": ["public.orders", "public.customers"],
+            "columns": [],
+            "join_plans": [],
+            "table_cards": {
+                "public.orders": {
+                    "text_raw": "订单表，包含订单ID、客户ID、金额等字段",
+                    "time_col_hint": "order_date",
+                }
             },
-            [0.01, 0.02],
-        )
+            "similar_sqls": [],
+            "dim_value_matches": [],
+            "candidate_fact_tables": ["public.orders"],
+            "candidate_dim_tables": ["public.customers"],
+            "table_similarities": {
+                "public.orders": 0.9,
+                "public.customers": 0.7,
+            },
+            "dim_value_hits": [],
+            "metadata": {"retrieval_time": 0.1},
+        }
         mock_retriever_instance.get_retrieval_stats.return_value = {
             "table_count": 2,
             "column_count": 0,

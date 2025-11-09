@@ -1,25 +1,66 @@
 """SQL 验证工具 - 三层验证：语法 + 安全 + 语义"""
 
 import re
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import sqlparse
 
 from src.services.db.pg_client import get_pg_client
+from src.utils.logger import get_module_logger, with_query_id
+
+
+DEFAULT_FORBIDDEN_KEYWORDS = [
+    'DROP',
+    'DELETE',
+    'TRUNCATE',
+    'ALTER',
+    'CREATE',
+    'INSERT',
+    'UPDATE',
+    'GRANT',
+    'REVOKE',
+    'EXEC',
+    'EXECUTE',
+]
+
+
+BASE_LOGGER = get_module_logger("sql_subgraph")
 
 
 class SQLValidationTool:
     """SQL 三层验证工具"""
 
-    def __init__(self, config: Dict[str, Any] = None):
+    def __init__(self, config: Dict[str, Any] = None, query_id: Optional[str] = None):
         """
         初始化验证工具
 
         Args:
             config: 验证配置（来自子图配置文件）
+            query_id: 日志上下文中的查询ID
         """
         self.config = config or {}
         self.pg_client = get_pg_client()
+        self.validation_config = self.config.get('validation', {})
+        self.security_config = self.validation_config.get('security', {})
+
+        self.logger = with_query_id(BASE_LOGGER, query_id) if query_id else BASE_LOGGER
+
+        raw_keywords = self.security_config.get('forbidden_keywords')
+        source = 'config' if raw_keywords else 'default'
+        self.security_keywords = [kw.upper() for kw in (raw_keywords or DEFAULT_FORBIDDEN_KEYWORDS)]
+        self.logger.debug(
+            '加载安全关键字列表（来源：%s）：%s',
+            source,
+            ', '.join(self.security_keywords),
+        )
+
+        self.allow_comments = self.security_config.get('allow_comments', False)
+        self.allow_multiple_statements = self.security_config.get('allow_multiple_statements', False)
+        self.logger.debug(
+            '安全检查配置：allow_comments=%s（配置占位，当前实现仍视注释为危险输入），allow_multiple_statements=%s（配置占位，依旧禁止多语句）',
+            self.allow_comments,
+            self.allow_multiple_statements,
+        )
 
     def validate(self, sql: str) -> Dict[str, Any]:
         """
@@ -38,8 +79,10 @@ class SQLValidationTool:
         all_warnings = []
 
         # 第1层：语法检查
+        self.logger.debug('验证1：开始语法检查')
         syntax_result = self._check_syntax(sql)
         if syntax_result["errors"]:
+            self.logger.warning('语法检查失败：%s', '; '.join(syntax_result["errors"]))
             return {
                 "valid": False,
                 "errors": syntax_result["errors"],
@@ -47,11 +90,14 @@ class SQLValidationTool:
                 "layer": "syntax",
                 "explain_plan": None,
             }
+        self.logger.debug('验证1：语法检查通过')
         all_warnings.extend(syntax_result["warnings"])
 
         # 第2层：安全检查
+        self.logger.debug('验证2：开始安全检查')
         security_errors = self._check_security(sql)
         if security_errors:
+            self.logger.warning('安全检查失败：%s', '; '.join(security_errors))
             return {
                 "valid": False,
                 "errors": security_errors,
@@ -59,11 +105,14 @@ class SQLValidationTool:
                 "layer": "security",
                 "explain_plan": None,
             }
+        self.logger.debug('验证2：安全检查通过')
 
         # 第3层：语义检查（EXPLAIN）
+        self.logger.debug('验证3：开始语义检查')
         semantic_result = self._check_semantics(sql)
         if not semantic_result["valid"]:
             combined_warnings = all_warnings + semantic_result.get("warnings", [])
+            self.logger.warning('语义检查失败：%s', '; '.join(semantic_result["errors"] or ['未知错误']))
             return {
                 "valid": False,
                 "errors": semantic_result["errors"],
@@ -71,6 +120,8 @@ class SQLValidationTool:
                 "layer": "semantic",
                 "explain_plan": semantic_result.get("explain_plan"),
             }
+
+        self.logger.debug('验证3：语义检查通过')
 
         # 全部通过
         combined_warnings = all_warnings + semantic_result.get("warnings", [])
@@ -150,17 +201,10 @@ class SQLValidationTool:
         errors = []
         sql_upper = sql.upper()
 
-        # 禁止的关键字 - 使用词边界匹配避免误杀（如 created_at 中的 CREATE）
-        dangerous_patterns = [
-            r"\bDROP\b", r"\bDELETE\b", r"\bTRUNCATE\b",
-            r"\bALTER\b", r"\bCREATE\b", r"\bINSERT\b",
-            r"\bUPDATE\b", r"\bGRANT\b", r"\bREVOKE\b",
-            r"\bEXEC\b", r"\bEXECUTE\b",
-        ]
-
-        for pattern in dangerous_patterns:
+        # 禁止的关键字 - 使用词边界匹配避免误杀（配置优先，缺省时使用默认列表）
+        for keyword in self.security_keywords:
+            pattern = rf"\b{re.escape(keyword)}\b"
             if re.search(pattern, sql_upper):
-                keyword = pattern.strip(r"\b")
                 errors.append(f"禁止使用关键字：{keyword}")
 
         # 检查注释注入

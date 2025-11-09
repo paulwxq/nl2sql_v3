@@ -7,13 +7,12 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.modules.sql_generation.subgraph.state import SQLGenerationState
 from src.services.config_loader import load_subgraph_config
-from src.services.db.pg_client import get_pg_client
 from src.tools.schema_retrieval.join_planner import format_join_plan_for_prompt
 from src.tools.schema_retrieval.value_matcher import (
     build_optimized_filters,
     format_dim_value_matches_for_prompt,
 )
-from src.utils.logger import get_module_logger
+from src.utils.logger import get_module_logger, with_query_id
 
 logger = get_module_logger("sql_generation")
 
@@ -180,7 +179,7 @@ JOIN 计划：
 
         final_prompt = prompt.strip()
         
-        # DEBUG: 打印完整提示词
+        # DEBUG: 打印完整提示词（统一由日志级别控制是否可见）
         logger.debug("=" * 80)
         logger.debug("完整 LLM 提示词:")
         logger.debug("=" * 80)
@@ -302,8 +301,11 @@ JOIN 计划：
         if not similar_sqls:
             return "（无相似案例）"
 
+        # 从配置读取展示数量
+        max_display = self.config.get("prompt", {}).get("max_similar_sqls", 2)
+        
         lines = []
-        for idx, hit in enumerate(similar_sqls[:2], 1):  # 最多显示 2 个
+        for idx, hit in enumerate(similar_sqls[:max_display], 1):
             sim = hit.get("similarity", 0.0)
             question = hit.get("question", "")
             sql_text = hit.get("sql", "")
@@ -372,22 +374,10 @@ def sql_generation_node(state: SQLGenerationState) -> Dict[str, Any]:
             "error_type": "generation_failed",
         }
 
-    # 检索历史 SQL（复用查询向量）
-    similar_sqls: List[Dict[str, Any]] = []
-    query_embedding = state.get("query_embedding")
-    if query_embedding:
-        pg_client = get_pg_client()
-        prompt_config = gen_config.get("prompt", {})
-        top_k = prompt_config.get("max_similar_sqls", 2)
-        similarity_threshold = gen_config.get("sql_similarity_threshold", 0.6)
-        similar_sqls = pg_client.search_similar_sqls(
-            embedding=query_embedding,
-            top_k=top_k,
-            similarity_threshold=similarity_threshold,
-        )
-        print(f"[{state['query_id']}] 检索到 {len(similar_sqls)} 个相似SQL案例")
-    else:
-        print(f"[{state['query_id']}] ⚠️ 缺少 query_embedding，跳过历史 SQL 检索")
+    # 直接从 schema_context 读取历史 SQL（已在 schema_retrieval 阶段完成）
+    similar_sqls = schema_context.get("similar_sqls", [])
+    qlog = with_query_id(logger, state.get("query_id", ""))
+    qlog.info(f"使用 {len(similar_sqls)} 个历史 SQL 案例")
 
     try:
         # 生成 SQL

@@ -6,10 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from src.services.db.neo4j_client import get_neo4j_client
 from src.services.db.pg_client import get_pg_client
 from src.services.embedding.embedding_client import get_embedding_client
-from src.tools.schema_retrieval.join_planner import (
-    build_join_plans,
-    select_base_tables,
-)
+from src.tools.schema_retrieval.join_planner import build_join_plans
 from src.tools.schema_retrieval.value_matcher import add_source_index_to_matches
 from src.utils.logger import get_module_logger, with_query_id
 
@@ -66,11 +63,10 @@ class SchemaRetriever:
         self,
         query: str,
         parse_result: Optional[Dict[str, Any]] = None,
-        query_embedding: Optional[List[float]] = None,
         parse_hints: Optional[Dict[str, Any]] = None,
         *,
         query_id: Optional[str] = None,
-    ) -> Tuple[Dict[str, Any], List[float]]:
+    ) -> Dict[str, Any]:
         """
         检索 Schema 上下文
 
@@ -96,11 +92,10 @@ class SchemaRetriever:
         if parse_result is None and parse_hints:
             parse_result = parse_hints
 
-        # 1) 生成或复用查询向量
+        # 1) 生成查询向量（局部变量）
         qlog = with_query_id(logger, query_id or "")
         qlog.info("步骤1: 生成查询向量")
-        if query_embedding is None:
-            query_embedding = self.embedding_client.embed_query(query)
+        query_embedding = self.embedding_client.embed_query(query)
         qlog.debug(f"✓ 向量维度: {len(query_embedding)}")
 
         # 2) 向量检索：表和列
@@ -228,11 +223,29 @@ class SchemaRetriever:
         )
         table_cards = self.pg_client.fetch_table_cards(all_table_ids)
 
+        table_names = self._collect_table_names(semantic_tables, semantic_columns)
+
+        # 6) 检索历史相似 SQL（带异常降级）
+        qlog.info("步骤6: 检索历史相似 SQL")
+        retrieval_config = self.config.get("schema_retrieval", {})
+        sql_topk = retrieval_config.get("sql_embedding_top_k", 3)
+        sql_threshold = retrieval_config.get("sql_similarity_threshold", 0.6)
+        
+        similar_sqls = []
+        try:
+            similar_sqls = self.pg_client.search_similar_sqls(
+                embedding=query_embedding,
+                top_k=sql_topk,
+                similarity_threshold=sql_threshold,
+            )
+            qlog.debug(f"✓ 检索到 {len(similar_sqls)} 个相似 SQL 案例")
+        except Exception as e:
+            qlog.warning(f"历史 SQL 检索失败（已降级为空）: {e}")
+            similar_sqls = []
+
         # 计算耗时
         retrieval_time = time.time() - start_time
         qlog.info(f"Schema 检索完成，耗时 {retrieval_time:.2f} 秒")
-
-        table_names = self._collect_table_names(semantic_tables, semantic_columns)
 
         # 构建 schema_context
         schema_context = {
@@ -240,7 +253,7 @@ class SchemaRetriever:
             "columns": semantic_columns,
             "join_plans": join_plans,
             "table_cards": table_cards,
-            "similar_sqls": [],  # 历史 SQL 移至生成阶段
+            "similar_sqls": similar_sqls,  # 直接包含历史 SQL
             "dim_value_hits": candidate_set["dim_value_hits"],  # 统一使用此字段
             "candidate_fact_tables": candidate_set["candidate_fact_tables"],
             "candidate_dim_tables": candidate_set["candidate_dim_tables"],
@@ -256,7 +269,7 @@ class SchemaRetriever:
             },
         }
 
-        return schema_context, query_embedding
+        return schema_context
 
     def _collect_table_names(
         self,
@@ -422,12 +435,23 @@ class SchemaRetriever:
         )
         candidate_bridge_tables = list(dict.fromkeys(semantic_bridge_tables + bridge_from_columns))  # 桥接表
 
+        # 6) 补全缺失的表类型信息（用于提示词展示）
+        all_candidate_tables = list(dict.fromkeys(
+            candidate_fact_tables + candidate_dim_tables + candidate_bridge_tables
+        ))
+        missing_tables = [t for t in all_candidate_tables if t not in table_categories]
+        
+        if missing_tables:
+            # 批量查询缺失的表类型（原始 table_category 值）
+            missing_categories = self.pg_client.fetch_table_categories(missing_tables)
+            table_categories.update(missing_categories)
+
         return {
             "candidate_fact_tables": candidate_fact_tables,
             "candidate_dim_tables": candidate_dim_tables,
             "candidate_bridge_tables": candidate_bridge_tables,  # 桥接表
             "table_similarities": table_similarities,
-            "table_categories": table_categories,  # 原始类型
+            "table_categories": table_categories,  # 原始类型（现在包含所有候选表）
             "dim_value_hits": dim_value_hits,
         }
 
@@ -773,25 +797,25 @@ def retrieve_schema(
     config: Dict[str, Any] = None,
     *,
     parse_hints: Optional[Dict[str, Any]] = None,
-    query_embedding: Optional[List[float]] = None,
     query_id: Optional[str] = None,
-) -> Tuple[Dict[str, Any], List[float]]:
+) -> Dict[str, Any]:
     """
     检索 Schema 上下文（便捷函数）
 
     Args:
         query: 子查询文本
-        parse_hints: 解析提示
+        parse_result: 解析结果
         config: 检索配置
+        parse_hints: 解析提示
+        query_id: 查询 ID（用于日志）
 
     Returns:
-        Schema 上下文字典
+        Schema 上下文字典（包含 similar_sqls）
     """
     retriever = SchemaRetriever(config)
     return retriever.retrieve(
         query=query,
         parse_result=parse_result,
-        query_embedding=query_embedding,
         parse_hints=parse_hints,
         query_id=query_id,
     )

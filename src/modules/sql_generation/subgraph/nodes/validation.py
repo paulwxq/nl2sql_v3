@@ -5,6 +5,10 @@ from typing import Any, Dict
 from src.modules.sql_generation.subgraph.state import SQLGenerationState
 from src.services.config_loader import load_subgraph_config
 from src.tools.validation.sql_validation import SQLValidationTool
+from src.utils.logger import get_module_logger, with_query_id
+
+
+logger = get_module_logger("sql_subgraph")
 
 
 def validation_node(state: SQLGenerationState) -> Dict[str, Any]:
@@ -23,12 +27,15 @@ def validation_node(state: SQLGenerationState) -> Dict[str, Any]:
     config = load_subgraph_config("sql_generation")
 
     # 初始化验证工具
-    validation_tool = SQLValidationTool(config)
+    validation_tool = SQLValidationTool(config, query_id=state.get("query_id"))
+
+    query_logger = with_query_id(logger, state.get("query_id", ""))
 
     # 获取生成的 SQL
     generated_sql = state.get("generated_sql")
 
     if not generated_sql:
+        query_logger.warning("验证阶段没有生成的 SQL，跳过验证")
         return {
             "validation_result": {
                 "valid": False,
@@ -54,7 +61,7 @@ def validation_node(state: SQLGenerationState) -> Dict[str, Any]:
 
         # 获取验证摘要
         summary = validation_tool.get_validation_summary(validation_result)
-        print(f"[{state['query_id']}] {summary}")
+        query_logger.debug(summary)
 
         # 准备更新的字段
         updates = {
@@ -65,18 +72,20 @@ def validation_node(state: SQLGenerationState) -> Dict[str, Any]:
         # 如果验证通过，设置 validated_sql
         if validation_result["valid"]:
             updates["validated_sql"] = generated_sql
-            print(f"[{state['query_id']}] ✅ SQL验证通过")
+            query_logger.info("SQL 验证通过")
         else:
             # 验证失败
-            print(
-                f"[{state['query_id']}] ❌ SQL验证失败（{validation_result['layer']}）："
-                f"{', '.join(validation_result['errors'])}"
+            error_list = validation_result.get("errors") or ["未知错误"]
+            query_logger.warning(
+                "SQL 验证失败（%s）：%s",
+                validation_result.get("layer", "unknown"),
+                "; ".join(error_list),
             )
 
         return updates
 
     except Exception as e:
-        print(f"[{state['query_id']}] ❌ 验证过程异常: {e}")
+        query_logger.error("验证过程出现异常: %s", e, exc_info=True)
 
         return {
             "validation_result": {

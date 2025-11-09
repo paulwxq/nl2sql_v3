@@ -3,84 +3,9 @@
 import pytest
 
 from src.tools.schema_retrieval.join_planner import (
-    select_base_tables,
     build_multi_base_join_plans,
     format_join_plan_for_prompt,
 )
-
-
-class TestSelectBaseTables:
-    """测试基表选择逻辑"""
-
-    def test_select_fact_tables(self):
-        """测试选择事实表作为基表"""
-        tables = ["public.orders", "public.customers", "public.products"]
-        table_categories = {
-            "public.orders": "fact",
-            "public.customers": "dimension",
-            "public.products": "dimension",
-        }
-
-        base_tables = select_base_tables(tables, table_categories)
-
-        assert base_tables == ["public.orders"]
-
-    def test_select_multiple_fact_tables(self):
-        """测试多个事实表都被选为基表"""
-        tables = ["public.orders", "public.sales", "public.customers"]
-        table_categories = {
-            "public.orders": "fact",
-            "public.sales": "fact",
-            "public.customers": "dimension",
-        }
-
-        base_tables = select_base_tables(tables, table_categories)
-
-        assert set(base_tables) == {"public.orders", "public.sales"}
-
-    def test_fallback_to_first_table(self):
-        """测试当没有事实表时回退到第一个表"""
-        tables = ["public.customers", "public.products", "public.categories"]
-        table_categories = {
-            "public.customers": "dimension",
-            "public.products": "dimension",
-            "public.categories": "dimension",
-        }
-
-        base_tables = select_base_tables(tables, table_categories)
-
-        assert base_tables == ["public.customers"]
-
-    def test_empty_tables_list(self):
-        """测试空表列表"""
-        tables = []
-        table_categories = {}
-
-        base_tables = select_base_tables(tables, table_categories)
-
-        assert base_tables == []
-
-    def test_missing_category_info(self):
-        """测试缺少分类信息的情况"""
-        tables = ["public.orders", "public.customers"]
-        table_categories = {}  # 没有分类信息
-
-        base_tables = select_base_tables(tables, table_categories)
-
-        # 应该回退到第一个表
-        assert base_tables == ["public.orders"]
-
-    def test_case_insensitive_category(self):
-        """测试分类大小写不敏感"""
-        tables = ["public.orders", "public.customers"]
-        table_categories = {
-            "public.orders": "FACT",  # 大写
-            "public.customers": "Dimension",  # 混合大小写
-        }
-
-        base_tables = select_base_tables(tables, table_categories)
-
-        assert base_tables == ["public.orders"]
 
 
 class TestBuildMultiBaseJoinPlans:

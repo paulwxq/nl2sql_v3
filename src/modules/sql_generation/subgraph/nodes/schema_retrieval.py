@@ -31,10 +31,9 @@ def schema_retrieval_node(state: SQLGenerationState) -> Dict[str, Any]:
 
     # 执行检索
     try:
-        schema_context, query_embedding = retriever.retrieve(
+        schema_context = retriever.retrieve(
             query=state["query"],
             parse_result=state.get("parse_result"),
-            query_embedding=state.get("query_embedding"),
             parse_hints=state.get("parse_hints"),
             query_id=state.get("query_id"),
         )
@@ -59,7 +58,6 @@ def schema_retrieval_node(state: SQLGenerationState) -> Dict[str, Any]:
 
         return {
             "schema_context": schema_context,
-            "query_embedding": query_embedding,
         }
 
     except Exception as e:

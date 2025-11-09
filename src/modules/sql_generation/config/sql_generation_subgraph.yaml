@@ -86,9 +86,6 @@ sql_generation:
   temperature: 0                     # 温度（0=确定性输出）
   max_tokens: 2000                   # 最大 token 数
   timeout: 30                        # LLM 调用超时（秒）
-  
-  # 历史 SQL 检索配置（在生成阶段使用）
-  sql_similarity_threshold: 0.6      # SQL 相似度阈值
 
   # 提示词配置
   prompt:
@@ -149,11 +146,11 @@ validation:
       - EXEC
       - EXECUTE
 
-    # 注释检查
-    allow_comments: false            # 是否允许 SQL 注释（防注入）
+    # 注释检查（暂未实现，SQL 中包含注释仍会直接判失败）
+    allow_comments: false            # 配置占位，当前实现始终视注释为危险输入
 
-    # 多语句检查
-    allow_multiple_statements: false # 是否允许多条 SQL（防注入）
+    # 多语句检查（暂未实现，出现多条语句会直接报错）
+    allow_multiple_statements: false # 配置占位，当前实现始终禁止多条 SQL
 
   # 语义检查配置
   semantic:
@@ -219,11 +216,7 @@ logging:
   # 日志级别
   level: INFO                        # DEBUG | INFO | WARNING | ERROR | CRITICAL
 
-  # 详细日志开关
-  log_schema_context: false          # 是否记录完整 Schema 上下文（大对象）
-  log_generated_sql: true            # 是否记录生成的 SQL
-  log_validation_details: true       # 是否记录验证详情
-  log_prompts: false                 # 是否记录完整提示词（调试用）
+  # 详细日志：已简化，统一由日志级别控制（不再单独开关）
 
   # 性能日志
   log_timing: true                   # 是否记录各阶段耗时

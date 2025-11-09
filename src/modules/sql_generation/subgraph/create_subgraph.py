@@ -54,7 +54,7 @@ def should_retry(state: SQLGenerationState) -> Literal["retry", "success", "fail
         # 这些错误通常不通过重试解决
         try:
             query_logger = with_query_id(logger, state.get("query_id", ""))
-            query_logger.info(f"出现不可恢复错误: {error_type}，流程失败结束")
+            query_logger.error(f"出现不可恢复错误: {error_type}，流程失败结束")
         except Exception:
             pass
         return "fail"
@@ -64,14 +64,16 @@ def should_retry(state: SQLGenerationState) -> Literal["retry", "success", "fail
     if iteration_count < max_iterations:
         try:
             query_logger = with_query_id(logger, state.get("query_id", ""))
-            query_logger.info(f"验证失败，准备重试（第 {iteration_count+1}/{max_iterations} 次）")
+            query_logger.warning(
+                f"验证失败，准备重试（第 {iteration_count+1}/{max_iterations} 次）"
+            )
         except Exception:
             pass
         return "retry"
     else:
         try:
             query_logger = with_query_id(logger, state.get("query_id", ""))
-            query_logger.info("重试次数已达上限，流程失败结束")
+            query_logger.error("重试次数已达上限，流程失败结束")
         except Exception:
             pass
         return "fail"
@@ -185,6 +187,21 @@ def run_sql_generation_subgraph(
 
     # 运行子图
     final_state = subgraph.invoke(initial_state)
+
+    # 打印最终 State 快照（不依赖 checkpoint，DEBUG 级别；始终可用，由日志级别控制是否可见）
+    try:
+        import json
+        snapshot = {}
+        for k, v in final_state.items():
+            if k == "messages":
+                snapshot["messages_count"] = len(v) if isinstance(v, list) else 0
+                continue
+            snapshot[k] = v
+        query_logger.debug("========== 最终 State 快照 ==========")
+        query_logger.debug(json.dumps(snapshot, ensure_ascii=False, indent=2))
+        query_logger.debug("====================================")
+    except Exception as exc:
+        query_logger.warning(f"打印最终 State 快照失败: {exc}")
 
     # 记录结束时间
     execution_time = time.time() - start_time

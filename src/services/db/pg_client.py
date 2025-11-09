@@ -146,6 +146,48 @@ class PGClient:
 
         return cards
 
+    def fetch_table_categories(self, table_names: List[str]) -> Dict[str, str]:
+        """
+        批量查询表的 table_category 字段
+        
+        用于补全候选表的原始类型信息（用于提示词展示）
+        
+        Args:
+            table_names: 表名列表
+            
+        Returns:
+            {table_id: table_category} 字典，例如：
+            {
+                "public.fact_sales": "事实表",
+                "public.dim_product": "维度表",
+                "public.bridge_xxx": "桥接表"
+            }
+        """
+        if not table_names:
+            return {}
+
+        query = """
+            SELECT
+                object_id,
+                table_category
+            FROM system.sem_object_vec
+            WHERE object_type = 'table'
+              AND object_id = ANY(%s)
+        """
+
+        with self.pg_manager.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, (table_names,))
+                rows = cur.fetchall()
+
+        categories = {}
+        for row in rows:
+            category = row.get("table_category") or ""
+            if category:  # 只记录非空的类型
+                categories[row["object_id"]] = category
+
+        return categories
+
     # ==================== 历史 SQL 检索 ====================
 
     def search_similar_sqls(
