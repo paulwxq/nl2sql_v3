@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from langchain_community.chat_models import ChatTongyi
 from langchain_core.messages import HumanMessage, SystemMessage
+import time
 
 from src.modules.sql_generation.subgraph.state import SQLGenerationState
 from src.services.config_loader import load_subgraph_config
@@ -45,6 +46,7 @@ class SQLGenerationAgent:
         parse_result: Optional[Dict[str, Any]] = None,
         dependencies_results: Optional[Dict[str, Any]] = None,
         validation_errors: Optional[List[str]] = None,
+        query_id: Optional[str] = None,
     ) -> str:
         """
         生成 SQL
@@ -55,10 +57,20 @@ class SQLGenerationAgent:
             parse_hints: 解析提示
             dependencies_results: 依赖查询结果
             validation_errors: 上一次的验证错误（重试时使用）
+            query_id: 查询ID（用于日志上下文）
 
         Returns:
             生成的 SQL 字符串
         """
+        # 读取重试配置（固定间隔，避免过度设计）
+        retry_conf = (self.config or {}).get("llm_retry", {})
+        max_attempts = int(retry_conf.get("max_attempts", 3))
+        initial_delay_ms = int(retry_conf.get("initial_delay_ms", 500))
+
+        qlog = with_query_id(logger, query_id or "")
+        provider = "DashScope"
+        model_name = self.config.get("llm_model", "qwen-plus")
+
         # 构建提示词
         prompt = self._build_prompt(
             query=query,
@@ -69,29 +81,65 @@ class SQLGenerationAgent:
             validation_errors=validation_errors,
         )
 
-        # 调用 LLM
-        messages = [
-            SystemMessage(content="You are an expert PostgreSQL SQL writer. Return valid SQL only."),
-            HumanMessage(content=prompt),
-        ]
+        # 调用 LLM（带固定次数重试与空结果自检）
+        last_error_text: Optional[str] = None
+        for attempt in range(1, max_attempts + 1):
+            # 准备消息
+            messages = [
+                SystemMessage(content="You are an expert PostgreSQL SQL writer. Return valid SQL only."),
+                HumanMessage(content=prompt),
+            ]
 
-        logger.debug("调用 LLM 生成 SQL...")
-        response = self.llm.invoke(messages)
-        
-        # DEBUG: 打印 LLM 原始响应
-        logger.debug("=" * 80)
-        logger.debug("LLM 原始响应:")
-        logger.debug("=" * 80)
-        logger.debug(response.content)
-        logger.debug("=" * 80)
+            try:
+                logger.debug("调用 LLM 生成 SQL...")
+                response = self.llm.invoke(messages)
 
-        # 清理 SQL（去除 markdown 标记）
-        sql = response.content.strip()
-        sql = sql.replace("```sql", "").replace("```", "").strip()
-        
-        logger.debug(f"清理后的 SQL: {sql}")
+                # DEBUG: 打印 LLM 原始响应
+                logger.debug("=" * 80)
+                logger.debug("LLM 原始响应:")
+                logger.debug("=" * 80)
+                logger.debug(response.content)
+                logger.debug("=" * 80)
 
-        return sql
+                # 清理 SQL（去除 markdown 标记）
+                sql = (response.content or "").strip()
+                sql = sql.replace("```sql", "").replace("```", "").strip()
+
+                logger.debug(f"清理后的 SQL: {sql}")
+
+                # 自检：空结果视为失败
+                if not sql:
+                    qlog.warning(
+                        "LLM 返回空结果（provider=%s, model=%s, attempt=%d/%d）",
+                        provider,
+                        model_name,
+                        attempt,
+                        max_attempts,
+                    )
+                    last_error_text = "empty_result"
+                else:
+                    return sql
+
+            except Exception as e:
+                # 最小实现：将常见连接/超时错误统一记录为 WARNING
+                last_error_text = str(e)
+                qlog.warning(
+                    "LLM 服务连接失败（provider=%s, model=%s, attempt=%d/%d）：%s",
+                    provider,
+                    model_name,
+                    attempt,
+                    max_attempts,
+                    last_error_text,
+                )
+
+            # 尝试间隔（固定间隔）
+            if attempt < max_attempts:
+                time.sleep(max(0, initial_delay_ms) / 1000.0)
+
+        # 达到最大次数仍失败
+        raise RuntimeError(
+            f"LLM 服务不可用（provider={provider}, model={model_name}, attempts={max_attempts}, last_error={last_error_text}）"
+        )
 
     def _build_prompt(
         self,
@@ -388,17 +436,21 @@ def sql_generation_node(state: SQLGenerationState) -> Dict[str, Any]:
             parse_result=state.get("parse_result") or state.get("parse_hints"),
             dependencies_results=state.get("dependencies_results"),
             validation_errors=validation_errors,
+            query_id=state.get("query_id"),
         )
 
-        print(f"[{state['query_id']}] SQL生成完成（第 {state.get('iteration_count', 0) + 1} 次）")
+        qlog.info(f"SQL生成完成（第 {state.get('iteration_count', 0) + 1} 次）")
 
         return {
             "generated_sql": generated_sql,
             "iteration_count": state.get("iteration_count", 0) + 1,
+            # 成功即清理上一轮的错误字段，保证状态一致
+            "error": None,
+            "error_type": None,
         }
 
     except Exception as e:
-        print(f"[{state['query_id']}] ❌ SQL生成失败: {e}")
+        qlog.error(f"SQL生成失败: {e}")
 
         return {
             "generated_sql": None,

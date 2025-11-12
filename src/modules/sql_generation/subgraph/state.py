@@ -115,10 +115,12 @@ def extract_output(state: SQLGenerationState) -> SQLGenerationOutput:
     Returns:
         输出字典
     """
+    has_valid_sql = state.get("validated_sql") is not None
     return {
         "validated_sql": state.get("validated_sql"),
-        "error": state.get("error"),
-        "error_type": state.get("error_type"),
+        # 若已成功，屏蔽错误字段，避免“成功 + 历史错误”并存
+        "error": None if has_valid_sql else state.get("error"),
+        "error_type": None if has_valid_sql else state.get("error_type"),
         "iteration_count": state.get("iteration_count", 0),
         "execution_time": state.get("execution_time", 0.0),
         "schema_context": state.get("schema_context"),

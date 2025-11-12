@@ -45,21 +45,65 @@ class SQLValidationTool:
 
         self.logger = with_query_id(BASE_LOGGER, query_id) if query_id else BASE_LOGGER
 
-        raw_keywords = self.security_config.get('forbidden_keywords')
-        source = 'config' if raw_keywords else 'default'
-        self.security_keywords = [kw.upper() for kw in (raw_keywords or DEFAULT_FORBIDDEN_KEYWORDS)]
+        # 读取三层验证开关
+        self.enable_syntax_check = self.validation_config.get('enable_syntax_check', True)
+        self.enable_security_check = self.validation_config.get('enable_security_check', True)
+        self.enable_semantic_check = self.validation_config.get('enable_semantic_check', True)
         self.logger.debug(
-            '加载安全关键字列表（来源：%s）：%s',
-            source,
-            ', '.join(self.security_keywords),
+            '三层验证开关：语法检查=%s，安全检查=%s，语义检查=%s',
+            self.enable_syntax_check,
+            self.enable_security_check,
+            self.enable_semantic_check,
         )
 
-        self.allow_comments = self.security_config.get('allow_comments', False)
-        self.allow_multiple_statements = self.security_config.get('allow_multiple_statements', False)
+        # 语法检查配置
+        self.syntax_config = self.validation_config.get('syntax', {})
+        self.allow_multiple_statements = self.syntax_config.get('allow_multiple_statements', False)
         self.logger.debug(
-            '安全检查配置：allow_comments=%s（配置占位，当前实现仍视注释为危险输入），allow_multiple_statements=%s（配置占位，依旧禁止多语句）',
-            self.allow_comments,
+            '语法检查配置：allow_multiple_statements=%s',
             self.allow_multiple_statements,
+        )
+
+        # 安全检查配置
+        raw_types = self.security_config.get('allowed_statement_types')
+        self.allowed_statement_types = [t.upper() for t in (raw_types or ['SELECT', 'WITH', 'UNKNOWN'])]
+        
+        raw_keywords = self.security_config.get('forbidden_keywords')
+        self.security_keywords = [kw.upper() for kw in (raw_keywords or DEFAULT_FORBIDDEN_KEYWORDS)]
+        
+        self.allow_comments = self.security_config.get('allow_comments', False)
+        
+        self.logger.debug(
+            '安全检查配置：allowed_statement_types=%s，forbidden_keywords=%s，allow_comments=%s',
+            self.allowed_statement_types,
+            ', '.join(self.security_keywords),
+            self.allow_comments,
+        )
+
+        # 语义检查配置
+        self.semantic_config = self.validation_config.get('semantic', {})
+        self.explain_timeout = self.semantic_config.get('explain_timeout', 5)
+        self.explain_analyze = self.semantic_config.get('explain_analyze', False)
+        
+        # 性能警告配置
+        self.warnings_config = self.semantic_config.get('warnings', {})
+        self.seq_scan_warn = self.warnings_config.get('seq_scan_warn', True)
+        self.nested_loop_warn = self.warnings_config.get('nested_loop_warn', True)
+        self.estimated_rows_threshold = self.warnings_config.get('estimated_rows_threshold', 100000)
+        
+        # 验证失败处理配置
+        self.validation_failure_config = self.validation_config.get('on_validation_failure', {})
+        self.include_explain_plan = self.validation_failure_config.get('include_explain_plan', True)
+        
+        self.logger.debug(
+            '语义检查配置：explain_timeout=%s秒，explain_analyze=%s，estimated_rows_threshold=%s',
+            self.explain_timeout,
+            self.explain_analyze,
+            self.estimated_rows_threshold,
+        )
+        self.logger.debug(
+            '验证失败处理配置：include_explain_plan=%s',
+            self.include_explain_plan,
         )
 
     def validate(self, sql: str) -> Dict[str, Any]:
@@ -77,67 +121,77 @@ class SQLValidationTool:
         """
         all_errors = []
         all_warnings = []
+        explain_plan = None
 
         # 第1层：语法检查
-        self.logger.debug('验证1：开始语法检查')
-        syntax_result = self._check_syntax(sql)
-        if syntax_result["errors"]:
-            self.logger.warning('语法检查失败：%s', '; '.join(syntax_result["errors"]))
-            return {
-                "valid": False,
-                "errors": syntax_result["errors"],
-                "warnings": syntax_result["warnings"],
-                "layer": "syntax",
-                "explain_plan": None,
-            }
-        self.logger.debug('验证1：语法检查通过')
-        all_warnings.extend(syntax_result["warnings"])
+        if self.enable_syntax_check:
+            self.logger.debug('验证1：开始语法检查')
+            syntax_result = self._check_syntax(sql)
+            if syntax_result["errors"]:
+                self.logger.warning('语法检查失败：%s', '; '.join(syntax_result["errors"]))
+                return {
+                    "valid": False,
+                    "errors": syntax_result["errors"],
+                    "warnings": syntax_result["warnings"],
+                    "layer": "syntax",
+                    "explain_plan": None,
+                }
+            self.logger.debug('验证1：语法检查通过')
+            all_warnings.extend(syntax_result["warnings"])
+        else:
+            self.logger.debug('验证1：语法检查配置为 false，跳过检查')
 
         # 第2层：安全检查
-        self.logger.debug('验证2：开始安全检查')
-        security_errors = self._check_security(sql)
-        if security_errors:
-            self.logger.warning('安全检查失败：%s', '; '.join(security_errors))
-            return {
-                "valid": False,
-                "errors": security_errors,
-                "warnings": all_warnings,
-                "layer": "security",
-                "explain_plan": None,
-            }
-        self.logger.debug('验证2：安全检查通过')
+        if self.enable_security_check:
+            self.logger.debug('验证2：开始安全检查')
+            security_errors = self._check_security(sql)
+            if security_errors:
+                self.logger.warning('安全检查失败：%s', '; '.join(security_errors))
+                return {
+                    "valid": False,
+                    "errors": security_errors,
+                    "warnings": all_warnings,
+                    "layer": "security",
+                    "explain_plan": None,
+                }
+            self.logger.debug('验证2：安全检查通过')
+        else:
+            self.logger.debug('验证2：安全检查配置为 false，跳过检查')
 
         # 第3层：语义检查（EXPLAIN）
-        self.logger.debug('验证3：开始语义检查')
-        semantic_result = self._check_semantics(sql)
-        if not semantic_result["valid"]:
-            combined_warnings = all_warnings + semantic_result.get("warnings", [])
-            self.logger.warning('语义检查失败：%s', '; '.join(semantic_result["errors"] or ['未知错误']))
-            return {
-                "valid": False,
-                "errors": semantic_result["errors"],
-                "warnings": combined_warnings,
-                "layer": "semantic",
-                "explain_plan": semantic_result.get("explain_plan"),
-            }
-
-        self.logger.debug('验证3：语义检查通过')
+        if self.enable_semantic_check:
+            self.logger.debug('验证3：开始语义检查')
+            semantic_result = self._check_semantics(sql)
+            if not semantic_result["valid"]:
+                combined_warnings = all_warnings + semantic_result.get("warnings", [])
+                self.logger.warning('语义检查失败：%s', '; '.join(semantic_result["errors"] or ['未知错误']))
+                return {
+                    "valid": False,
+                    "errors": semantic_result["errors"],
+                    "warnings": combined_warnings,
+                    "layer": "semantic",
+                    "explain_plan": semantic_result.get("explain_plan"),
+                }
+            self.logger.debug('验证3：语义检查通过')
+            all_warnings.extend(semantic_result.get("warnings", []))
+            explain_plan = semantic_result.get("explain_plan")
+        else:
+            self.logger.debug('验证3：语义检查配置为 false，跳过检查')
 
         # 全部通过
-        combined_warnings = all_warnings + semantic_result.get("warnings", [])
         return {
             "valid": True,
             "errors": [],
-            "warnings": combined_warnings,
+            "warnings": all_warnings,
             "layer": "all_passed",
-            "explain_plan": semantic_result.get("explain_plan"),
+            "explain_plan": explain_plan,
         }
 
     # ==================== 第1层：语法检查 ====================
 
     def _check_syntax(self, sql: str) -> Dict[str, Any]:
         """
-        第1层：语法检查（使用 sqlparse）
+        第1层：语法检查（判断是否为合法的SQL语句）
 
         Returns:
             {
@@ -151,38 +205,24 @@ class SQLValidationTool:
         try:
             parsed = sqlparse.parse(sql)
 
+            # 1. 能否被解析
             if not parsed:
                 errors.append("SQL解析失败：无法识别的SQL语句")
                 return {"errors": errors, "warnings": warnings}
 
+            # 2. 是否多条语句（根据配置决定是否报错）
             if len(parsed) > 1:
-                errors.append("不允许执行多条SQL语句")
-                return {"errors": errors, "warnings": warnings}
-
-            stmt = parsed[0]
-
-            # 允许的语句类型
-            allowed_types = {"SELECT", "WITH", "UNKNOWN"}
-            stmt_type = stmt.get_type()
-
-            if stmt_type not in allowed_types:
-                # 额外检查：确保没有修改操作
-                sql_upper = sql.upper()
-                write_keywords = [
-                    "INSERT", "UPDATE", "DELETE", "DROP",
-                    "CREATE", "ALTER", "TRUNCATE"
-                ]
-                found_write = [kw for kw in write_keywords if f" {kw} " in f" {sql_upper} "]
-
-                if found_write:
-                    errors.append(
-                        f"只允许只读查询，检测到修改操作：{', '.join(found_write)}"
-                    )
+                if not self.allow_multiple_statements:
+                    errors.append("不允许执行多条SQL语句")
+                    return {"errors": errors, "warnings": warnings}
                 else:
-                    # 类型不在允许列表，但没检测到修改操作，给出警告
-                    warnings.append(
-                        f"SQL类型为 {stmt_type}，请确保是只读查询"
-                    )
+                    warnings.append("检测到多条SQL语句")
+
+            # 3. 是否被识别为SQL语句（而不是纯文本）
+            stmt = parsed[0]
+            stmt_type = stmt.get_type()
+            if not stmt_type:
+                errors.append("无法识别的SQL类型，可能不是合法的SQL语句")
 
         except Exception as e:
             errors.append(f"语法解析错误：{str(e)}")
@@ -193,7 +233,7 @@ class SQLValidationTool:
 
     def _check_security(self, sql: str) -> List[str]:
         """
-        第2层：安全检查（防止危险操作）
+        第2层：安全检查（检查SQL是否符合安全策略）
 
         Returns:
             错误列表
@@ -201,23 +241,35 @@ class SQLValidationTool:
         errors = []
         sql_upper = sql.upper()
 
-        # 禁止的关键字 - 使用词边界匹配避免误杀（配置优先，缺省时使用默认列表）
+        # 1. 检查SQL类型是否允许
+        try:
+            parsed = sqlparse.parse(sql)
+            if parsed:
+                stmt = parsed[0]
+                stmt_type = stmt.get_type()
+                self.logger.debug(
+                    'SQL类型检查：stmt_type=%s，允许的类型=%s',
+                    stmt_type,
+                    self.allowed_statement_types,
+                )
+                
+                if stmt_type and stmt_type not in self.allowed_statement_types:
+                    errors.append(
+                        f"不允许的SQL类型：{stmt_type}，只允许：{', '.join(self.allowed_statement_types)}"
+                    )
+        except Exception as e:
+            self.logger.warning('SQL类型检查失败：%s', e)
+
+        # 2. 检查禁止的关键字（使用词边界匹配避免误杀）
         for keyword in self.security_keywords:
             pattern = rf"\b{re.escape(keyword)}\b"
             if re.search(pattern, sql_upper):
                 errors.append(f"禁止使用关键字：{keyword}")
 
-        # 检查注释注入
-        if "--" in sql or "/*" in sql:
-            errors.append("SQL中不允许包含注释（防止注入）")
-
-        # 检查分号（防止多语句）
-        if sql.count(";") > 1:
-            errors.append("不允许执行多条SQL语句")
-
-        # 注意：不再强制要求 WHERE/LIMIT
-        # 原因：会误杀合法的维度枚举查询、TOP-N查询等
-        # 全表扫描问题由后续的 EXPLAIN 检查处理
+        # 3. 检查注释（根据配置决定是否报错）
+        if not self.allow_comments:
+            if "--" in sql or "/*" in sql:
+                errors.append("SQL中不允许包含注释（防止注入）")
 
         return errors
 
@@ -240,11 +292,11 @@ class SQLValidationTool:
         explain_plan = None
 
         try:
-            # 执行 EXPLAIN（不实际执行查询）
+            # 执行 EXPLAIN（根据配置决定是否实际执行）
             success, plan, explain_errors = self.pg_client.explain_query(
                 sql=sql,
-                analyze=False,
-                timeout=self.config.get("validation", {}).get("semantic", {}).get("explain_timeout", 5),
+                analyze=self.explain_analyze,
+                timeout=self.explain_timeout,
             )
 
             if not success:
@@ -262,22 +314,21 @@ class SQLValidationTool:
             # 分析查询计划，检测潜在问题
             plan_upper = plan.upper()
 
-            # 性能警告（不影响 valid 状态）
-            if "SEQ SCAN" in plan_upper:
+            # 性能警告（不影响 valid 状态，根据配置决定是否启用）
+            if self.seq_scan_warn and "SEQ SCAN" in plan_upper:
                 warnings.append("检测到顺序扫描（Seq Scan），可能影响性能")
 
-            if "NESTED LOOP" in plan_upper and "JOIN" not in sql.upper():
+            if self.nested_loop_warn and "NESTED LOOP" in plan_upper and "JOIN" not in sql.upper():
                 warnings.append("可能存在笛卡尔积，请检查JOIN条件")
 
             # 检查预估行数（如果配置了阈值）
-            threshold = self.config.get("validation", {}).get("semantic", {}).get("warnings", {}).get("estimated_rows_threshold", 100000)
-            if threshold:
+            if self.estimated_rows_threshold:
                 rows_match = re.search(r"rows=(\d+)", plan)
                 if rows_match:
                     estimated_rows = int(rows_match.group(1))
-                    if estimated_rows > threshold:
+                    if estimated_rows > self.estimated_rows_threshold:
                         warnings.append(
-                            f"预估返回行数过多：{estimated_rows} 行（阈值：{threshold}）"
+                            f"预估返回行数过多：{estimated_rows} 行（阈值：{self.estimated_rows_threshold}）"
                         )
 
         except Exception as e:
@@ -352,6 +403,10 @@ class SQLValidationTool:
             if result["errors"]:
                 summary += f"\n错误 ({len(result['errors'])}个):\n"
                 summary += "\n".join(f"  - {e}" for e in result["errors"])
+            
+            # 根据配置决定是否在日志中包含 EXPLAIN 结果
+            if self.include_explain_plan and result.get("explain_plan"):
+                summary += f"\n\n📋 EXPLAIN 结果：\n{result['explain_plan']}"
 
         return summary
 

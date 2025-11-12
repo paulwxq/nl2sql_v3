@@ -35,16 +35,22 @@ def validation_node(state: SQLGenerationState) -> Dict[str, Any]:
     generated_sql = state.get("generated_sql")
 
     if not generated_sql:
-        query_logger.warning("验证阶段没有生成的 SQL，跳过验证")
+        # 若上游已经标记为不可恢复错误（例如 generation_failed），不覆盖错误类型，直接返回
+        if state.get("error_type") == "generation_failed":
+            query_logger.warning("上游生成失败（generation_failed），跳过验证")
+            return {}
+
+        # 否则视为异常流程，记录错误并返回防御性结果
+        query_logger.error("验证节点收到空SQL，这是一个异常流程")
         return {
             "validation_result": {
                 "valid": False,
-                "errors": ["没有生成SQL"],
+                "errors": ["系统错误：空SQL进入验证"],
                 "warnings": [],
                 "layer": "syntax",
                 "explain_plan": None,
             },
-            "error": "没有生成SQL",
+            "error": "系统错误：空SQL进入验证",
             "error_type": "validation_failed",
         }
 
@@ -73,6 +79,9 @@ def validation_node(state: SQLGenerationState) -> Dict[str, Any]:
         if validation_result["valid"]:
             updates["validated_sql"] = generated_sql
             query_logger.info("SQL 验证通过")
+            # 成功后清理错误字段，避免“成功 + 历史错误”并存
+            updates["error"] = None
+            updates["error_type"] = None
         else:
             # 验证失败
             error_list = validation_result.get("errors") or ["未知错误"]

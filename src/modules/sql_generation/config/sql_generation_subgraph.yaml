@@ -109,9 +109,20 @@ sql_generation:
     require_schema_prefix: true      # 强制表名包含 schema 前缀
     use_half_open_interval: true     # 时间过滤使用半开区间（>= start AND < end）
 
-  # 重试配置（针对 LLM 调用失败）
-  max_llm_retries: 2                 # LLM 调用失败最大重试次数
-  llm_retry_delay: 1                 # 重试延迟（秒）
+  # --------------------------------------------------------------------------
+  # LLM 调用重试配置（生成节点内部重试）
+  # 说明：
+  # - 每次进入 SQL 生成节点时，若出现连接/超时失败或清洗后空结果，将在节点内进行重试
+  # - 重试为固定间隔，不做复杂退避；避免过度设计，满足瞬时网络抖动与服务端偶发波动的场景
+  # - 与图层的验证失败重试（retry.max_iterations）完全独立
+  # --------------------------------------------------------------------------
+  llm_retry:
+    max_attempts: 3                  # 单次进入生成节点时的 LLM 调用最大尝试次数（默认 3 次）
+    initial_delay_ms: 500            # 固定间隔：每次重试前等待的毫秒数（默认 500ms）
+
+  # 兼容旧字段（已弃用，保留以兼容历史配置；不再被代码读取）
+  # max_llm_retries: 2               # [deprecated]
+  # llm_retry_delay: 1               # [deprecated]（秒）
 
 # ------------------------------------------------------------------------------
 # SQL 验证配置
@@ -124,14 +135,16 @@ validation:
 
   # 语法检查配置
   syntax:
-    allowed_statement_types:         # 允许的 SQL 类型
-      - SELECT
-      - WITH                         # CTE
-      - UNKNOWN                      # WITH...SELECT 的解析结果
-    strict_mode: false               # 严格模式：true=拒绝所有非 SELECT, false=警告
+    allow_multiple_statements: false # 是否允许多条SQL语句
 
   # 安全检查配置
   security:
+    # 允许的 SQL 类型
+    allowed_statement_types:
+      - SELECT
+      - WITH                         # CTE
+      - UNKNOWN                      # WITH...SELECT 的解析结果
+
     # 禁止的关键字（使用词边界匹配）
     forbidden_keywords:
       - DROP
@@ -146,11 +159,8 @@ validation:
       - EXEC
       - EXECUTE
 
-    # 注释检查（暂未实现，SQL 中包含注释仍会直接判失败）
-    allow_comments: false            # 配置占位，当前实现始终视注释为危险输入
-
-    # 多语句检查（暂未实现，出现多条语句会直接报错）
-    allow_multiple_statements: false # 配置占位，当前实现始终禁止多条 SQL
+    # 注释检查
+    allow_comments: false            # 是否允许SQL中包含注释
 
   # 语义检查配置
   semantic:
@@ -167,10 +177,6 @@ validation:
   # 验证失败处理
   on_validation_failure:
     include_explain_plan: true       # 是否在错误信息中包含 EXPLAIN 结果
-    include_suggestions: true        # 是否包含修复建议
-
-  # 超时配置
-  total_timeout: 10                  # 验证总超时（秒）
 
 # ------------------------------------------------------------------------------
 # 重试机制配置

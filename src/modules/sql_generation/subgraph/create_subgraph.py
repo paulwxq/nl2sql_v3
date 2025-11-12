@@ -121,8 +121,21 @@ def create_sql_generation_subgraph():
     # 固定边：schema_retrieval -> sql_generation
     subgraph.add_edge("schema_retrieval", "sql_generation")
 
-    # 固定边：sql_generation -> validation
-    subgraph.add_edge("sql_generation", "validation")
+    # 条件边：sql_generation -> (validation | fail)
+    def _route_after_generation(state: SQLGenerationState) -> str:
+        # 生成节点三次尝试仍失败会将 error_type 置为 generation_failed
+        if state.get("error_type") == "generation_failed":
+            return "fail"
+        return "to_validation"
+
+    subgraph.add_conditional_edges(
+        "sql_generation",
+        _route_after_generation,
+        {
+            "to_validation": "validation",
+            "fail": END,
+        },
+    )
 
     # 条件边：validation -> (retry/success/fail)
     subgraph.add_conditional_edges(
