@@ -1,0 +1,1113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SQL生成子图架构文档</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        nav {
+            background: #f8f9fa;
+            padding: 20px 40px;
+            border-bottom: 1px solid #dee2e6;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        nav ul {
+            list-style: none;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        nav a {
+            text-decoration: none;
+            color: #667eea;
+            padding: 10px 20px;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+            font-weight: 500;
+            display: inline-block;
+        }
+
+        nav a:hover {
+            background: #667eea;
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        main {
+            padding: 40px;
+        }
+
+        section {
+            margin-bottom: 60px;
+            scroll-margin-top: 80px;
+        }
+
+        h2 {
+            color: #667eea;
+            font-size: 2em;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+        }
+
+        h3 {
+            color: #764ba2;
+            font-size: 1.5em;
+            margin: 30px 0 15px 0;
+        }
+
+        .description {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            border-left: 4px solid #667eea;
+        }
+
+        .description p {
+            margin-bottom: 10px;
+        }
+
+        .description ul {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+
+        .description li {
+            margin-bottom: 8px;
+        }
+
+        .diagram-container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border: 1px solid #dee2e6;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 300px;
+        }
+
+        .info-box {
+            background: #e7f3ff;
+            border-left: 4px solid #2196F3;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+
+        .warning-box {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+
+        .success-box {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+
+        .state-fields {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+
+        .state-fields h4 {
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+
+        .state-fields pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 0.9em;
+        }
+
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            color: #e83e8c;
+        }
+
+        footer {
+            background: #2d2d2d;
+            color: white;
+            text-align: center;
+            padding: 30px;
+            margin-top: 60px;
+        }
+
+        .metadata {
+            font-size: 0.9em;
+            color: #6c757d;
+            margin-top: 10px;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+
+            header h1 {
+                font-size: 1.8em;
+            }
+
+            main, header, nav {
+                padding: 20px;
+            }
+
+            nav ul {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>SQL生成子图架构文档</h1>
+            <p>基于LangGraph的自然语言转SQL系统 - 完整架构与流程说明</p>
+            <p class="metadata">v1.3 | 自动生成于 2025-11-13</p>
+        </header>
+
+        <nav>
+            <ul>
+                <li><a href="#overview">整体架构</a></li>
+                <li><a href="#question-parsing">问题解析</a></li>
+                <li><a href="#schema-retrieval">Schema检索</a></li>
+                <li><a href="#sql-generation">SQL生成</a></li>
+                <li><a href="#validation">SQL验证</a></li>
+                <li><a href="#state">State结构</a></li>
+            </ul>
+        </nav>
+
+        <main>
+            <!-- 整体架构 -->
+            <section id="overview">
+                <h2>一、整体架构图（LangGraph Node Level）</h2>
+
+                <div class="description">
+                    <p><strong>子图概述：</strong></p>
+                    <p>SQL生成子图是一个基于LangGraph构建的状态图，包含4个核心节点和1个条件重试循环。</p>
+                    <ul>
+                        <li><strong>入口：</strong>START → question_parsing</li>
+                        <li><strong>核心流程：</strong>question_parsing → schema_retrieval → sql_generation → validation</li>
+                        <li><strong>重试循环：</strong>validation → sql_generation（验证失败时，最多3次）</li>
+                        <li><strong>出口：</strong>success/fail → END</li>
+                    </ul>
+                </div>
+
+                <div class="diagram-container">
+                    <div class="mermaid">
+graph TB
+    START([START])
+    QP[问题解析<br/>question_parsing]
+    SR[Schema检索<br/>schema_retrieval]
+    SG[SQL生成<br/>sql_generation]
+    VAL[验证<br/>validation]
+    END_NODE([END])
+
+    START --> QP
+
+    QP -->|解析成功| SR
+    QP -->|解析失败<br/>error_type=parsing_failed| END_NODE
+
+    SR --> SG
+
+    SG -->|生成成功| VAL
+    SG -->|生成失败<br/>error_type=generation_failed| END_NODE
+
+    VAL -->|验证通过<br/>validated_sql存在| END_NODE
+    VAL -->|验证失败<br/>未超过最大迭代次数<br/>max_iterations=3| SG
+    VAL -->|验证失败<br/>已达最大迭代次数| END_NODE
+
+    style START fill:#90EE90
+    style END_NODE fill:#FFB6C1
+    style QP fill:#87CEEB
+    style SR fill:#DDA0DD
+    style SG fill:#F0E68C
+    style VAL fill:#FFA07A
+                    </div>
+                </div>
+
+                <div class="info-box">
+                    <strong>重试机制说明：</strong>
+                    <ul>
+                        <li><strong>最大迭代次数：</strong>3次（配置：retry.max_iterations）</li>
+                        <li><strong>重试条件：</strong>validation失败 + iteration_count &lt; max_iterations</li>
+                        <li><strong>不可恢复错误：</strong>schema_retrieval_failed、generation_failed → 直接结束</li>
+                        <li><strong>错误反馈：</strong>重试时会将validation错误信息传递给LLM</li>
+                    </ul>
+                </div>
+
+                <div class="warning-box">
+                    <strong>条件边逻辑（should_retry函数）：</strong>
+                    <ul>
+                        <li><strong>success：</strong>state.validated_sql存在 → 流程成功结束</li>
+                        <li><strong>fail：</strong>不可恢复错误 或 迭代次数达上限 → 流程失败结束</li>
+                        <li><strong>retry：</strong>验证失败 且 未超过最大迭代次数 → 返回sql_generation重试</li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- 问题解析 -->
+            <section id="question-parsing">
+                <h2>二、问题解析模块（Question Parsing）</h2>
+
+                <div class="description">
+                    <p><strong>模块职责：</strong></p>
+                    <p>将自然语言问题解析为结构化的<code>parse_result</code>，包含时间窗口、维度、指标、意图等信息。</p>
+                </div>
+
+                <div class="diagram-container">
+                    <div class="mermaid">
+graph TB
+    START_QP[开始问题解析]
+    CHECK_EXTERNAL{检查外部<br/>parse_hints}
+    CHECK_CONFIG{检查配置<br/>enable_internal_parser}
+    CALL_LLM[调用LLM解析<br/>QuestionParsingAgent]
+    PARSE_SUCCESS[解析成功<br/>返回parse_result]
+    RETURN_EXTERNAL[使用外部解析<br/>parsing_source=external]
+    RETURN_DISABLED[跳过解析<br/>parsing_source=disabled<br/>返回空结构]
+    CHECK_FALLBACK{检查配置<br/>fallback_to_empty}
+    RETURN_FALLBACK[使用空解析作为回退<br/>parsing_source=fallback]
+    RETURN_ERROR[返回错误<br/>error_type=parsing_failed]
+
+    START_QP --> CHECK_EXTERNAL
+    CHECK_EXTERNAL -->|存在parse_hints| RETURN_EXTERNAL
+    CHECK_EXTERNAL -->|不存在| CHECK_CONFIG
+    CHECK_CONFIG -->|已禁用<br/>enable_internal_parser=false| RETURN_DISABLED
+    CHECK_CONFIG -->|已启用<br/>enable_internal_parser=true| CALL_LLM
+    CALL_LLM -->|成功| PARSE_SUCCESS
+    CALL_LLM -->|失败| CHECK_FALLBACK
+    CHECK_FALLBACK -->|fallback_to_empty=true| RETURN_FALLBACK
+    CHECK_FALLBACK -->|fallback_to_empty=false| RETURN_ERROR
+
+    style START_QP fill:#90EE90
+    style PARSE_SUCCESS fill:#90EE90
+    style RETURN_EXTERNAL fill:#87CEEB
+    style RETURN_DISABLED fill:#FFD700
+    style RETURN_FALLBACK fill:#FFD700
+    style RETURN_ERROR fill:#FFB6C1
+    style CALL_LLM fill:#DDA0DD
+                    </div>
+                </div>
+
+                <div class="state-fields">
+                    <h4>解析结果结构（parse_result）：</h4>
+                    <pre>{
+  "keywords": ["业务关键词1", "业务关键词2"],
+  "time": {
+    "start": "2025-01-01",           // 开始时间
+    "end": "2025-01-31",             // 结束时间
+    "grain_inferred": "day",         // 推断的时间粒度：year|quarter|month|week|day|hour
+    "is_full_period": true           // 是否完整周期
+  },
+  "metric": {
+    "text": "销售额",                 // 指标文本
+    "is_aggregate_candidate": true  // 是否需要聚合
+  },
+  "dimensions": [
+    {
+      "text": "产品类别",             // 维度文本
+      "role": "column",              // 角色：column（列名候选）或 value（字面值）
+      "evidence": "问题中提到产品"   // 证据
+    }
+  ],
+  "intent": {
+    "task": "plain_agg",             // 任务类型：plain_agg|topn|rank|compare_yoy|compare_mom
+    "topn": null                     // TopN数量（如果task=topn）
+  },
+  "signals": ["聚合", "时间范围"]    // 额外信号
+}</pre>
+                </div>
+
+                <div class="success-box">
+                    <strong>关键特性：</strong>
+                    <ul>
+                        <li><strong>向后兼容：</strong>支持外部传入parse_hints，直接复用</li>
+                        <li><strong>可配置：</strong>通过enable_internal_parser控制是否启用内部解析</li>
+                        <li><strong>容错机制：</strong>解析失败时支持回退到空结构，保证流程继续</li>
+                        <li><strong>时间语义：</strong>支持ISO-8601周语义，时区为Asia/Shanghai</li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- Schema检索 -->
+            <section id="schema-retrieval">
+                <h2>三、Schema检索模块（Schema Retrieval）</h2>
+
+                <div class="description">
+                    <p><strong>模块职责：</strong></p>
+                    <p>从元数据库（PostgreSQL + Neo4j）检索与问题相关的Schema信息，包括表、列、JOIN路径、维度值等。</p>
+                </div>
+
+                <div class="diagram-container">
+                    <div class="mermaid">
+graph TB
+    START_SR[开始Schema检索]
+    EMBED[生成查询向量<br/>embedding_client]
+    VEC_SEARCH[向量检索<br/>表和列<br/>pgvector]
+    CLASSIFY[表分类<br/>事实表/维度表/桥接表]
+    DIM_VALUE[维度值匹配<br/>dim_value_index]
+    SQL_HIST[历史SQL检索<br/>sql_embedding]
+    JOIN_PLAN[JOIN路径规划<br/>Neo4j图检索]
+    BUILD_CARDS[构建表卡片<br/>table_cards]
+    RETURN_CONTEXT[返回schema_context]
+    ERROR[返回错误<br/>error_type=schema_retrieval_failed]
+
+    START_SR --> EMBED
+    EMBED --> VEC_SEARCH
+    VEC_SEARCH --> CLASSIFY
+    CLASSIFY --> DIM_VALUE
+    DIM_VALUE --> SQL_HIST
+    SQL_HIST --> JOIN_PLAN
+    JOIN_PLAN --> BUILD_CARDS
+    BUILD_CARDS --> RETURN_CONTEXT
+
+    VEC_SEARCH -.异常.-> ERROR
+    JOIN_PLAN -.异常.-> ERROR
+
+    style START_SR fill:#90EE90
+    style RETURN_CONTEXT fill:#90EE90
+    style ERROR fill:#FFB6C1
+    style EMBED fill:#87CEEB
+    style VEC_SEARCH fill:#DDA0DD
+    style CLASSIFY fill:#F0E68C
+    style DIM_VALUE fill:#FFA07A
+    style SQL_HIST fill:#98FB98
+    style JOIN_PLAN fill:#DEB887
+    style BUILD_CARDS fill:#B0C4DE
+                    </div>
+                </div>
+
+                <h3>3.1 向量检索步骤</h3>
+                <div class="info-box">
+                    <strong>数据源：</strong>system.sem_object_vec（表和列的向量嵌入）
+                    <ul>
+                        <li><strong>表检索：</strong>topk_tables=10, similarity_threshold=0.45</li>
+                        <li><strong>列检索：</strong>topk_columns=10, similarity_threshold=0.45</li>
+                        <li><strong>相似度计算：</strong>使用余弦相似度（pgvector: &lt;=&gt; 操作符）</li>
+                    </ul>
+                </div>
+
+                <h3>3.2 表分类逻辑</h3>
+                <div class="diagram-container">
+                    <div class="mermaid">
+graph LR
+    TABLE[检索到的表]
+    READ_CAT[读取table_category字段]
+    CHECK_FACT{匹配fact类型?}
+    CHECK_BRIDGE{匹配bridge类型?}
+    FACT[归类为事实表<br/>candidate_fact_tables]
+    DIM[归类为维度表<br/>candidate_dim_tables]
+    BRIDGE[归类为桥接表<br/>bridge标记]
+
+    TABLE --> READ_CAT
+    READ_CAT --> CHECK_FACT
+    CHECK_FACT -->|是<br/>包含: fact, 事实表, 交易表等| FACT
+    CHECK_FACT -->|否| CHECK_BRIDGE
+    CHECK_BRIDGE -->|是<br/>包含: bridge, 桥接表, 关联表| BRIDGE
+    CHECK_BRIDGE -->|否<br/>默认兜底| DIM
+
+    style TABLE fill:#87CEEB
+    style FACT fill:#90EE90
+    style DIM fill:#FFD700
+    style BRIDGE fill:#FFA07A
+                    </div>
+                </div>
+
+                <div class="warning-box">
+                    <strong>表分类配置（table_category_mapping）：</strong>
+                    <ul>
+                        <li><strong>事实表（fact）：</strong>fact, 事实表, 交易表, 明细表, 流水表, 快照表, 汇总表</li>
+                        <li><strong>维度表（dimension）：</strong>dimension, 维度表, 实体表, 枚举表, 查找表</li>
+                        <li><strong>桥接表（bridge）：</strong>bridge, 桥接表, 关联表</li>
+                        <li><strong>匹配规则：</strong>大小写不敏感，优先级：fact > bridge > dimension</li>
+                    </ul>
+                </div>
+
+                <h3>3.3 维度值匹配</h3>
+                <div class="info-box">
+                    <strong>数据源：</strong>system.dim_value_index（维度值倒排索引）
+                    <ul>
+                        <li><strong>匹配逻辑：</strong>从parse_result.dimensions中提取role=value的维度，进行向量检索</li>
+                        <li><strong>参数：</strong>dim_index_topk=5, dim_value_min_score=0.5</li>
+                        <li><strong>输出：</strong>dim_value_hits（包含query_value, matched_text, score, table_id, column_name等）</li>
+                    </ul>
+                </div>
+
+                <h3>3.4 历史SQL检索</h3>
+                <div class="info-box">
+                    <strong>数据源：</strong>system.sql_embedding（历史成功SQL案例的向量嵌入）
+                    <ul>
+                        <li><strong>检索策略：</strong>使用问题向量检索相似的历史SQL</li>
+                        <li><strong>参数：</strong>sql_embedding_top_k=3, sql_similarity_threshold=0.6</li>
+                        <li><strong>输出：</strong>similar_sqls（包含question, sql, similarity等）</li>
+                    </ul>
+                </div>
+
+                <h3>3.5 JOIN路径规划</h3>
+                <div class="diagram-container">
+                    <div class="mermaid">
+graph TB
+    START_JOIN[开始JOIN规划]
+    CHECK_MULTI{检查Base表数量}
+    SINGLE[单Base表<br/>join_plans=空]
+    MULTI[多Base表<br/>需要规划]
+    NEO4J[Neo4j图检索<br/>APOC Dijkstra]
+    BUILD_PLAN[构建JOIN计划<br/>包含路径和ON模板]
+    RETURN[返回join_plans]
+
+    START_JOIN --> CHECK_MULTI
+    CHECK_MULTI -->|单个Base表| SINGLE
+    CHECK_MULTI -->|多个Base表| MULTI
+    MULTI --> NEO4J
+    NEO4J --> BUILD_PLAN
+    BUILD_PLAN --> RETURN
+    SINGLE --> RETURN
+
+    style START_JOIN fill:#90EE90
+    style RETURN fill:#90EE90
+    style NEO4J fill:#DDA0DD
+    style BUILD_PLAN fill:#87CEEB
+                    </div>
+                </div>
+
+                <div class="info-box">
+                    <strong>JOIN路径配置：</strong>
+                    <ul>
+                        <li><strong>最大跳数：</strong>join_max_hops=5</li>
+                        <li><strong>策略：</strong>join_strategy=apoc_dijkstra（最短路径）</li>
+                        <li><strong>回退：</strong>join_fallback_enabled=true（失败时回退到简单策略）</li>
+                        <li><strong>输出格式：</strong>包含路径、ON条件模板、权重等</li>
+                    </ul>
+                </div>
+
+                <div class="state-fields">
+                    <h4>Schema上下文结构（schema_context）：</h4>
+                    <pre>{
+  "tables": ["public.table1", "public.table2"],           // 候选表列表
+  "columns": [                                             // 候选列列表
+    {"object_id": "public.table1.column1", "similarity": 0.85, ...}
+  ],
+  "table_cards": {                                         // 表卡片字典
+    "public.table1": {
+      "text_raw": "表名: table1, 列: col1, col2, ...",
+      "time_col_hint": "create_time",
+      "grain_hint": "day"
+    }
+  },
+  "table_categories": {                                    // 表分类
+    "public.table1": "事实表",
+    "public.table2": "维度表"
+  },
+  "candidate_fact_tables": ["public.table1"],             // 候选事实表
+  "candidate_dim_tables": ["public.table2"],              // 候选维度表
+  "join_plans": [                                          // JOIN计划
+    {
+      "base_tables": ["public.table1", "public.table2"],
+      "path": ["table1", "bridge_table", "table2"],
+      "on_templates": ["SRC.id = DST.table1_id", ...],
+      "weight": 2
+    }
+  ],
+  "dim_value_hits": [                                      // 维度值匹配结果
+    {
+      "query_value": "电子产品",
+      "matched_text": "电子产品",
+      "score": 0.95,
+      "table_id": "public.product",
+      "column_name": "category"
+    }
+  ],
+  "similar_sqls": [                                        // 历史SQL案例
+    {
+      "question": "查询上个月的销售额",
+      "sql": "SELECT SUM(amount) FROM public.sales ...",
+      "similarity": 0.78
+    }
+  ],
+  "table_similarities": {                                  // 表相似度
+    "public.table1": 0.85
+  },
+  "retrieval_time": 1.23                                   // 检索耗时（秒）
+}</pre>
+                </div>
+            </section>
+
+            <!-- SQL生成 -->
+            <section id="sql-generation">
+                <h2>四、SQL生成模块（SQL Generation）</h2>
+
+                <div class="description">
+                    <p><strong>模块职责：</strong></p>
+                    <p>基于Schema上下文和问题信息，调用LLM生成符合PostgreSQL语法的SQL查询。</p>
+                </div>
+
+                <div class="diagram-container">
+                    <div class="mermaid">
+graph TB
+    START_SG[开始SQL生成]
+    CHECK_SCHEMA{检查<br/>schema_context}
+    GET_ERRORS[获取上一次<br/>验证错误]
+    BUILD_PROMPT[构建提示词]
+    LLM_CALL[调用LLM<br/>ChatTongyi]
+    CLEAN_SQL[清理SQL<br/>去除markdown标记]
+    CHECK_EMPTY{检查SQL<br/>是否为空}
+    CHECK_RETRY{检查重试次数<br/>attempt < max_attempts}
+    WAIT[等待固定间隔<br/>initial_delay_ms]
+    RETURN_SQL[返回generated_sql<br/>iteration_count+1]
+    ERROR_SCHEMA[返回错误<br/>Schema为空]
+    ERROR_LLM[返回错误<br/>LLM不可用]
+
+    START_SG --> CHECK_SCHEMA
+    CHECK_SCHEMA -->|schema_context为空| ERROR_SCHEMA
+    CHECK_SCHEMA -->|schema_context存在| GET_ERRORS
+    GET_ERRORS --> BUILD_PROMPT
+    BUILD_PROMPT --> LLM_CALL
+    LLM_CALL --> CLEAN_SQL
+    CLEAN_SQL --> CHECK_EMPTY
+    CHECK_EMPTY -->|SQL不为空| RETURN_SQL
+    CHECK_EMPTY -->|SQL为空| CHECK_RETRY
+    LLM_CALL -.异常.-> CHECK_RETRY
+    CHECK_RETRY -->|未达上限<br/>attempt < 3| WAIT
+    CHECK_RETRY -->|已达上限<br/>attempt = 3| ERROR_LLM
+    WAIT --> LLM_CALL
+
+    style START_SG fill:#90EE90
+    style RETURN_SQL fill:#90EE90
+    style ERROR_SCHEMA fill:#FFB6C1
+    style ERROR_LLM fill:#FFB6C1
+    style BUILD_PROMPT fill:#87CEEB
+    style LLM_CALL fill:#DDA0DD
+    style CLEAN_SQL fill:#F0E68C
+                    </div>
+                </div>
+
+                <h3>4.1 提示词构建（_build_prompt）</h3>
+                <div class="info-box">
+                    <strong>提示词包含以下部分（按顺序）：</strong>
+                    <ol>
+                        <li><strong>系统要求：</strong>PostgreSQL专家，仅输出SQL，包含schema前缀等</li>
+                        <li><strong>问题信息：</strong>query（子查询文本）</li>
+                        <li><strong>时间信息：</strong>time_info（解析出的时间窗口和粒度）</li>
+                        <li><strong>维度过滤：</strong>dimension_filters（优化后的维度过滤条件）</li>
+                        <li><strong>指标信息：</strong>metric_info（指标文本）</li>
+                        <li><strong>依赖结果：</strong>dependencies_text（子查询依赖的其他查询结果）</li>
+                        <li><strong>表类型分组：</strong>table_categories_text（事实表、维度表、桥接表分组）</li>
+                        <li><strong>表结构：</strong>table_cards_text（表卡片，包含列信息）</li>
+                        <li><strong>JOIN计划：</strong>join_plans_text（JOIN路径和ON条件模板）</li>
+                        <li><strong>时间列：</strong>time_columns_text（各表的时间列提示）</li>
+                        <li><strong>历史SQL案例：</strong>similar_sqls_text（最多2个相似案例，可选）</li>
+                        <li><strong>验证错误：</strong>errors_text（上一次验证失败的错误信息，重试时使用）</li>
+                    </ol>
+                </div>
+
+                <h3>4.2 LLM调用重试机制</h3>
+                <div class="warning-box">
+                    <strong>重试配置（llm_retry）：</strong>
+                    <ul>
+                        <li><strong>最大尝试次数：</strong>max_attempts=3</li>
+                        <li><strong>重试间隔：</strong>initial_delay_ms=500（固定间隔，不做指数退避）</li>
+                        <li><strong>触发条件：</strong>连接/超时异常 或 LLM返回空结果</li>
+                        <li><strong>与图层重试的区别：</strong>这是节点内部重试（处理网络抖动），图层重试是validation失败后的重新生成</li>
+                    </ul>
+                </div>
+
+                <div class="state-fields">
+                    <h4>提示词示例片段：</h4>
+                    <pre>你是 PostgreSQL SQL 生成专家。根据以下上下文生成 SQL。
+
+要求：
+1. 仅输出 SQL，不附加说明。
+2. 所有表必须包含 schema 前缀（例如 public.table）。
+3. 日期时间过滤使用指定列：同时具备 start 与 end 时使用 >= start AND < end；仅有 start 时使用 >= start；仅有 end 时使用 < end。
+4. JOIN 条件必须严格按照 ON 模板，用实际别名替换 SRC/DST。
+
+---
+
+方言：postgresql
+问题：查询2025年1月的销售总额
+日期时间粒度：month
+日期时间条件：>= 2025-01-01 AND < 2025-02-01
+指标：销售额
+
+---
+
+表类型：
+  - 事实表: public.sales
+  - 维度表: public.product, public.customer
+
+---
+
+表结构：
+- **public.sales**  表名: sales, 列: id, amount, create_time, product_id, customer_id
+- **public.product**  表名: product, 列: id, name, category
+- **public.customer**  表名: customer, 列: id, name, region
+
+---
+
+JOIN 计划：
+（如果需要多表JOIN，这里会包含路径和ON模板）
+
+---
+
+时间列：
+- public.sales.create_time
+
+---</pre>
+                </div>
+
+                <h3>4.3 SQL清理</h3>
+                <div class="success-box">
+                    <strong>清理步骤：</strong>
+                    <ul>
+                        <li>去除LLM响应中的markdown代码块标记（```sql 和 ```）</li>
+                        <li>去除首尾空白字符</li>
+                        <li>验证SQL是否为空（空结果视为失败，触发重试）</li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- 验证 -->
+            <section id="validation">
+                <h2>五、SQL验证模块（Validation）</h2>
+
+                <div class="description">
+                    <p><strong>模块职责：</strong></p>
+                    <p>对生成的SQL执行三层验证（语法、安全、语义），确保SQL的正确性和安全性。</p>
+                </div>
+
+                <div class="diagram-container">
+                    <div class="mermaid">
+graph TB
+    START_VAL[开始验证]
+    CHECK_SQL{检查<br/>generated_sql}
+    LAYER1[第1层：语法检查<br/>sqlparse]
+    CHECK_L1{语法<br/>是否通过}
+    LAYER2[第2层：安全检查<br/>禁止关键字等]
+    CHECK_L2{安全<br/>是否通过}
+    LAYER3[第3层：语义检查<br/>EXPLAIN]
+    CHECK_L3{语义<br/>是否通过}
+    RECORD_HIST[记录验证历史<br/>validation_history]
+    SUCCESS[验证通过<br/>设置validated_sql]
+    FAIL_L1[返回失败<br/>layer=syntax]
+    FAIL_L2[返回失败<br/>layer=security]
+    FAIL_L3[返回失败<br/>layer=semantic]
+    ERROR[返回错误<br/>SQL为空或异常]
+
+    START_VAL --> CHECK_SQL
+    CHECK_SQL -->|SQL为空| ERROR
+    CHECK_SQL -->|SQL存在| LAYER1
+    LAYER1 --> CHECK_L1
+    CHECK_L1 -->|失败| FAIL_L1
+    CHECK_L1 -->|通过| LAYER2
+    LAYER2 --> CHECK_L2
+    CHECK_L2 -->|失败| FAIL_L2
+    CHECK_L2 -->|通过| LAYER3
+    LAYER3 --> CHECK_L3
+    CHECK_L3 -->|失败| FAIL_L3
+    CHECK_L3 -->|通过| RECORD_HIST
+    RECORD_HIST --> SUCCESS
+
+    style START_VAL fill:#90EE90
+    style SUCCESS fill:#90EE90
+    style ERROR fill:#FFB6C1
+    style FAIL_L1 fill:#FFB6C1
+    style FAIL_L2 fill:#FFB6C1
+    style FAIL_L3 fill:#FFD700
+    style LAYER1 fill:#87CEEB
+    style LAYER2 fill:#DDA0DD
+    style LAYER3 fill:#F0E68C
+                    </div>
+                </div>
+
+                <h3>5.1 第1层：语法检查（Syntax Check）</h3>
+                <div class="info-box">
+                    <strong>检查项：</strong>
+                    <ul>
+                        <li><strong>工具：</strong>sqlparse（Python SQL解析库）</li>
+                        <li><strong>检查点：</strong>
+                            <ul>
+                                <li>SQL语法是否正确</li>
+                                <li>是否包含多条语句（allow_multiple_statements=false时禁止）</li>
+                                <li>括号、引号是否匹配</li>
+                            </ul>
+                        </li>
+                        <li><strong>配置：</strong>enable_syntax_check=true</li>
+                    </ul>
+                </div>
+
+                <h3>5.2 第2层：安全检查（Security Check）</h3>
+                <div class="warning-box">
+                    <strong>检查项：</strong>
+                    <ul>
+                        <li><strong>允许的语句类型：</strong>SELECT, WITH, UNKNOWN（WITH...SELECT的解析结果）</li>
+                        <li><strong>禁止的关键字：</strong>DROP, DELETE, TRUNCATE, ALTER, CREATE, INSERT, UPDATE, GRANT, REVOKE, EXEC, EXECUTE</li>
+                        <li><strong>注释检查：</strong>allow_comments=false（默认禁止SQL中包含注释）</li>
+                        <li><strong>配置：</strong>enable_security_check=true</li>
+                    </ul>
+                </div>
+
+                <div class="diagram-container">
+                    <div class="mermaid">
+graph LR
+    SQL[SQL语句]
+    PARSE[sqlparse解析]
+    CHECK_TYPE{检查语句类型}
+    CHECK_KW{检查禁止关键字}
+    CHECK_COMMENT{检查注释}
+    PASS[安全检查通过]
+    FAIL_TYPE[失败：非法语句类型]
+    FAIL_KW[失败：包含禁止关键字]
+    FAIL_COMMENT[失败：包含注释]
+
+    SQL --> PARSE
+    PARSE --> CHECK_TYPE
+    CHECK_TYPE -->|不在允许列表| FAIL_TYPE
+    CHECK_TYPE -->|在允许列表| CHECK_KW
+    CHECK_KW -->|匹配禁止关键字| FAIL_KW
+    CHECK_KW -->|无匹配| CHECK_COMMENT
+    CHECK_COMMENT -->|包含注释<br/>且allow_comments=false| FAIL_COMMENT
+    CHECK_COMMENT -->|无注释或允许注释| PASS
+
+    style SQL fill:#87CEEB
+    style PASS fill:#90EE90
+    style FAIL_TYPE fill:#FFB6C1
+    style FAIL_KW fill:#FFB6C1
+    style FAIL_COMMENT fill:#FFB6C1
+                    </div>
+                </div>
+
+                <h3>5.3 第3层：语义检查（Semantic Check）</h3>
+                <div class="info-box">
+                    <strong>检查方式：</strong>EXPLAIN（计划分析，不实际执行）
+                    <ul>
+                        <li><strong>数据库操作：</strong>在PostgreSQL上执行EXPLAIN命令</li>
+                        <li><strong>超时配置：</strong>explain_timeout=5秒</li>
+                        <li><strong>EXPLAIN ANALYZE：</strong>explain_analyze=false（默认不实际执行）</li>
+                        <li><strong>配置：</strong>enable_semantic_check=true</li>
+                    </ul>
+                </div>
+
+                <div class="success-box">
+                    <strong>性能警告检测：</strong>
+                    <ul>
+                        <li><strong>顺序扫描警告：</strong>seq_scan_warn=true（检测Seq Scan节点）</li>
+                        <li><strong>嵌套循环警告：</strong>nested_loop_warn=true（检测Nested Loop节点）</li>
+                        <li><strong>预估行数阈值：</strong>estimated_rows_threshold=100000（超过阈值发出警告）</li>
+                        <li><strong>警告处理：</strong>警告不阻止验证通过，仅记录在validation_result.warnings中</li>
+                    </ul>
+                </div>
+
+                <div class="state-fields">
+                    <h4>验证结果结构（validation_result）：</h4>
+                    <pre>{
+  "valid": true,                         // 是否通过验证
+  "errors": [],                          // 错误列表（硬错误）
+  "warnings": [                          // 警告列表（性能警告等）
+    "检测到顺序扫描（Seq Scan），可能影响性能"
+  ],
+  "layer": "all_passed",                 // 验证层级：syntax|security|semantic|all_passed
+  "explain_plan": "Aggregate (...)"      // EXPLAIN结果（如果执行了）
+}</pre>
+                </div>
+
+                <h3>5.4 验证历史记录</h3>
+                <div class="info-box">
+                    <strong>validation_history结构：</strong>
+                    <ul>
+                        <li>每次验证都会追加一条记录到validation_history（使用add reducer自动追加）</li>
+                        <li>记录包含：iteration（迭代次数）、sql（生成的SQL）、result（验证结果）</li>
+                        <li>用途：调试、分析迭代过程、提供错误反馈给LLM</li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- State结构 -->
+            <section id="state">
+                <h2>六、State结构详解（SQLGenerationState）</h2>
+
+                <div class="description">
+                    <p><strong>State继承关系：</strong></p>
+                    <p>SQLGenerationState继承自MessagesState（LangGraph内置），支持消息管理用于LLM交互。</p>
+                </div>
+
+                <div class="state-fields">
+                    <h4>完整State字段定义：</h4>
+                    <pre># ========== 输入字段 ==========
+query: str                              # 子查询文本
+query_id: str                           # 查询ID（用于日志追踪）
+user_query: str                         # 用户原始查询
+dependencies_results: Dict[str, Any]    # 依赖查询的结果
+parse_hints: Optional[Dict[str, Any]]   # 解析提示（外部传入）
+
+# ========== 解析阶段 ==========
+parse_result: Optional[Dict[str, Any]]  # 内部解析或外部传入的结构化结果
+parsing_source: Optional[str]           # 解析来源："external" | "llm" | "disabled" | "fallback"
+
+# ========== Schema检索阶段 ==========
+schema_context: Optional[Dict[str, Any]]  # Schema上下文（详见上文）
+
+# ========== SQL生成阶段 ==========
+generated_sql: Optional[str]            # 当前生成的SQL
+iteration_count: int                    # 当前迭代次数（从0开始）
+
+# ========== 验证阶段 ==========
+validation_result: Optional[Dict[str, Any]]  # 当前验证结果（详见上文）
+validation_history: List[Dict]          # 所有验证历史（使用add reducer自动追加）
+
+# ========== 输出字段 ==========
+validated_sql: Optional[str]            # 最终验证通过的SQL（成功标志）
+error: Optional[str]                    # 错误信息
+error_type: Optional[str]               # 错误类型：parsing_failed | schema_retrieval_failed | generation_failed | validation_failed
+execution_time: float                   # 执行耗时（秒）
+
+# ========== 继承字段（MessagesState） ==========
+messages: List[BaseMessage]             # 消息列表（用于LLM交互）</pre>
+                </div>
+
+                <h3>6.1 State字段流转</h3>
+                <div class="diagram-container">
+                    <div class="mermaid">
+graph TB
+    INPUT[输入字段<br/>query, query_id, user_query,<br/>dependencies_results, parse_hints]
+    QP[question_parsing<br/>→ parse_result, parsing_source]
+    SR[schema_retrieval<br/>→ schema_context]
+    SG[sql_generation<br/>→ generated_sql, iteration_count]
+    VAL[validation<br/>→ validation_result,<br/>validation_history, validated_sql]
+    OUTPUT[输出字段<br/>validated_sql, error,<br/>error_type, execution_time]
+
+    INPUT --> QP
+    QP --> SR
+    SR --> SG
+    SG --> VAL
+    VAL --> OUTPUT
+    VAL -.重试.-> SG
+
+    style INPUT fill:#90EE90
+    style OUTPUT fill:#FFB6C1
+    style QP fill:#87CEEB
+    style SR fill:#DDA0DD
+    style SG fill:#F0E68C
+    style VAL fill:#FFA07A
+                    </div>
+                </div>
+
+                <h3>6.2 错误类型（error_type）</h3>
+                <div class="warning-box">
+                    <strong>error_type枚举值：</strong>
+                    <ul>
+                        <li><strong>parsing_failed：</strong>问题解析失败（不可恢复，直接结束）</li>
+                        <li><strong>schema_retrieval_failed：</strong>Schema检索失败（不可恢复，直接结束）</li>
+                        <li><strong>generation_failed：</strong>SQL生成失败（LLM不可用，不可恢复，直接结束）</li>
+                        <li><strong>validation_failed：</strong>SQL验证失败（可恢复，触发重试）</li>
+                    </ul>
+                </div>
+
+                <h3>6.3 成功判断逻辑</h3>
+                <div class="success-box">
+                    <strong>判断标准：</strong>
+                    <ul>
+                        <li><strong>成功：</strong>state.validated_sql 存在（不为None）</li>
+                        <li><strong>失败：</strong>state.validated_sql 为None 且 state.error_type 存在</li>
+                        <li><strong>输出清理：</strong>成功时自动清理error和error_type字段，避免"成功+历史错误"并存</li>
+                    </ul>
+                </div>
+
+                <h3>6.4 State输出结构（extract_output）</h3>
+                <div class="state-fields">
+                    <h4>最终输出字典：</h4>
+                    <pre>{
+  "validated_sql": "SELECT ...",         // 验证通过的SQL（成功时）或 None（失败时）
+  "error": None,                         // 错误信息（成功时为None）
+  "error_type": None,                    // 错误类型（成功时为None）
+  "iteration_count": 2,                  // 迭代次数
+  "execution_time": 3.45,                // 执行耗时（秒）
+  "schema_context": {...},               // Schema上下文（用于调试）
+  "validation_history": [...]            // 验证历史（用于调试）
+}</pre>
+                </div>
+            </section>
+
+            <!-- 配置参数汇总 -->
+            <section id="config">
+                <h2>七、关键配置参数汇总</h2>
+
+                <div class="state-fields">
+                    <h4>配置文件：src/modules/sql_generation/config/sql_generation_subgraph.yaml</h4>
+                    <pre># Schema检索配置
+schema_retrieval:
+  topk_tables: 10                        # 表向量检索Top-K
+  topk_columns: 10                       # 列向量检索Top-K
+  similarity_threshold: 0.45             # 相似度阈值
+  dim_index_topk: 5                      # 维度值检索Top-K
+  dim_value_min_score: 0.5               # 维度值匹配最小分数
+  sql_embedding_top_k: 3                 # 历史SQL相似案例数量
+  sql_similarity_threshold: 0.6          # SQL相似度阈值
+  join_max_hops: 5                       # 最大跳数
+  join_strategy: apoc_dijkstra           # JOIN策略
+
+# SQL生成配置
+sql_generation:
+  llm_model: qwen-max                    # 模型
+  temperature: 0                         # 温度
+  max_tokens: 2000                       # 最大token数
+  timeout: 30                            # LLM调用超时（秒）
+  llm_retry:
+    max_attempts: 3                      # LLM调用最大尝试次数
+    initial_delay_ms: 500                # 重试间隔（毫秒）
+
+# SQL验证配置
+validation:
+  enable_syntax_check: true              # 启用语法检查
+  enable_security_check: true            # 启用安全检查
+  enable_semantic_check: true            # 启用语义检查
+  semantic:
+    explain_timeout: 5                   # EXPLAIN超时（秒）
+    warnings:
+      seq_scan_warn: true                # 顺序扫描警告
+      nested_loop_warn: true             # 嵌套循环警告
+      estimated_rows_threshold: 100000   # 预估行数阈值
+
+# 重试机制配置
+retry:
+  max_iterations: 3                      # 最大迭代次数
+  include_error_in_prompt: true          # 是否将错误反馈给LLM
+
+# 问题解析配置
+question_parsing:
+  parser_model: qwen-plus                # 解析模型
+  enable_internal_parser: true           # 启用内部解析
+  fallback_to_empty: true                # 解析失败时回退到空结构</pre>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p><strong>SQL生成子图架构文档</strong></p>
+            <p>基于真实代码生成 | LangGraph + PostgreSQL + Neo4j</p>
+            <p>© 2025 NL2SQL Project</p>
+        </footer>
+    </div>
+
+    <script>
+        // 初始化Mermaid
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'default',
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true,
+                curve: 'basis',
+                padding: 20
+            },
+            securityLevel: 'loose'
+        });
+
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 高亮当前导航
+        const sections = document.querySelectorAll('section');
+        const navLinks = document.querySelectorAll('nav a');
+
+        window.addEventListener('scroll', () => {
+            let current = '';
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop;
+                const sectionHeight = section.clientHeight;
+                if (window.scrollY >= sectionTop - 100) {
+                    current = section.getAttribute('id');
+                }
+            });
+
+            navLinks.forEach(link => {
+                link.style.background = '';
+                link.style.color = '#667eea';
+                if (link.getAttribute('href') === `#${current}`) {
+                    link.style.background = '#667eea';
+                    link.style.color = 'white';
+                }
+            });
+        });
+    </script>
+</body>
+</html>

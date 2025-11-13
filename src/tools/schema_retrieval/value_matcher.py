@@ -239,3 +239,31 @@ def validate_dim_value_match(match: Dict[str, Any]) -> List[str]:
             errors.append(f"分数超出范围 [0.0, 1.0]: {score}")
 
     return errors
+
+
+def deduplicate_dim_hits(hits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    对 dim_value_hits 进行去重与排序。
+
+    规则：
+    1) 按 (dim_table, dim_col, key_value) 分组，保留分数最高的元素；分数相等保留先出现者
+    2) 最终按 score 降序排序
+
+    注意：保留原对象的全部字段，不做裁剪
+    """
+    if not hits:
+        return []
+
+    best_by_key: Dict[tuple, Dict[str, Any]] = {}
+
+    for hit in hits:
+        key = (hit.get("dim_table"), hit.get("dim_col"), hit.get("key_value"))
+        score = hit.get("score", 0.0)
+        current_best = best_by_key.get(key)
+        if current_best is None or score > current_best.get("score", 0.0):
+            best_by_key[key] = hit
+
+    # 按分数降序排序
+    deduped = list(best_by_key.values())
+    deduped.sort(key=lambda h: h.get("score", 0.0), reverse=True)
+    return deduped

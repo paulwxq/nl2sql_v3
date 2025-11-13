@@ -247,19 +247,24 @@ class SchemaRetriever:
         retrieval_time = time.time() - start_time
         qlog.info(f"Schema 检索完成，耗时 {retrieval_time:.2f} 秒")
 
+        # 维度匹配结果：去重并按分数降序排序
+        try:
+            from .value_matcher import deduplicate_dim_hits
+            dedup_dim_hits = deduplicate_dim_hits(candidate_set["dim_value_hits"])
+        except Exception:
+            # 防御性回退：异常时保留原始结果
+            dedup_dim_hits = candidate_set["dim_value_hits"]
+
         # 构建 schema_context
         schema_context = {
-            "tables": table_names,
-            "columns": semantic_columns,
+            # 保留：后续 SQL 生成实际使用的字段
             "join_plans": join_plans,
             "table_cards": table_cards,
-            "similar_sqls": similar_sqls,  # 直接包含历史 SQL
-            "dim_value_hits": candidate_set["dim_value_hits"],  # 统一使用此字段
-            "candidate_fact_tables": candidate_set["candidate_fact_tables"],
-            "candidate_dim_tables": candidate_set["candidate_dim_tables"],
-            "candidate_bridge_tables": candidate_set["candidate_bridge_tables"],  # 桥接表
-            "table_similarities": candidate_set["table_similarities"],
-            "table_categories": candidate_set["table_categories"],  # 原始类型
+            "similar_sqls": similar_sqls,  # 历史 SQL 案例
+            "dim_value_hits": dedup_dim_hits,
+            "table_categories": candidate_set["table_categories"],
+
+            # 可选：元数据（调试/统计用，后续如需可在统一瘦身口移除）
             "metadata": {
                 "retrieval_time": retrieval_time,
                 "table_count": len(table_names),

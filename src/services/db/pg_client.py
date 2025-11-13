@@ -123,8 +123,7 @@ class PGClient:
                 object_id,
                 text_raw,
                 grain_hint,
-                time_col_hint,
-                attrs
+                time_col_hint
             FROM system.sem_object_vec
             WHERE object_type = 'table'
               AND object_id = ANY(%s)
@@ -141,7 +140,6 @@ class PGClient:
                 "text_raw": row["text_raw"],
                 "grain_hint": row["grain_hint"],
                 "time_col_hint": row["time_col_hint"],
-                "attrs": row["attrs"],
             }
 
         return cards
