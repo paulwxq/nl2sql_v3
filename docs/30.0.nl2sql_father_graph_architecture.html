@@ -287,11 +287,11 @@
                     graph TB
                         Start([用户输入问题]) --> Router{Router<br/>问题分类<br/>⚡ 快速判断}
                         
-                        Router -->|simple<br/>简单问题| FastPath[Fast Path<br/>快速路径]
+                        Router -->|simple<br/>简单问题| SimplePlanner[Simple Planner<br/>参数准备<br/>⚡ 纯函数 < 1ms]
                         Router -->|complex<br/>复杂问题| Planner[Planner Agent<br/>问题诊断与规划]
-                        
+
                         %% 快速路径
-                        FastPath --> SQLGen1[SQL生成子图]
+                        SimplePlanner --> SQLGen1[SQL生成子图]
                         SQLGen1 --> SQLExec1[SQL执行]
                         SQLExec1 --> SimpleSum[简单总结<br/>可选LLM]
                         SimpleSum --> End([返回结果])
@@ -308,7 +308,7 @@
                         style Start fill:#e1f5e1,stroke:#4caf50,stroke-width:3px
                         style End fill:#e1f5e1,stroke:#4caf50,stroke-width:3px
                         style Router fill:#fff4e1,stroke:#ffa726,stroke-width:4px
-                        style FastPath fill:#d4edda,stroke:#28a745,stroke-width:3px
+                        style SimplePlanner fill:#d4edda,stroke:#28a745,stroke-width:3px
                         style Planner fill:#ffe1f5,stroke:#f5576c,stroke-width:3px
                         style SQLGen1 fill:#e1f0ff,stroke:#00f2fe,stroke-width:3px
                         style SQLGen2 fill:#e1f0ff,stroke:#00f2fe,stroke-width:3px
@@ -335,17 +335,18 @@
                     <p style="color: #666; margin-bottom: 15px;">适用于简单的单个查询问题</p>
                     
                     <div class="path-steps">
-                        <div class="step">1️⃣ SQL生成子图</div>
-                        <div class="step">2️⃣ SQL执行</div>
-                        <div class="step">3️⃣ 简单总结（可选）</div>
+                        <div class="step">1️⃣ Simple Planner（参数准备，< 1ms）</div>
+                        <div class="step">2️⃣ SQL生成子图</div>
+                        <div class="step">3️⃣ SQL执行</div>
+                        <div class="step">4️⃣ 简单总结（可选）</div>
                     </div>
                     
                     <div style="background: #d4edda; padding: 12px; border-radius: 8px; margin-top: 15px;">
                         <strong style="color: #28a745;">✅ 优势：</strong>
                         <ul style="margin-left: 20px; margin-top: 8px; color: #155724;">
-                            <li>只需3个节点</li>
+                            <li>只需4个节点（Simple Planner 纯函数）</li>
                             <li>可选LLM调用（0-1次）</li>
-                            <li>响应速度快</li>
+                            <li>响应速度快（Planner < 1ms）</li>
                             <li>成本低</li>
                         </ul>
                     </div>
@@ -469,10 +470,38 @@ Complex: 多个问题或有依赖关系
 
 def route_by_complexity(state: NL2SQLState) -> str:
     """路由函数"""
-    return "fast_path" if state["complexity"] == "simple" else "plan_path"
+    return "simple_planner" if state["complexity"] == "simple" else "planner"
                 </div>
             </div>
-            
+
+            <!-- Simple Planner说明 -->
+            <div class="example-box">
+                <h3>⚡ Simple Planner 节点</h3>
+                <p style="color: #666; margin-bottom: 15px;">轻量级参数准备节点，为 Fast Path 提供对称设计</p>
+                <div style="background: #d4edda; padding: 20px; border-radius: 8px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <div>
+                            <strong style="color: #28a745; display: block; margin-bottom: 10px;">核心特点</strong>
+                            <ul style="margin-left: 20px; color: #155724; line-height: 1.8;">
+                                <li>纯函数，不调用 LLM</li>
+                                <li>执行时间 < 1ms</li>
+                                <li>创建单个子查询</li>
+                                <li>设置 current_sub_query_id</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <strong style="color: #28a745; display: block; margin-bottom: 10px;">设计原因</strong>
+                            <ul style="margin-left: 20px; color: #155724; line-height: 1.8;">
+                                <li>简化 Router 职责（仅判定复杂度）</li>
+                                <li>对称设计（Simple/Complex 都有 Planner）</li>
+                                <li>为 Phase 2 预留优化空间</li>
+                                <li>保持架构一致性</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- 优化效果 -->
             <div class="highlight-box">
                 <h4>📈 优化效果对比</h4>
