@@ -258,3 +258,22 @@ def load_subgraph_config(subgraph_name: str = "sql_generation") -> Dict[str, Any
     # 加载子图配置
     subgraph_loader = ConfigLoader(str(absolute_path))
     return subgraph_loader.load()
+
+
+def load_config(config_path: str) -> Dict[str, Any]:
+    """
+    加载指定路径的配置文件（通用函数）
+
+    Args:
+        config_path: 配置文件路径（相对于项目根目录）
+
+    Returns:
+        配置字典
+
+    Example:
+        >>> config = load_config("src/modules/nl2sql_father/config/nl2sql_father_graph.yaml")
+    """
+    project_root = ConfigLoader._get_project_root()
+    absolute_path = project_root / config_path
+    loader = ConfigLoader(str(absolute_path))
+    return loader.load()

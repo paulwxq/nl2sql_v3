@@ -454,6 +454,52 @@ class PGClient:
 
         return [row["column_name"] for row in rows]
 
+    def execute_query(
+        self,
+        sql: str,
+        timeout: int = 30,
+    ) -> Dict[str, Any]:
+        """
+        执行SQL查询（通用方法）
+
+        用于父图的 SQL执行节点，支持任意 SELECT 查询。
+
+        Args:
+            sql: 要执行的SQL语句
+            timeout: 超时时间（秒）
+
+        Returns:
+            查询结果字典：
+            {
+                "columns": List[str],  # 列名列表
+                "rows": List[List[Any]],  # 数据行（列表的列表）
+            }
+
+        Raises:
+            Exception: SQL执行失败时抛出异常
+        """
+        with self.pg_manager.get_connection() as conn:
+            with conn.cursor() as cur:
+                # 设置语句超时
+                cur.execute(f"SET statement_timeout = {timeout * 1000}")
+
+                # 执行查询
+                cur.execute(sql)
+
+                # 获取列名
+                columns = [desc[0] for desc in cur.description] if cur.description else []
+
+                # 获取数据
+                rows = cur.fetchall()
+
+                # 转换为列表的列表（便于序列化）
+                rows_list = [list(row.values()) for row in rows]
+
+                return {
+                    "columns": columns,
+                    "rows": rows_list,
+                }
+
 
 # 全局 PG 客户端实例（单例）
 _global_pg_client: Optional[PGClient] = None

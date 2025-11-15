@@ -4,7 +4,15 @@
       "Bash(cat:*)",
       "Bash(uv sync:*)",
       "Bash(find:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(.venv-wsl/bin/python -m pytest src/tests/unit/nl2sql_father/ -v)",
+      "Bash(.venv-wsl/bin/pip install:*)",
+      "Bash(.venv-wsl/bin/python -m pip install:*)",
+      "Bash(.venv-wsl/bin/python:*)",
+      "Bash(uv run python:*)",
+      "Bash(uv run pytest:*)",
+      "Bash(chmod:*)"
     ],
     "deny": [],
     "ask": []

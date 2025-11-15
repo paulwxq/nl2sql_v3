@@ -1,0 +1,49 @@
+# NL2SQL 父图配置文件
+# Phase 1: Fast Path 实现
+
+# Router 配置
+router:
+  # LLM配置
+  model: qwen-turbo  # 轻量级模型，适合快速分类
+  api_key: ${DASHSCOPE_API_KEY}  # 从环境变量读取
+  temperature: 0  # 确定性输出
+  timeout: 5  # LLM调用超时（秒）
+
+  # 行为配置
+  default_on_error: complex  # LLM失败时的默认判定（保守策略）
+  log_decision: true  # 是否记录判定理由
+
+# SQL 执行配置
+sql_execution:
+  # 超时配置
+  timeout_per_sql: 30  # 单条SQL超时（秒）
+  max_total_timeout: 300  # 总超时（秒，Phase 2多SQL场景）
+
+  # 并发配置（Phase 2）
+  max_concurrency: 1  # Phase 1: 串行执行
+
+  # 结果限制（Phase 2 预留）
+  max_rows_per_query: 10000  # 单条SQL最大返回行数（Phase 1 暂未实现截断）
+
+  # 日志配置
+  log_sql: true  # 是否记录执行的SQL
+  log_results: false  # 是否记录执行结果（调试用）
+
+# Summarizer 配置
+summarizer:
+  # LLM配置
+  model: qwen-plus  # 平衡效果与成本
+  api_key: ${DASHSCOPE_API_KEY}
+  temperature: 0.3  # 生成多样性（略高于0）
+  timeout: 10  # LLM调用超时（秒）
+
+  # 提示词配置
+  max_rows_in_prompt: 10  # 提示词中最多包含多少行数据
+  use_template: false  # 是否使用模板（true不调用LLM）
+  enable_chart_suggestion: false  # Phase 2: 是否生成图表建议
+
+# 可观测性配置
+observability:
+  enable_tracing: true  # 是否启用 tracing
+  log_state_transitions: true  # 是否记录 State 变更
+  save_checkpoints: false  # 是否保存检查点（调试用）

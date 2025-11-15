@@ -83,6 +83,23 @@ sql_generation:
   prompt_path: src/prompts/sql_generation/generator_prompt.txt
 
 # ------------------------------------------------------------------------------
+# NL2SQL 父图配置（Phase 1: Fast Path）
+# ------------------------------------------------------------------------------
+nl2sql_father:
+  # 父图配置文件路径（相对于项目根目录）
+  father_graph_config_path: src/modules/nl2sql_father/config/nl2sql_father_graph.yaml
+
+  # 全局开关
+  enabled: true                      # 是否启用 NL2SQL 父图
+
+  # 超时配置
+  total_timeout: 120                 # 父图总超时（秒）
+
+  # 路径配置（Phase 1: Fast Path only）
+  fast_path_enabled: true            # 是否启用 Fast Path
+  complex_path_enabled: false        # 是否启用 Complex Path（Phase 2）
+
+# ------------------------------------------------------------------------------
 # 日志配置
 # ------------------------------------------------------------------------------
 logging:
