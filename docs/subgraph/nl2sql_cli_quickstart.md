@@ -9,7 +9,7 @@ NL2SQL CLI 是一个命令行对话工具，可以将自然语言问题自动转
 ### 1. 单次查询
 
 ```bash
-python scripts/nl2sql_cli.py "请对比一下9月份京东便利和全家这两个公司的销售金额"
+python scripts/nl2sql_subgraph_cli.py "请对比一下9月份京东便利和全家这两个公司的销售金额"
 ```
 
 **输入包装**（自动完成）：
@@ -55,7 +55,7 @@ ORDER BY total_amount DESC
 ### 2. 交互模式
 
 ```bash
-python scripts/nl2sql_cli.py
+python scripts/nl2sql_subgraph_cli.py
 ```
 
 进入交互模式后可以连续输入问题：
@@ -99,15 +99,15 @@ python scripts/nl2sql_cli.py
 
 所有关键步骤都会记录到日志文件：
 
-**日志文件位置**：`logs/nl2sql_cli.log`
+**日志文件位置**：`logs/sql_subgraph.log`
 
 **日志内容**：
 ```
-2025-11-02 14:30:52 - nl2sql_cli - INFO - [q_xxx] 输入问题: 请对比一下9月份...
-2025-11-02 14:30:52 - nl2sql_cli - INFO - [q_xxx] 开始执行NL2SQL转换
-2025-11-02 14:30:55 - nl2sql_cli - INFO - [q_xxx] 子图执行完成，总耗时 3.45秒
-2025-11-02 14:30:55 - nl2sql_cli - INFO - [q_xxx] SQL生成成功，耗时 3.45秒
-2025-11-02 14:30:55 - nl2sql_cli - INFO - [q_xxx] 生成的SQL: SELECT ...
+2025-11-02 14:30:52 - nl2sql_subgraph_cli - INFO - [q_xxx] 输入问题: 请对比一下9月份...
+2025-11-02 14:30:52 - nl2sql_subgraph_cli - INFO - [q_xxx] 开始执行NL2SQL转换
+2025-11-02 14:30:55 - nl2sql_subgraph_cli - INFO - [q_xxx] 子图执行完成，总耗时 3.45秒
+2025-11-02 14:30:55 - nl2sql_subgraph_cli - INFO - [q_xxx] SQL生成成功，耗时 3.45秒
+2025-11-02 14:30:55 - nl2sql_subgraph_cli - INFO - [q_xxx] 生成的SQL: SELECT ...
 ```
 
 ## 功能特点
@@ -123,22 +123,22 @@ python scripts/nl2sql_cli.py
 
 ```bash
 # 时间范围查询
-python scripts/nl2sql_cli.py "查询2024年10月的订单总金额"
+python scripts/nl2sql_subgraph_cli.py "查询2024年10月的订单总金额"
 
 # 对比查询
-python scripts/nl2sql_cli.py "对比京东便利和全家9月份的销售额"
+python scripts/nl2sql_subgraph_cli.py "对比京东便利和全家9月份的销售额"
 
 # TOP-N查询
-python scripts/nl2sql_cli.py "销售额最高的前10个门店"
+python scripts/nl2sql_subgraph_cli.py "销售额最高的前10个门店"
 
 # 维度查询
-python scripts/nl2sql_cli.py "列出所有门店名称"
+python scripts/nl2sql_subgraph_cli.py "列出所有门店名称"
 
 # 聚合查询
-python scripts/nl2sql_cli.py "计算9月份的平均订单金额"
+python scripts/nl2sql_subgraph_cli.py "计算9月份的平均订单金额"
 
 # 同比环比
-python scripts/nl2sql_cli.py "对比今年和去年9月的销售额"
+python scripts/nl2sql_subgraph_cli.py "对比今年和去年9月的销售额"
 ```
 
 ## 运行示例脚本
@@ -164,7 +164,7 @@ ImportError: No module named 'src'
 **解决方法**：确保在项目根目录运行
 ```bash
 cd C:\Projects\cursor_2025h2\nl2sql_v3
-python scripts/nl2sql_cli.py "你的问题"
+python scripts/nl2sql_subgraph_cli.py "你的问题"
 ```
 
 ### 问题2：数据库连接失败
@@ -224,7 +224,7 @@ retry:
 批量执行（Windows PowerShell）：
 ```powershell
 Get-Content questions.txt | ForEach-Object {
-    python scripts/nl2sql_cli.py $_
+    python scripts/nl2sql_subgraph_cli.py $_
 }
 ```
 
@@ -232,16 +232,16 @@ Get-Content questions.txt | ForEach-Object {
 
 ```bash
 # Windows
-Get-Content logs/nl2sql_cli.log -Wait -Tail 50
+Get-Content logs/sql_subgraph.log -Wait -Tail 50
 
 # Linux/Mac
-tail -f logs/nl2sql_cli.log
+tail -f logs/sql_subgraph.log
 ```
 
 ## 技术架构
 
 ```
-nl2sql_cli.py
+nl2sql_subgraph_cli.py
     ↓
 format_input()          # 包装输入格式
     ↓

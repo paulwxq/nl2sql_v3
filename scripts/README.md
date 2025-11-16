@@ -1,6 +1,6 @@
 # Scripts 使用说明
 
-## nl2sql_cli.py - NL2SQL 命令行对话工具
+## nl2sql_subgraph_cli.py - NL2SQL 命令行对话工具
 
 ### 功能
 将自然语言问题转换为 SQL 语句的命令行工具。
@@ -12,20 +12,20 @@
 
 ```bash
 # 基本用法
-python scripts/nl2sql_cli.py "请对比一下9月份京东便利和全家这两个公司的销售金额"
+python scripts/nl2sql_subgraph_cli.py "请对比一下9月份京东便利和全家这两个公司的销售金额"
 
 # Windows (PowerShell)
-python scripts/nl2sql_cli.py "查询2024年10月的订单总数"
+python scripts/nl2sql_subgraph_cli.py "查询2024年10月的订单总数"
 
 # Linux/Mac
-python scripts/nl2sql_cli.py "查询销售额最高的前10个门店"
+python scripts/nl2sql_subgraph_cli.py "查询销售额最高的前10个门店"
 ```
 
 #### 2. 交互模式
 不传参数直接运行，进入交互模式：
 
 ```bash
-python scripts/nl2sql_cli.py
+python scripts/nl2sql_subgraph_cli.py
 ```
 
 进入交互模式后，可以持续输入问题：
@@ -105,7 +105,7 @@ GROUP BY store_name
 
 所有执行日志会保存到：
 ```
-logs/nl2sql_cli.log
+logs/sql_subgraph.log
 ```
 
 日志包含：
@@ -128,19 +128,19 @@ logs/nl2sql_cli.log
 
 ```bash
 # 时间范围查询
-python scripts/nl2sql_cli.py "查询2024年10月的订单总金额"
+python scripts/nl2sql_subgraph_cli.py "查询2024年10月的订单总金额"
 
 # 对比查询
-python scripts/nl2sql_cli.py "对比京东便利和全家的销售额"
+python scripts/nl2sql_subgraph_cli.py "对比京东便利和全家的销售额"
 
 # TOP-N查询
-python scripts/nl2sql_cli.py "销售额最高的前10个门店"
+python scripts/nl2sql_subgraph_cli.py "销售额最高的前10个门店"
 
 # 维度查询
-python scripts/nl2sql_cli.py "列出所有门店名称"
+python scripts/nl2sql_subgraph_cli.py "列出所有门店名称"
 
 # 聚合查询
-python scripts/nl2sql_cli.py "计算9月份的平均订单金额"
+python scripts/nl2sql_subgraph_cli.py "计算9月份的平均订单金额"
 ```
 
 ### 依赖要求
@@ -182,10 +182,10 @@ python scripts/nl2sql_cli.py "计算9月份的平均订单金额"
 #### 查看详细日志
 ```bash
 # 实时查看日志
-tail -f logs/nl2sql_cli.log
+tail -f logs/sql_subgraph.log
 
 # Windows
-Get-Content logs/nl2sql_cli.log -Wait
+Get-Content logs/sql_subgraph.log -Wait
 ```
 
 #### 批量查询
@@ -200,12 +200,12 @@ Get-Content logs/nl2sql_cli.log -Wait
 ```bash
 # Linux/Mac
 while read question; do
-    python scripts/nl2sql_cli.py "$question"
+    python scripts/nl2sql_subgraph_cli.py "$question"
 done < questions.txt
 
 # Windows (PowerShell)
 Get-Content questions.txt | ForEach-Object {
-    python scripts/nl2sql_cli.py $_
+    python scripts/nl2sql_subgraph_cli.py $_
 }
 ```
 

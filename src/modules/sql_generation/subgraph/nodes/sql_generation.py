@@ -38,6 +38,10 @@ class SQLGenerationAgent:
             max_tokens=config.get("max_tokens", 2000),
         )
 
+        # 维度过滤配置
+        dim_filter_cfg = (config or {}).get("dimension_filter", {})
+        self.dimension_filter_min_score = float(dim_filter_cfg.get("optimize_min_score", 0.5))
+
     def generate(
         self,
         query: str,
@@ -277,7 +281,7 @@ JOIN 计划：
         filters = build_optimized_filters(
             parse_hints=parse_result,
             dim_matches=schema_context.get("dim_value_hits", []),
-            optimize_min_score=0.5,
+            optimize_min_score=self.dimension_filter_min_score,
         )
 
         if filters:

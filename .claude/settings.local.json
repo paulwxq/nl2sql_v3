@@ -12,7 +12,8 @@
       "Bash(.venv-wsl/bin/python:*)",
       "Bash(uv run python:*)",
       "Bash(uv run pytest:*)",
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "Bash(uv pip list:*)"
     ],
     "deny": [],
     "ask": []

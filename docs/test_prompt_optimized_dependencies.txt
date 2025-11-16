@@ -1,0 +1,53 @@
+你是 PostgreSQL SQL 生成专家。根据以下上下文生成 SQL。
+
+要求：
+1. 仅输出 SQL，不附加说明。
+2. 所有表必须包含 schema 前缀（例如 public.table）。
+3. 日期时间过滤使用指定列：同时具备 start 与 end 时使用 >= start AND < end；仅有 start 时使用 >= start；仅有 end 时使用 < end。
+4. JOIN 条件必须严格按照 ON 模板，用实际别名替换 SRC/DST。
+5. 以下提供的表结构、JOIN 计划和时间列为参考，你可以选择性使用它们，但不得使用未列出的字段。
+
+---
+
+方言：postgresql
+问题：查询店铺 {{sq1.result}} 在9月份的总销售额
+日期时间粒度：month
+日期时间条件：>= 2025-09-01 AND < 2025-10-01
+维度过滤：column=店铺, value={{sq1.result}}
+指标：总销售额
+
+可能依赖的查询结果：
+  - q_11e3134a_sq1:
+    question: 找出8月1日销售额最高的店铺ID
+    result: 
+      - [303, 1662.00]
+    columns: [store_id, total_sales]
+
+---
+
+表类型：
+  - 事实表: public.fact_store_sales_day, public.fact_store_sales_month
+  - 维度表: public.dim_company, public.dim_store
+
+---
+
+表结构：
+- **public.dim_company**  公司维表（类型：维度表）。字段：company_id(integer) 公司ID（主键）[例:3]；company_name(character varying) 公司名称，唯一[例:喜士多]。
+- **public.dim_store**  店铺维表（类型：维度表）。字段：store_id(integer) 店铺ID（主键）[例:101]；store_name(character varying) 店铺名称（同一公司下唯一）[例:全家苏州姑苏店]；company_id(integer) 所属公司ID（外键）[例:3]；region_id(integer) 所属区（县）ID（外键）[例:320508]。
+- **public.fact_store_sales_day**  店铺销售日流水事实表（按天、店铺、商品类型汇总），类型：事实表。按日汇总数据，时间字段为 date_day。字段：store_id(integer) 店铺ID（外键）[例:203]；date_day(date) 交易日期（日粒度）[例:2025-08-15]；product_type_id(integer) 商品类型ID（外键）[例:1]；amount(numeric) 销售金额（当日）[例:326.00]。
+- **public.fact_store_sales_month**  店铺销售月汇总事实表（按月、店铺、商品类型汇总），类型：事实表。按月汇总数据，时间字段为 date_month。字段：store_id(integer) 店铺ID（外键）[例:203]；date_month(date) 月份（建议为当月第一天）[例:2025-08-01]；product_type_id(integer) 商品类型ID（外键）[例:1]；amount(numeric) 销售金额（当月累计值）[例:666.00]。
+
+---
+
+JOIN 计划：
+Base #1：**public.fact_store_sales_month**
+- public.fact_store_sales_month --INNER JOIN (N:1)--> public.dim_store ON SRC.store_id = DST.store_id
+- public.fact_store_sales_day --INNER JOIN (N:1)--> public.dim_store ON SRC.store_id = DST.store_id
+- public.dim_store --INNER JOIN (N:1)--> public.dim_company ON SRC.company_id = DST.company_id
+
+---
+
+时间列：
+- public.fact_store_sales_day.date_day
+- public.fact_store_sales_month.date_month
+

@@ -22,6 +22,7 @@ class SubQueryInfo(TypedDict):
     execution_result: Optional[Dict[str, Any]]  # 执行结果（双向绑定）
     error: Optional[str]  # 错误信息
     iteration_count: int  # SQL生成迭代次数
+    dependencies_results: Optional[Dict[str, Any]]  # Phase 2: 依赖结果字典（由 Inject Params 注入）
 
 
 class SQLExecutionResult(TypedDict):
@@ -69,6 +70,14 @@ class NL2SQLFatherState(TypedDict):
     # ========== SQL执行结果 ==========
     execution_results: Annotated[List[SQLExecutionResult], add]  # 执行结果列表（使用 reducer）
 
+    # ========== Phase 2 新增字段（Complex Path） ==========
+    dependency_graph: Optional[Dict[str, Any]]  # 依赖图结构（Planner 输出，API 诊断）
+    current_round: Optional[int]  # 当前轮次（从1开始，Check Completion 递增）
+    max_rounds: Optional[int]  # 最大轮次（Planner 从配置读取并设置）
+    current_batch_ids: Optional[List[str]]  # 当前轮次待执行的子查询ID列表（Inject Params 输出）
+    planner_latency_ms: Optional[float]  # Planner 延迟（毫秒，Phase 2 监控指标）
+    parallel_execution_count: Optional[int]  # 本轮并发执行的 SQL 数量（Phase 2 监控指标）
+
     # ========== 最终输出 ==========
     summary: Optional[str]  # 自然语言总结
 
@@ -113,6 +122,13 @@ def create_initial_state(
         iteration_count=None,
         # 执行结果
         execution_results=[],
+        # Phase 2 字段
+        dependency_graph=None,
+        current_round=None,
+        max_rounds=None,
+        current_batch_ids=None,
+        planner_latency_ms=None,
+        parallel_execution_count=None,
         # 最终输出
         summary=None,
         # 元数据
@@ -133,12 +149,11 @@ def extract_final_result(state: NL2SQLFatherState) -> Dict[str, Any]:
         - Phase 2 诊断字段（dependency_graph, current_round, max_rounds）
         - Phase 1 运行时，Phase 2 字段为 None
     """
-    # 提取 SQL（快捷访问：从第一个 sub_query 提取 validated_sql）
+    # 提取 SQL（快捷访问：仅在单子查询时填充，多子查询时为 None）
     sql = None
     sub_queries = state.get("sub_queries", [])
-    if sub_queries and len(sub_queries) > 0:
-        first_sq = sub_queries[0]
-        sql = first_sq.get("validated_sql")
+    if len(sub_queries) == 1:
+        sql = sub_queries[0].get("validated_sql")
 
     return {
         # ========== Phase 1 + Phase 2 通用字段 ==========
@@ -148,7 +163,7 @@ def extract_final_result(state: NL2SQLFatherState) -> Dict[str, Any]:
         "path_taken": state.get("path_taken"),  # "fast" | "complex" | None
         "summary": state.get("summary"),
         "error": state.get("error"),
-        "sql": sql,  # 快捷访问：第一个 sub_query 的 SQL
+        "sql": sql,  # 快捷访问：单子查询时为 SQL，多子查询时为 None
         "sub_queries": sub_queries,  # 完整子查询列表
         "execution_results": state.get("execution_results", []),  # 完整执行结果
 
@@ -161,5 +176,8 @@ def extract_final_result(state: NL2SQLFatherState) -> Dict[str, Any]:
         "metadata": {
             "total_execution_time_ms": state.get("total_execution_time_ms"),
             "router_latency_ms": state.get("router_latency_ms"),
+            "planner_latency_ms": state.get("planner_latency_ms"),  # Phase 2
+            "parallel_execution_count": state.get("parallel_execution_count"),  # Phase 2
+            "sub_query_count": len(sub_queries),  # Phase 2: 子查询数量
         },
     }

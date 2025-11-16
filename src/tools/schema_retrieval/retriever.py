@@ -54,9 +54,9 @@ class SchemaRetriever:
 
         logger.info(
             f"表分类映射已加载: "
-            f"fact={len(self._category_mapping_lower['fact'])} 个类型, "
-            f"dimension={len(self._category_mapping_lower['dimension'])} 个类型, "
-            f"bridge={len(self._category_mapping_lower['bridge'])} 个类型"
+            f"fact包含 {len(self._category_mapping_lower['fact'])} 个子类型, "
+            f"dimension包含 {len(self._category_mapping_lower['dimension'])} 个子类型, "
+            f"bridge包含 {len(self._category_mapping_lower['bridge'])} 个子类型"
         )
 
     def retrieve(

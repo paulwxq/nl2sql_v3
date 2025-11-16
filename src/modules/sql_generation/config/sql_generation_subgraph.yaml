@@ -19,8 +19,8 @@ schema_retrieval:
   similarity_threshold: 0.45         # 相似度阈值（0.0-1.0）
 
   # 维度值检索配置
-  dim_index_topk: 5                  # 维度值检索 Top-K（system.dim_value_index）
-  dim_value_min_score: 0.5           # 维度值匹配最小分数
+  dim_index_topk: 3                  # 维度值检索 Top-K（system.dim_value_index）
+  dim_value_min_score: 0.4           # 维度值匹配最小分数
 
   # 历史 SQL 检索配置
   sql_embedding_top_k: 3             # 历史 SQL 相似案例数量（system.sql_embedding）
@@ -102,6 +102,10 @@ sql_generation:
     include_schema_hints: true       # 是否包含 Schema 提示（粒度、时间列等）
     include_history_examples: true   # 是否包含历史案例
     include_dim_value_hints: true    # 是否包含维度值提示
+
+  # 维度过滤优化
+  dimension_filter:
+    optimize_min_score: 0.4         # 维度值替换最小分数（默认0.5）
 
   # SQL 生成策略
   strategy:

@@ -78,14 +78,6 @@ def summarizer_node(state: NL2SQLFatherState) -> Dict[str, Any]:
     max_rows_in_prompt = config["max_rows_in_prompt"]
     use_template = config["use_template"]
 
-    # ========== 场景0：Phase 1 暂不支持的 complex 问题 ==========
-    # 判断标准：complexity 为 complex 且没有执行结果（说明从 Router 直接跳转过来）
-    if complexity == "complex" and not execution_results:
-        query_logger.info("场景0：complex 问题暂不支持")
-        return {
-            "summary": "抱歉，当前版本暂不支持复杂问题。我们正在开发中，敬请期待！",
-        }
-
     # ========== 场景1：SQL生成失败（从子图直接跳转过来，跳过了SQL执行） ==========
     if not execution_results and error:
         query_logger.info(f"场景1：SQL生成失败，error_type={error_type}")
@@ -272,12 +264,36 @@ def _format_multi_results(results: List[Dict], sub_queries: List[Dict], max_rows
     Returns:
         格式化后的多结果字符串
     """
-    # Phase 1 占位实现（Phase 2 会详细实现）
+    # Phase 2 完整实现：为每个结果显示对应的子查询问题文本
+    # 1. 构建 sub_query_id 到 sub_query 对象的映射
+    sub_query_map = {sq["sub_query_id"]: sq for sq in sub_queries}
+
+    # 2. 格式化每个结果
     lines = []
     for idx, result in enumerate(results, 1):
+        sub_query_id = result.get("sub_query_id")
+
+        # 3. 获取子查询文本（用于标题）
+        if sub_query_id and sub_query_id in sub_query_map:
+            query_text = sub_query_map[sub_query_id].get("query", "")
+            if query_text:
+                title = f"【{query_text}】"
+            else:
+                # 子查询存在但 query 字段为空（异常情况）
+                title = f"查询 {idx}"
+        else:
+            # 回退：找不到对应子查询时使用通用标题（异常情况）
+            title = f"查询 {idx}"
+
+        # 4. 格式化表格
         rows = result.get("rows", [])
         columns = result.get("columns", [])
-        lines.append(f"\n查询 {idx}（共{len(rows)}行）：")
+
+        lines.append(f"\n{title}")
         lines.append(_format_table(columns, rows[:max_rows]))
+
+        # 5. 可选：显示行数统计（如果结果被截断）
+        if len(rows) > max_rows:
+            lines.append(f"（仅显示前{max_rows}行，实际共{len(rows)}行）")
 
     return "\n".join(lines)

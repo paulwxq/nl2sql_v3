@@ -17,6 +17,10 @@ from src.modules.nl2sql_father.nodes.router import router_node
 from src.modules.nl2sql_father.nodes.simple_planner import simple_planner_node
 from src.modules.nl2sql_father.nodes.sql_execution import sql_execution_node
 from src.modules.nl2sql_father.nodes.summarizer import summarizer_node
+# Phase 2 新增节点
+from src.modules.nl2sql_father.nodes.planner import planner_node
+from src.modules.nl2sql_father.nodes.inject_params import inject_params_node
+from src.modules.nl2sql_father.nodes.check_completion import check_completion_node
 from src.modules.nl2sql_father.state import (
     NL2SQLFatherState,
     create_initial_state,
@@ -129,6 +133,78 @@ def sql_gen_wrapper(state: NL2SQLFatherState) -> Dict[str, Any]:
         }
 
 
+def sql_gen_batch_wrapper(state: NL2SQLFatherState) -> Dict[str, Any]:
+    """SQL生成子图批量 Wrapper（Complex Path）
+
+    职责：
+    1. 从 current_batch_ids 获取当前批次待处理的子查询ID列表
+    2. 串行调用 SQL 生成子图（Phase 2 不并发调用子图，避免资源竞争）
+    3. 更新每个子查询的 validated_sql 和 status
+
+    Args:
+        state: 父图 State
+
+    Returns:
+        空字典 {}（直接修改 sub_queries，无需返回）
+    """
+    from src.modules.sql_generation.subgraph.create_subgraph import (
+        run_sql_generation_subgraph,
+    )
+
+    query_logger = with_query_id(logger, state.get("query_id", "unknown"))
+
+    current_batch_ids = state.get("current_batch_ids", [])
+    sub_queries = state.get("sub_queries", [])
+
+    if not current_batch_ids:
+        query_logger.warning("current_batch_ids 为空，跳过 SQL 生成")
+        return {}
+
+    query_logger.info(f"开始批量 SQL 生成：{len(current_batch_ids)} 个子查询")
+
+    # 串行处理每个子查询
+    for sub_query_id in current_batch_ids:
+        # 找到对应的子查询
+        sub_query = next((sq for sq in sub_queries if sq["sub_query_id"] == sub_query_id), None)
+        if not sub_query:
+            query_logger.warning(f"未找到子查询: {sub_query_id}")
+            continue
+
+        query_logger.info(f"生成 SQL: {sub_query_id}")
+
+        try:
+            # 调用 SQL 生成子图
+            subgraph_output = run_sql_generation_subgraph(
+                query=sub_query["query"],
+                query_id=state["query_id"],
+                user_query=state["user_query"],
+                dependencies_results=sub_query.get("dependencies_results", {}),
+                parse_hints=None,
+            )
+
+            # 更新子查询状态
+            if subgraph_output.get("validated_sql"):
+                sub_query["validated_sql"] = subgraph_output["validated_sql"]
+                sub_query["iteration_count"] = subgraph_output.get("iteration_count", 0)
+                # 注意：不在此处更新 status，由 SQL 执行节点更新为 completed
+                query_logger.info(f"SQL 生成成功: {sub_query_id}")
+            else:
+                sub_query["status"] = "failed"
+                sub_query["error"] = subgraph_output.get("error", "SQL生成失败")
+                query_logger.warning(
+                    f"SQL 生成失败: {sub_query_id}, error_type={subgraph_output.get('error_type')}"
+                )
+
+        except Exception as e:
+            # 异常兜底
+            error_msg = f"SQL生成子图执行异常: {str(e)}"
+            query_logger.error(error_msg, exc_info=True)
+            sub_query["status"] = "failed"
+            sub_query["error"] = error_msg
+
+    return {}  # 直接修改 sub_queries，无需返回
+
+
 # ==================== 条件边函数 ====================
 
 
@@ -138,21 +214,20 @@ def route_by_complexity(state: NL2SQLFatherState) -> str:
     注意：complexity 是字符串 "simple" 或 "complex"，不是布尔值
 
     Returns:
-        "simple_planner": 走 Fast Path，进入 Simple Planner 准备参数（当 complexity == "simple"）
-        "summarizer": Phase 1 暂不支持复杂问题，直接进入 Summarizer（当 complexity == "complex"）
+        "simple_planner": 走 Fast Path（当 complexity == "simple"）
+        "planner": 走 Complex Path（当 complexity == "complex"）
     """
     complexity = state.get("complexity")
 
     # 字符串比较（不是布尔判断）
-    if complexity == "simple":  # ← 比较字符串 "simple"
-        return "simple_planner"  # ← 进入 Simple Planner
+    if complexity == "simple":
+        return "simple_planner"  # Fast Path
     else:
-        # Phase 1：复杂问题暂不支持，直接进入统一的 Summarizer 返回友好提示
-        return "summarizer"
+        return "planner"  # Complex Path (Phase 2)
 
 
 def route_after_sql_gen(state: NL2SQLFatherState) -> str:
-    """SQL生成后的路由：判断是否成功
+    """SQL生成后的路由：判断是否成功（Fast Path 专用）
 
     成功标志：validated_sql 非空
 
@@ -166,21 +241,85 @@ def route_after_sql_gen(state: NL2SQLFatherState) -> str:
         return "summarizer"  # 生成失败 → 直接总结错误
 
 
+def route_after_check_completion(state: NL2SQLFatherState) -> str:
+    """Check Completion 后的路由：判断是否继续循环（Complex Path 专用）
+
+    判断标准：是否所有子查询都已完成
+
+    Returns:
+        "inject_params": 继续循环（还有未完成的子查询）
+        "summarizer": 结束循环，进入总结
+    """
+    sub_queries = state.get("sub_queries", [])
+
+    # 检查是否所有子查询都已完成或失败
+    all_done = all(
+        sq.get("status") in ["completed", "failed"]
+        for sq in sub_queries
+    )
+
+    if all_done:
+        return "summarizer"
+    else:
+        return "inject_params"
+
+
+def route_after_sql_exec(state: NL2SQLFatherState) -> str:
+    """SQL 执行后的路由：判断当前路径
+
+    根据 path_taken 判断是 Fast Path 还是Complex Path
+
+    Returns:
+        "summarizer": Fast Path，直接进入总结
+        "check_completion": Complex Path，进入完成度检查
+    """
+    path_taken = state.get("path_taken")
+
+    if path_taken == "fast":
+        return "summarizer"
+    else:  # complex
+        return "check_completion"
+
+
+def route_after_planner(state: NL2SQLFatherState) -> str:
+    """Planner 后的路由：判断是否成功
+
+    成功标志：sub_queries 非空且无 error
+
+    Returns:
+        "inject_params": Planner 成功，进入参数注入
+        "summarizer": Planner 失败，直接总结错误
+    """
+    sub_queries = state.get("sub_queries", [])
+    error = state.get("error")
+
+    if sub_queries and not error:
+        return "inject_params"
+    else:
+        return "summarizer"
+
+
 # ==================== 父图编译 ====================
 
 
 def create_nl2sql_father_graph():
-    """创建 NL2SQL 父图（Phase 1：Fast Path）
+    """创建 NL2SQL 父图（Phase 1 + Phase 2）
 
-    拓扑：
-    START → router → [simple_planner → sql_gen → [sql_exec → summarizer | summarizer] | summarizer] → END
+    拓扑（统一图，包含 Fast Path 和 Complex Path）：
+
+    START → router → {
+        [Fast Path]  simple_planner → sql_gen → sql_exec → summarizer → END
+        [Complex Path] planner → inject_params → sql_gen_batch → sql_exec →
+                       check_completion → {inject_params (循环) | summarizer → END}
+    }
 
     设计要点：
-    1. Router 判定 simple → 进入 Simple Planner 准备参数
-    2. Simple Planner → SQL生成子图（准备好参数后直接调用）
-    3. Router 判定 complex → 直接进入 Summarizer（Phase 1 返回"暂不支持"提示）
-    4. SQL生成失败 → 跳过SQL执行，直接进入Summarizer
-    5. 所有路径统一经过 Summarizer 节点，确保返回格式一致
+    1. Router 判定 simple → Fast Path（Simple Planner）
+    2. Router 判定 complex → Complex Path（Planner）
+    3. Complex Path 支持循环：inject_params → sql_gen_batch → sql_exec → check_completion
+    4. Check Completion 判定未完成 → 循环回 inject_params
+    5. Check Completion 判定完成 → 进入 Summarizer
+    6. 所有路径统一经过 Summarizer 节点，确保返回格式一致
 
     Returns:
         编译后的父图（可执行）
@@ -189,47 +328,86 @@ def create_nl2sql_father_graph():
     graph = StateGraph(NL2SQLFatherState)
 
     # ========== 添加节点 ==========
+    # 共享节点
     graph.add_node("router", router_node)
-    graph.add_node("simple_planner", simple_planner_node)  # 新增：Simple 问题参数准备
+    graph.add_node("sql_exec", sql_execution_node)  # 共享：Phase 1 + Phase 2
+    graph.add_node("summarizer", summarizer_node)  # 共享：Phase 1 + Phase 2
+
+    # Fast Path 节点
+    graph.add_node("simple_planner", simple_planner_node)
     graph.add_node("sql_gen", sql_gen_wrapper)
-    graph.add_node("sql_exec", sql_execution_node)
-    graph.add_node("summarizer", summarizer_node)  # 统一的响应构建器
+
+    # Complex Path 节点（Phase 2）
+    graph.add_node("planner", planner_node)
+    graph.add_node("inject_params", inject_params_node)
+    graph.add_node("sql_gen_batch", sql_gen_batch_wrapper)
+    graph.add_node("check_completion", check_completion_node)
 
     # ========== 添加边 ==========
     # 入口
     graph.add_edge(START, "router")
 
-    # Router 条件边（共享 Summarizer 设计）
+    # Router 条件边（Fast Path vs Complex Path）
     graph.add_conditional_edges(
         "router",
         route_by_complexity,
         {
-            "simple_planner": "simple_planner",  # simple → Simple Planner（参数准备）
-            "summarizer": "summarizer",  # complex → 直接总结（暂不支持提示）
+            "simple_planner": "simple_planner",  # Fast Path
+            "planner": "planner",  # Complex Path (Phase 2)
         },
     )
 
-    # Simple Planner 固定边（参数准备完成后直接进入SQL生成）
+    # ========== Fast Path 边 ==========
     graph.add_edge("simple_planner", "sql_gen")
-
-    # SQL生成后的条件边（优化：失败时跳过SQL执行）
     graph.add_conditional_edges(
         "sql_gen",
         route_after_sql_gen,
         {
-            "sql_exec": "sql_exec",  # 生成成功 → 执行SQL
-            "summarizer": "summarizer",  # 生成失败 → 直接总结错误
+            "sql_exec": "sql_exec",
+            "summarizer": "summarizer",
         },
     )
 
-    # SQL执行后必定进入Summarizer
-    graph.add_edge("sql_exec", "summarizer")
+    # ========== Complex Path 边（Phase 2）==========
+    # Planner 条件边（失败时直接进入 Summarizer）
+    graph.add_conditional_edges(
+        "planner",
+        route_after_planner,
+        {
+            "inject_params": "inject_params",  # 成功 → 参数注入
+            "summarizer": "summarizer",  # 失败 → 直接总结错误
+        },
+    )
+    graph.add_edge("inject_params", "sql_gen_batch")
+    graph.add_edge("sql_gen_batch", "sql_exec")  # 批量生成后执行SQL
+
+    # ========== SQL 执行后的路由（共享节点，不同路径）==========
+    graph.add_conditional_edges(
+        "sql_exec",
+        route_after_sql_exec,
+        {
+            "summarizer": "summarizer",  # Fast Path → 直接总结
+            "check_completion": "check_completion",  # Complex Path → 检查完成度
+        },
+    )
+
+    # Check Completion 条件边（循环控制）
+    graph.add_conditional_edges(
+        "check_completion",
+        route_after_check_completion,
+        {
+            "inject_params": "inject_params",  # 循环边：继续下一轮
+            "summarizer": "summarizer",  # 结束：进入总结
+        },
+    )
+
+    # ========== 出口 ==========
     graph.add_edge("summarizer", END)
 
     # ========== 编译 ==========
     app = graph.compile()
 
-    logger.info("NL2SQL 父图编译完成")
+    logger.info("NL2SQL 父图编译完成（Fast Path + Complex Path）")
     return app
 
 

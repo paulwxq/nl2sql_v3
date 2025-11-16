@@ -45,23 +45,6 @@ class TestSummarizerNode:
             # 测试后清空缓存
             summarizer_module._summarizer_config_cache = None
 
-    # ========== 场景 0：复杂问题暂不支持 ==========
-
-    def test_scenario_0_complex_not_supported(self, mock_config):
-        """场景 0：复杂问题暂不支持"""
-        state = {
-            "user_query": "复杂问题",
-            "query_id": "test-001",
-            "complexity": "complex",
-            "execution_results": [],  # 无执行结果（从 Router 直接跳转）
-        }
-
-        result = summarizer_node(state)
-
-        # 验证返回"暂不支持"提示
-        assert "summary" in result
-        assert "暂不支持" in result["summary"]
-
     # ========== 场景 1：SQL 生成失败 ==========
 
     def test_scenario_1_sql_generation_failed(self, mock_config):

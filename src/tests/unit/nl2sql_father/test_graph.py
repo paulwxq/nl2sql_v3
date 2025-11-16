@@ -28,8 +28,8 @@ class TestConditionalEdges:
 
         result = route_by_complexity(state)
 
-        # 应该路由到 summarizer
-        assert result == "summarizer"
+        # Phase 2: 应该路由到 planner
+        assert result == "planner"
 
     def test_route_by_complexity_none(self):
         """测试 complexity=None 时的路由"""
@@ -37,8 +37,8 @@ class TestConditionalEdges:
 
         result = route_by_complexity(state)
 
-        # None 不等于 "simple"，应该路由到 summarizer
-        assert result == "summarizer"
+        # None 不等于 "simple"，应该路由到 planner（Phase 2）
+        assert result == "planner"
 
     def test_route_by_complexity_missing(self):
         """测试缺少 complexity 字段时的路由"""
@@ -46,8 +46,8 @@ class TestConditionalEdges:
 
         result = route_by_complexity(state)
 
-        # 缺失时默认路由到 summarizer
-        assert result == "summarizer"
+        # 缺失时默认路由到 planner（Phase 2）
+        assert result == "planner"
 
     def test_route_after_sql_gen_success(self):
         """测试 SQL 生成成功时的路由"""

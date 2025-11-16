@@ -3,10 +3,10 @@
 NL2SQL 命令行对话工具
 
 用法:
-    python scripts/nl2sql_cli.py "请对比一下9月份京东便利和全家这两个公司的销售金额"
+    python scripts/nl2sql_subgraph_cli.py "请对比一下9月份京东便利和全家这两个公司的销售金额"
     
     或交互模式:
-    python scripts/nl2sql_cli.py
+    python scripts/nl2sql_subgraph_cli.py
 """
 
 import sys
