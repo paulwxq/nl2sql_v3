@@ -113,6 +113,11 @@ sql_generation:
     require_schema_prefix: true      # 强制表名包含 schema 前缀
     use_half_open_interval: true     # 时间过滤使用半开区间（>= start AND < end）
 
+  # 依赖结果格式化配置
+  dependencies_formatting:
+    max_display_rows: 5              # 依赖结果最多显示行数
+    include_columns: true            # 是否包含列名
+
   # --------------------------------------------------------------------------
   # LLM 调用重试配置（生成节点内部重试）
   # 说明：

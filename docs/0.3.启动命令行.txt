@@ -1,0 +1,2 @@
+python scripts/nl2sql_father_cli.py
+

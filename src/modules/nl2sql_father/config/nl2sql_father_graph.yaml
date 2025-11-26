@@ -73,7 +73,8 @@ sql_execution:
 
   # 日志配置
   log_sql: true  # 是否记录执行的SQL
-  log_results: false  # 是否记录执行结果（调试用）
+  log_results: true  # 是否记录执行结果（调试用）
+  max_log_rows: 3  # 日志最多显示行数
 
 # ------------------------------------------------------------------------------
 # Summarizer 配置（Phase 1 + Phase 2 共享）

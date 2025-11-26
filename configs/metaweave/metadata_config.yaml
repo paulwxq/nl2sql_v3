@@ -1,0 +1,173 @@
+# MetaWeave 元数据生成配置文件
+
+# 数据库连接配置
+database:
+  host: ${DB_HOST:localhost}
+  port: ${DB_PORT:5432}
+  database: ${DB_NAME:your_database}
+  user: ${DB_USER:postgres}
+  password: ${DB_PASSWORD:your_password}
+  
+  # 连接池配置
+  pool_min_size: 1
+  pool_max_size: 5
+  
+  # 要处理的 schema 列表
+  schemas:
+    - public
+  
+  # 排除的表（支持通配符 *）
+  exclude_tables:
+    - temp_*
+    - test_*
+    - _*
+
+# 数据采样配置
+sampling:
+  enabled: true
+  sample_size: 1000
+  sample_method: limit  # limit | tablesample | range
+  
+  # 列统计配置
+  column_statistics:
+    enabled: true
+    value_distribution_threshold: 10  # 唯一值<=10时才统计值分布
+  
+  # 枚举识别配置
+  enum_detection:
+    enabled: true
+    # 简单两值枚举的配置
+    simple_two_value:
+      max_null_rate: 0.3  # 最大空值比例
+      min_occurrence_per_value: 2  # 每个值最少出现次数
+      max_string_length: 20  # 字符串最大长度
+  
+  # 标识符识别配置
+  identifier_detection:
+    # 数据类型白名单：只有这些类型才可能被识别为 identifier
+    # 使用白名单而非黑名单，确保安全性和可预测性
+    allowed_data_types:
+      # 整数类型
+      - integer
+      - int
+      - int4
+      - bigint
+      - int8
+      - smallint
+      - int2
+      - serial
+      - bigserial
+      - smallserial
+      # 字符串类型
+      - varchar
+      - character varying
+      - char
+      - character
+      - bpchar        # blank-padded char (PostgreSQL内部类型名)
+      # UUID类型
+      - uuid
+      # 数值类型（需要额外检查 scale=0，无小数位才允许）
+      - numeric
+      - decimal
+    
+    # 统计阈值
+    high_uniqueness_threshold: 0.95  # 规则2：高唯一性阈值
+    min_non_null_rate: 0.80  # 规则2：最小非空率
+    low_uniqueness_threshold: 0.05  # 规则3：排除枚举的最低唯一性
+    # 排除关键词：包含这些关键词的字段名不识别为 identifier（子串匹配）
+    exclude_keywords:
+      - name        # 名称字段（如 company_name, username, name）
+      - nm          # 名称缩写（如 dept_nm）
+      - desc        # 描述字段（如 product_desc, description）
+      - description # 完整描述（如 item_description）
+      - remark      # 备注字段（如 order_remark）
+      - comment     # 评论/注释字段（如 user_comment）
+      - details     # 详情字段（如 product_details）
+      - memo        # 备忘字段（如 transaction_memo）
+      - summary     # 摘要字段（如 report_summary）
+
+# LLM 配置
+llm:
+  # 提供商：qwen-plus | deepseek
+  provider: qwen-plus
+  
+  # 模型名称
+  # qwen 系列：qwen-turbo（快速）, qwen-plus（平衡）, qwen-max（最强）, qwen-long（长文本）
+  # deepseek 系列：deepseek-chat
+  model: ${DASHSCOPE_MODEL:qwen-plus}
+  
+  # API 密钥（建议使用环境变量）
+  # qwen-plus 使用 DASHSCOPE_API_KEY
+  # deepseek 使用 DEEPSEEK_API_KEY
+  api_key: ${DASHSCOPE_API_KEY}
+  
+  # API 基础 URL（deepseek 需要）
+  api_base: ${DEEPSEEK_API_BASE:https://api.deepseek.com/v1}
+  
+  # 模型参数
+  temperature: 0.3
+  max_tokens: 500
+  timeout: 30
+  
+  # 批量处理配置
+  batch_size: 10
+  retry_times: 3
+
+# 注释生成配置
+comment_generation:
+  enabled: true
+  generate_table_comment: true
+  generate_column_comment: true
+  language: zh-CN  # 生成中文注释
+  
+  # 缓存配置
+  cache_enabled: true
+  cache_file: cache/metaweave/comment_cache.json
+
+# 逻辑主键识别配置
+logical_key_detection:
+  enabled: true
+  min_confidence: 0.7
+  max_combinations: 3  # 最多考虑 3 字段组合
+  
+  # 主键字段名模式
+  name_patterns:
+    - id
+    - code
+    - key
+    - no
+    - number
+    - pk
+
+# 输出配置
+output:
+  output_dir: output/metaweave/metadata
+  
+  # 输出格式
+  formats:
+    - ddl
+    - markdown
+    - json
+  
+  # DDL 选项
+  ddl_options:
+    include_comments: true
+    include_indexes: true
+    sample_records:
+      enabled: true
+      count: 5
+      label_prefix: "Record"
+      include_placeholders: true
+  
+  # Markdown 选项
+  markdown_options:
+    include_sample_data: true
+    sample_rows: 5
+    include_statistics: true
+
+# 日志配置
+logging:
+  level: INFO  # DEBUG | INFO | WARNING | ERROR
+  log_file: logs/metaweave/metadata.log
+  console_output: true
+

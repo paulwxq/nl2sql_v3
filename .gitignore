@@ -51,3 +51,12 @@ htmlcov/
 
 # Debug output
 logs/debug/
+
+# MetaWeave output and cache
+#output/metaweave/
+cache/metaweave/
+logs/metaweave/
+
+# MetaWeave local configs
+configs/metaweave/.env
+configs/metaweave/*_local.yaml

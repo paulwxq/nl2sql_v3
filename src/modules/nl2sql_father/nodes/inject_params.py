@@ -107,8 +107,11 @@ def inject_params_node(state: NL2SQLFatherState) -> Dict[str, Any]:
             # 找到依赖的子查询
             dep_sq = next((s for s in sub_queries if s["sub_query_id"] == dep_id), None)
             if dep_sq and dep_sq.get("execution_result"):
-                # Phase 2: 简单传递完整的 execution_result
-                dependencies_results[dep_id] = dep_sq["execution_result"]
+                # Phase 2: 新格式 - 包含 question 和完整的 execution_result
+                dependencies_results[dep_id] = {
+                    "question": dep_sq["query"],
+                    "execution_result": dep_sq["execution_result"]
+                }
 
         # 更新子查询
         sq["dependencies_results"] = dependencies_results

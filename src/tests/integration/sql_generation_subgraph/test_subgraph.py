@@ -259,7 +259,19 @@ class TestSubgraphExecution:
     def test_execution_with_dependencies(self, mock_all_dependencies):
         """测试带依赖结果的执行"""
         dependencies_results = {
-            "sub1": {"result": [{"store_id": "BJ001"}]},
+            "sub1": {
+                "question": "查询北京的门店",
+                "execution_result": {
+                    "sub_query_id": "sub1",
+                    "sql": "SELECT store_id FROM public.dim_store WHERE city = '北京'",
+                    "success": True,
+                    "columns": ["store_id"],
+                    "rows": [["BJ001"]],
+                    "row_count": 1,
+                    "execution_time_ms": 3.0,
+                    "error": None
+                }
+            }
         }
 
         output = run_sql_generation_subgraph(
@@ -491,7 +503,19 @@ class TestEndToEndScenarios:
     def test_query_with_dependencies(self, mock_all_dependencies):
         """测试带依赖的查询场景"""
         dependencies = {
-            "sub_query_1": [{"store_id": "001"}, {"store_id": "002"}],
+            "sub_query_1": {
+                "question": "查询某些门店",
+                "execution_result": {
+                    "sub_query_id": "sub_query_1",
+                    "sql": "SELECT store_id FROM public.dim_store WHERE region = 'A'",
+                    "success": True,
+                    "columns": ["store_id"],
+                    "rows": [["001"], ["002"]],
+                    "row_count": 2,
+                    "execution_time_ms": 3.0,
+                    "error": None
+                }
+            }
         }
 
         output = run_sql_generation_subgraph(

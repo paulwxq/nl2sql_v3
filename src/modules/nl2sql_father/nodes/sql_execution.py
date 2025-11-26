@@ -46,6 +46,8 @@ def _execute_single_sql(
     idx: int,
     total: int,
     query_logger,
+    log_results: bool = False,
+    max_log_rows: int = 3,
 ) -> SQLExecutionResult:
     """执行单条 SQL（串行和并发模式复用）
 
@@ -85,6 +87,12 @@ def _execute_single_sql(
         query_logger.info(
             f"SQL执行成功，返回 {len(result.get('rows', []))} 行，耗时 {execution_time_ms:.0f}ms"
         )
+        
+        # 记录执行结果详情
+        if log_results and result.get('rows'):
+            display_rows = result.get('rows')[:max_log_rows]
+            query_logger.debug(f"执行结果（前{max_log_rows}行）: {display_rows}")
+        
         return exec_result
 
     except Exception as e:
@@ -136,6 +144,8 @@ def sql_execution_node(state: NL2SQLFatherState, config: Dict[str, Any] = None) 
     max_concurrency = exec_config.get("max_concurrency", 1)
     enable_parallel = exec_config.get("enable_parallel", False)
     log_sql = exec_config.get("log_sql", True)
+    log_results = exec_config.get("log_results", False)
+    max_log_rows = exec_config.get("max_log_rows", 3)
 
     # 1. 从 sub_queries 中收集待执行 SQL
     sub_queries = state.get("sub_queries", [])
@@ -188,6 +198,8 @@ def sql_execution_node(state: NL2SQLFatherState, config: Dict[str, Any] = None) 
                     idx,
                     len(sqls_to_execute),
                     query_logger,
+                    log_results,
+                    max_log_rows,
                 ): sql_item
                 for idx, sql_item in enumerate(sqls_to_execute, 1)
             }
@@ -222,7 +234,8 @@ def sql_execution_node(state: NL2SQLFatherState, config: Dict[str, Any] = None) 
         # ========== 串行执行模式（Phase 1 or Phase 2 单条） ==========
         for idx, sql_item in enumerate(sqls_to_execute, 1):
             exec_result = _execute_single_sql(
-                sql_item, pg_client, timeout_per_sql, idx, len(sqls_to_execute), query_logger
+                sql_item, pg_client, timeout_per_sql, idx, len(sqls_to_execute), query_logger,
+                log_results, max_log_rows
             )
             results.append(exec_result)
 

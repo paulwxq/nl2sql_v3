@@ -1,0 +1,197 @@
+{
+  "_comment": "这是表元数据的JSON格式模板 v2.0",
+  "_usage": "此模板包含所有可能的字段和结构，实际使用时根据需要填充",
+  
+  "metadata_version": "2.0",
+  "generated_at": "2025-11-22T00:00:00.000000Z",
+  
+  "table_info": {
+    "schema_name": "public",
+    "table_name": "table_name",
+    "table_type": "table",
+    "comment": "表注释",
+    "comment_source": "ddl",
+    "total_rows": 0,
+    "total_columns": 0
+  },
+  
+  "column_profiles": {
+    "column_name": {
+      "column_name": "column_name",
+      "ordinal_position": 1,
+      "data_type": "integer",
+      "character_maximum_length": null,
+      "numeric_precision": 32,
+      "numeric_scale": 0,
+      "is_nullable": false,
+      "column_default": null,
+      "comment": "列注释",
+      "comment_source": "ddl",
+      
+      "statistics": {
+        "sample_count": 100,
+        "unique_count": 100,
+        "null_count": 0,
+        "null_rate": 0.0,
+        "uniqueness": 1.0,
+        "min": "1",
+        "max": "100",
+        "mean": "50.5",
+        "median": "50",
+        "stddev": "28.87",
+        "value_distribution": {
+          "value1": 10,
+          "value2": 20,
+          "value3": 15
+        },
+        "top_values": [
+          {"value": "value1", "count": 10, "percentage": 10.0},
+          {"value": "value2", "count": 20, "percentage": 20.0}
+        ]
+      },
+      
+      "semantic_analysis": {
+        "semantic_role": "identifier",
+        "semantic_confidence": 1.0,
+        "inference_basis": [
+          "type_whitelist_passed",
+          "physical_constraint:primary_key"
+        ]
+      },
+      
+      "structure_flags": {
+        "is_primary_key": true,
+        "is_foreign_key": false,
+        "is_unique": true,
+        "is_unique_constraint": false,
+        "is_indexed": true,
+        "is_nullable": false
+      },
+      
+      "role_specific_info": {
+        "identifier_info": {
+          "naming_pattern": "primary_key",
+          "is_surrogate": true
+        },
+        "metric_info": {
+          "aggregation_type": "sum",
+          "unit": null
+        },
+        "datetime_info": {
+          "datetime_role": "creation_time",
+          "granularity": "day"
+        },
+        "enum_info": {
+          "cardinality": 5,
+          "enum_values": ["value1", "value2", "value3"]
+        }
+      }
+    }
+  },
+  
+  "table_profile": {
+    "table_category": "dimension",
+    "confidence": 0.9,
+    "inference_basis": [
+      "has_logical_primary_key",
+      "no_metric_columns",
+      "table_name_pattern:dim_"
+    ],
+    
+    "physical_constraints": {
+      "primary_key": {
+        "constraint_name": "pk_name",
+        "columns": ["column1"]
+      },
+      "foreign_keys": [
+        {
+          "constraint_name": "fk_name",
+          "source_columns": ["local_column"],
+          "target_schema": "public",
+          "target_table": "referenced_table",
+          "target_columns": ["referenced_column"]
+        }
+      ],
+      "unique_constraints": [
+        {
+          "constraint_name": "uk_single_column",
+          "columns": ["column1"]
+        },
+        {
+          "constraint_name": "uk_composite",
+          "columns": ["column1", "column2", "column3"]
+        }
+      ],
+      "indexes": [
+        {
+          "index_name": "idx_single",
+          "columns": ["column1"],
+          "is_unique": false,
+          "index_type": "btree"
+        },
+        {
+          "index_name": "idx_composite",
+          "columns": ["column1", "column2"],
+          "is_unique": false,
+          "index_type": "btree"
+        },
+        {
+          "index_name": "idx_unique_composite",
+          "columns": ["column2", "column3"],
+          "is_unique": true,
+          "index_type": "btree"
+        }
+      ]
+    },
+    
+    "column_statistics": {
+      "total_columns": 10,
+      "identifier_count": 1,
+      "metric_count": 0,
+      "datetime_count": 2,
+      "enum_count": 1,
+      "audit_count": 2,
+      "attribute_count": 4,
+      "primary_key_count": 1,
+      "foreign_key_count": 0
+    },
+    
+    "logical_keys": {
+      "candidate_primary_keys": [
+        {
+          "columns": ["column1"],
+          "confidence_score": 1.0,
+          "uniqueness": 1.0,
+          "null_rate": 0.0
+        }
+      ]
+    },
+    
+    "fact_table_info": {
+      "grain_columns": ["date_key", "store_key"],
+      "metric_columns": ["sales_amount", "quantity"],
+      "dimension_references": ["dim_date", "dim_store"]
+    }
+  },
+  "sample_records": {
+    "sample_method": "random",
+    "sample_size": 10,
+    "total_rows": 100,
+    "sampled_at": "2025-11-22T00:00:00.000000Z",
+    "records": [
+      {
+        "column1": 1,
+        "column2": "value1",
+        "column3": "2025-01-01",
+        "column4": 100.50
+      },
+      {
+        "column1": 2,
+        "column2": "value2",
+        "column3": "2025-01-02",
+        "column4": 200.75
+      }
+    ]
+  }
+}
+

@@ -1,0 +1,97 @@
+{
+  "metadata_version": "2.0",
+  "generated_at": "2025-11-22T00:00:00.000000Z",
+  
+  "table_info": {
+    "schema_name": "public",
+    "table_name": "table_name",
+    "table_type": "table",
+    "comment": null,
+    "comment_source": null,
+    "total_rows": 0,
+    "total_columns": 0,
+    
+    "constraints": {
+      "primary_keys": [],
+      "foreign_keys": [],
+      "unique_constraints": [],
+      "indexes": []
+    }
+  },
+  
+  "column_profiles": {
+    "column_name": {
+      "column_name": "column_name",
+      "ordinal_position": 1,
+      "data_type": "integer",
+      "character_maximum_length": null,
+      "numeric_precision": null,
+      "numeric_scale": null,
+      "is_nullable": true,
+      "column_default": null,
+      "comment": null,
+      "comment_source": null,
+      
+      "statistics": {
+        "sample_count": 0,
+        "unique_count": 0,
+        "null_count": 0,
+        "null_rate": 0.0,
+        "uniqueness": 0.0,
+        "value_distribution": {}
+      },
+      
+      "semantic_analysis": {
+        "semantic_role": "attribute",
+        "semantic_confidence": 0.5,
+        "inference_basis": []
+      },
+      
+      "structure_flags": {
+        "is_primary_key": false,
+        "is_foreign_key": false,
+        "is_unique": false,
+        "is_unique_constraint": false,
+        "is_indexed": false,
+        "is_nullable": true
+      },
+      
+      "role_specific_info": {}
+    }
+  },
+  
+  "table_profile": {
+    "table_category": "unknown",
+    "confidence": 0.5,
+    "inference_basis": [],
+    
+    "column_statistics": {
+      "total_columns": 0,
+      "identifier_count": 0,
+      "metric_count": 0,
+      "datetime_count": 0,
+      "enum_count": 0,
+      "audit_count": 0,
+      "attribute_count": 0,
+      "primary_key_count": 0,
+      "foreign_key_count": 0
+    },
+    
+    "key_columns": {
+      "primary_keys": [],
+      "logical_primary_keys": [],
+      "foreign_keys": []
+    },
+    
+    "candidate_logical_primary_keys": []
+  },
+  
+  "sample_records": {
+    "sample_method": "random",
+    "sample_size": 0,
+    "total_rows": 0,
+    "sampled_at": null,
+    "records": []
+  }
+}
+

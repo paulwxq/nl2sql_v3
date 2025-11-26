@@ -1,0 +1,176 @@
+{
+  "metadata_version": "2.0",
+  "generated_at": "2025-11-25T10:42:42.849110Z",
+  "table_info": {
+    "schema_name": "public",
+    "table_name": "dim_product_type",
+    "table_type": "table",
+    "comment": "商品类型维表",
+    "comment_source": "ddl",
+    "total_rows": 4,
+    "total_columns": 2
+  },
+  "column_profiles": {
+    "product_type_id": {
+      "column_name": "product_type_id",
+      "ordinal_position": 1,
+      "data_type": "integer",
+      "character_maximum_length": null,
+      "numeric_precision": 32,
+      "numeric_scale": null,
+      "is_nullable": false,
+      "column_default": null,
+      "comment": "商品类型ID（主键）",
+      "comment_source": "ddl",
+      "statistics": {
+        "sample_count": 4,
+        "unique_count": 4,
+        "null_count": 0,
+        "null_rate": 0.0,
+        "uniqueness": 1.0,
+        "min": "1",
+        "max": "4",
+        "mean": "2.5",
+        "value_distribution": {
+          "1": 1,
+          "2": 1,
+          "3": 1,
+          "4": 1
+        }
+      },
+      "semantic_analysis": {
+        "semantic_role": "identifier",
+        "semantic_confidence": 0.95,
+        "inference_basis": [
+          "type_whitelist_passed",
+          "high_uniqueness"
+        ]
+      },
+      "structure_flags": {
+        "is_primary_key": false,
+        "is_foreign_key": false,
+        "is_unique": true,
+        "is_unique_constraint": false,
+        "is_indexed": false,
+        "is_nullable": false
+      },
+      "role_specific_info": {
+        "identifier_info": {
+          "naming_pattern": "logical_primary_key",
+          "is_surrogate": true
+        }
+      }
+    },
+    "product_type_name": {
+      "column_name": "product_type_name",
+      "ordinal_position": 2,
+      "data_type": "character varying",
+      "character_maximum_length": 100,
+      "numeric_precision": null,
+      "numeric_scale": null,
+      "is_nullable": false,
+      "column_default": null,
+      "comment": "商品类型名称，唯一",
+      "comment_source": "ddl",
+      "statistics": {
+        "sample_count": 4,
+        "unique_count": 4,
+        "null_count": 0,
+        "null_rate": 0.0,
+        "uniqueness": 1.0,
+        "value_distribution": {
+          "饮料": 1,
+          "零食": 1,
+          "烟草": 1,
+          "水果": 1
+        }
+      },
+      "semantic_analysis": {
+        "semantic_role": "attribute",
+        "semantic_confidence": 0.7,
+        "inference_basis": [
+          "fallback_attribute"
+        ]
+      },
+      "structure_flags": {
+        "is_primary_key": false,
+        "is_foreign_key": false,
+        "is_unique": true,
+        "is_unique_constraint": false,
+        "is_indexed": false,
+        "is_nullable": false
+      },
+      "role_specific_info": {}
+    }
+  },
+  "table_profile": {
+    "table_category": "dim",
+    "confidence": 0.95,
+    "inference_basis": [
+      "dim_identifier_columns",
+      "dim_has_primary_key",
+      "dim_name_pattern",
+      "dim_comment_keyword"
+    ],
+    "physical_constraints": {
+      "primary_key": null,
+      "foreign_keys": [],
+      "unique_constraints": [],
+      "indexes": []
+    },
+    "column_statistics": {
+      "total_columns": 2,
+      "identifier_count": 1,
+      "metric_count": 0,
+      "datetime_count": 0,
+      "enum_count": 0,
+      "audit_count": 0,
+      "attribute_count": 1,
+      "primary_key_count": 0,
+      "foreign_key_count": 0
+    },
+    "logical_keys": {
+      "candidate_primary_keys": [
+        {
+          "columns": [
+            "product_type_id"
+          ],
+          "confidence_score": 1.0,
+          "uniqueness": 1.0,
+          "null_rate": 0.0
+        }
+      ]
+    },
+    "dim_table_info": {
+      "natural_key": "product_type_id",
+      "surrogate_key": null,
+      "attributes": [
+        "product_type_name"
+      ]
+    }
+  },
+  "sample_records": {
+    "sample_method": "random",
+    "sample_size": 4,
+    "total_rows": 4,
+    "sampled_at": "2025-11-22T16:27:25.807775Z",
+    "records": [
+      {
+        "product_type_id": 1,
+        "product_type_name": "饮料"
+      },
+      {
+        "product_type_id": 2,
+        "product_type_name": "零食"
+      },
+      {
+        "product_type_id": 3,
+        "product_type_name": "烟草"
+      },
+      {
+        "product_type_id": 4,
+        "product_type_name": "水果"
+      }
+    ]
+  }
+}

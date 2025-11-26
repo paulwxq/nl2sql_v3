@@ -246,6 +246,10 @@ JOIN 计划：
             return ""
 
         time_window = parse_result["time"]
+        # 如果 time 是 null，直接返回空
+        if not time_window:
+            return ""
+            
         start = time_window.get("start", "")
         end = time_window.get("end", "")
         grain = time_window.get("grain_inferred", "")
@@ -372,15 +376,60 @@ JOIN 计划：
         return "\n".join(lines)
 
     def _format_dependencies(self, dependencies: Optional[Dict[str, Any]]) -> str:
-        """格式化依赖结果"""
+        """格式化依赖结果
+        
+        Args:
+            dependencies: 依赖结果字典，格式：
+                {
+                    "query_id": {
+                        "question": "...",
+                        "execution_result": {...}
+                    }
+                }
+        
+        Returns:
+            格式化后的依赖信息字符串
+        """
         if not dependencies:
             return ""
-
+        
+        max_rows = self.config.get("dependencies_formatting", {}).get("max_display_rows", 5)
+        include_columns = self.config.get("dependencies_formatting", {}).get("include_columns", True)
+        
         deps = []
-        for query_id, result in dependencies.items():
-            deps.append(f"- {query_id}: {result}")
-
-        return "\n\n依赖查询结果：\n" + "\n".join(deps)
+        for query_id, dep_data in dependencies.items():
+            # 处理旧格式或空数据
+            if not dep_data or not isinstance(dep_data, dict):
+                continue
+                
+            # 提取关键信息
+            question = dep_data.get("question", f"子查询 {query_id}")
+            exec_result = dep_data.get("execution_result")
+            
+            # 如果没有 execution_result，跳过
+            if not exec_result or not isinstance(exec_result, dict):
+                continue
+            
+            rows = exec_result.get("rows", [])
+            columns = exec_result.get("columns", [])
+            
+            # 构建格式化输出
+            deps.append(f"  - {query_id}:")
+            deps.append(f"    question: {question}")
+            
+            if rows:
+                deps.append(f"    result:")
+                display_rows = rows[:max_rows]
+                for row in display_rows:
+                    deps.append(f"      - {row}")
+                
+                if len(rows) > max_rows:
+                    deps.append(f"    ... 共 {len(rows)} 行，仅显示前 {max_rows} 行")
+            
+            if include_columns and columns:
+                deps.append(f"    columns: {columns}")
+        
+        return "\n\n可能依赖的查询结果：\n" + "\n".join(deps)
 
     def _format_errors(self, errors: Optional[List[str]]) -> str:
         """格式化验证错误"""

@@ -20,10 +20,19 @@ class TestInjectParamsNode:
                 "query": "查询1",
                 "status": "completed",
                 "dependencies": [],
-                "validated_sql": None,
-                "execution_result": {"sql": "SELECT 1", "rows": [[101]], "success": True},
+                "validated_sql": "SELECT 1",
+                "execution_result": {
+                    "sub_query_id": "sq1",
+                    "sql": "SELECT 1",
+                    "success": True,
+                    "columns": ["result"],
+                    "rows": [[101]],
+                    "row_count": 1,
+                    "execution_time_ms": 3.0,
+                    "error": None
+                },
                 "error": None,
-                "iteration_count": 0,
+                "iteration_count": 1,
                 "dependencies_results": None,
             },
             {
@@ -47,6 +56,13 @@ class TestInjectParamsNode:
         assert state["sub_queries"][1]["status"] == "in_progress"
         assert state["sub_queries"][1]["dependencies_results"] is not None
         assert "sq1" in state["sub_queries"][1]["dependencies_results"]
+        
+        # 验证新格式
+        dep_data = state["sub_queries"][1]["dependencies_results"]["sq1"]
+        assert "question" in dep_data
+        assert "execution_result" in dep_data
+        assert dep_data["question"] == "查询1"
+        assert dep_data["execution_result"]["rows"] == [[101]]
 
     def test_inject_multiple_dependencies(self):
         """测试注入多个依赖结果"""
@@ -59,10 +75,19 @@ class TestInjectParamsNode:
                 "query": "查询1",
                 "status": "completed",
                 "dependencies": [],
-                "validated_sql": None,
-                "execution_result": {"sql": "SELECT 1", "rows": [[101]], "success": True},
+                "validated_sql": "SELECT 1",
+                "execution_result": {
+                    "sub_query_id": "sq1",
+                    "sql": "SELECT 1",
+                    "success": True,
+                    "columns": ["result"],
+                    "rows": [[101]],
+                    "row_count": 1,
+                    "execution_time_ms": 3.0,
+                    "error": None
+                },
                 "error": None,
-                "iteration_count": 0,
+                "iteration_count": 1,
                 "dependencies_results": None,
             },
             {
@@ -70,10 +95,19 @@ class TestInjectParamsNode:
                 "query": "查询2",
                 "status": "completed",
                 "dependencies": [],
-                "validated_sql": None,
-                "execution_result": {"sql": "SELECT 2", "rows": [[202]], "success": True},
+                "validated_sql": "SELECT 2",
+                "execution_result": {
+                    "sub_query_id": "sq2",
+                    "sql": "SELECT 2",
+                    "success": True,
+                    "columns": ["result"],
+                    "rows": [[202]],
+                    "row_count": 1,
+                    "execution_time_ms": 3.0,
+                    "error": None
+                },
                 "error": None,
-                "iteration_count": 0,
+                "iteration_count": 1,
                 "dependencies_results": None,
             },
             {
@@ -98,6 +132,19 @@ class TestInjectParamsNode:
         assert len(state["sub_queries"][2]["dependencies_results"]) == 2
         assert "sq1" in state["sub_queries"][2]["dependencies_results"]
         assert "sq2" in state["sub_queries"][2]["dependencies_results"]
+        
+        # 验证新格式
+        dep1 = state["sub_queries"][2]["dependencies_results"]["sq1"]
+        assert "question" in dep1
+        assert "execution_result" in dep1
+        assert dep1["question"] == "查询1"
+        assert dep1["execution_result"]["rows"] == [[101]]
+        
+        dep2 = state["sub_queries"][2]["dependencies_results"]["sq2"]
+        assert "question" in dep2
+        assert "execution_result" in dep2
+        assert dep2["question"] == "查询2"
+        assert dep2["execution_result"]["rows"] == [[202]]
 
     def test_parallel_batch_selection(self):
         """测试并行批次选择（同一轮执行多个无依赖关系的子查询）"""
