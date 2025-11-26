@@ -13,7 +13,12 @@
       "Bash(uv run python:*)",
       "Bash(uv run pytest:*)",
       "Bash(chmod:*)",
-      "Bash(uv pip list:*)"
+      "Bash(uv pip list:*)",
+      "Bash(source .venv-wsl/bin/activate:*)",
+      "Bash(pip install:*)",
+      "Bash(python3 -m pytest tests/unit/metaweave/relationships/test_repository.py -v)",
+      "Bash(xargs cat:*)",
+      "Bash(xargs ls:*)"
     ],
     "deny": [],
     "ask": []

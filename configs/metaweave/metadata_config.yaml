@@ -142,7 +142,13 @@ logical_key_detection:
 # 输出配置
 output:
   output_dir: output/metaweave/metadata
-  
+
+  # Step 3: 关系发现输出配置
+  json_directory: output/metaweave/metadata/json  # Step 2 输出 / Step 3 输入
+  rel_directory: output/metaweave/metadata/rel    # Step 3 输出
+  rel_granularity: global  # global | schema (Phase 1只支持global)
+  rel_id_salt: ""          # 关系ID哈希盐值（可选）
+
   # 输出格式
   formats:
     - ddl
@@ -170,4 +176,43 @@ logging:
   level: INFO  # DEBUG | INFO | WARNING | ERROR
   log_file: logs/metaweave/metadata.log
   console_output: true
+
+# Step 3: 关系发现配置
+# 单列候选配置
+single_column:
+  active_search_same_name: true  # 启用主动同名搜索
+  important_constraints:
+    - single_field_primary_key
+    - single_field_unique_constraint
+    - single_field_index
+  exclude_semantic_roles:
+    - audit
+    - metric
+  logical_key_min_confidence: 0.8
+
+# 复合键候选配置
+composite:
+  max_columns: 3  # 最多考虑3列的复合键
+  target_sources:
+    - physical_constraints
+    - candidate_logical_keys
+    - dynamic_same_name
+  min_name_similarity: 0.7
+  min_type_compatibility: 0.8
+
+# 决策配置
+decision:
+  accept_threshold: 0.80  # 最低接受阈值
+  high_confidence_threshold: 0.90
+  medium_confidence_threshold: 0.80
+  suppress_single_if_composite: true  # 复合关系存在时抑制单列关系
+
+# 评分权重
+weights:
+  inclusion_rate: 0.30
+  jaccard_index: 0.15
+  uniqueness: 0.10
+  name_similarity: 0.20
+  type_compatibility: 0.20
+  semantic_role_bonus: 0.05
 

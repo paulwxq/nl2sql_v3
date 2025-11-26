@@ -45,10 +45,10 @@ logger = logging.getLogger("metaweave.cli")
 )
 @click.option(
     "--step",
-    type=click.Choice(["ddl", "json", "cql", "md", "all"], case_sensitive=False),
+    type=click.Choice(["ddl", "json", "cql", "md", "rel", "all"], case_sensitive=False),
     default="all",
     show_default=True,
-    help="指定要执行的步骤：ddl/json/cql/md 或 all"
+    help="指定要执行的步骤：ddl/json/cql/md/rel 或 all"
 )
 def metadata_command(
     config: str,
@@ -76,10 +76,50 @@ def metadata_command(
         config_path = Path(config)
         if not config_path.is_absolute():
             config_path = get_project_root() / config_path
-        
+
         click.echo(f"📋 加载配置: {config_path}")
-        
-        # 初始化生成器
+
+        # Step 3: 关系发现
+        if step == "rel":
+            from src.metaweave.core.relationships.pipeline import RelationshipDiscoveryPipeline
+
+            click.echo("🔗 开始关系发现...")
+            click.echo("")
+
+            pipeline = RelationshipDiscoveryPipeline(config_path)
+            result = pipeline.discover()
+
+            # 显示结果统计
+            click.echo("")
+            click.echo("=" * 60)
+            click.echo("📊 关系发现结果统计")
+            click.echo("=" * 60)
+            click.echo(f"✅ 发现关系: {result.total_relations} 个")
+            click.echo(f"  - 外键直通: {result.foreign_key_relations}")
+            click.echo(f"  - 推断关系: {result.inferred_relations}")
+            click.echo(f"  - 高置信度: {result.high_confidence_count}")
+            click.echo(f"  - 中置信度: {result.medium_confidence_count}")
+            click.echo(f"  - 抑制数量: {result.suppressed_count}")
+            click.echo(f"📁 输出文件: {len(result.output_files)} 个")
+
+            if result.errors:
+                click.echo(f"\n⚠️  错误列表:")
+                for error in result.errors[:5]:
+                    click.echo(f"  - {error}", err=True)
+                if len(result.errors) > 5:
+                    click.echo(f"  ... 还有 {len(result.errors) - 5} 个错误", err=True)
+
+            click.echo("=" * 60)
+
+            if result.success:
+                click.echo("✨ 关系发现完成！")
+            else:
+                click.echo("⚠️  关系发现完成，但存在错误", err=True)
+                raise click.Abort()
+
+            return
+
+        # 初始化生成器（Step 2）
         generator = MetadataGenerator(config_path)
         
         # 解析 schemas 和 tables
