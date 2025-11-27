@@ -375,40 +375,6 @@ UNWIND [
     "pk_position": 0,
     "uniqueness": 0.75,
     "null_rate": 0.0
-  },
-  {
-    "full_name": "public.table_name.column_name",
-    "schema": "public",
-    "table": "table_name",
-    "name": "column_name",
-    "comment": "列注释",
-    "data_type": "integer",
-    "semantic_role": "identifier",
-    "is_pk": false,
-    "is_uk": false,
-    "is_fk": false,
-    "is_time": false,
-    "is_measure": false,
-    "pk_position": 0,
-    "uniqueness": 1.0,
-    "null_rate": 0.0
-  },
-  {
-    "full_name": "public.table_name.column_name",
-    "schema": "public",
-    "table": "table_name",
-    "name": "column_name",
-    "comment": "",
-    "data_type": "integer",
-    "semantic_role": "attribute",
-    "is_pk": false,
-    "is_uk": false,
-    "is_fk": false,
-    "is_time": false,
-    "is_measure": false,
-    "pk_position": 0,
-    "uniqueness": 0.0,
-    "null_rate": 0.0
   }
 ] AS c
 MERGE (n:Column {full_name: c.full_name})

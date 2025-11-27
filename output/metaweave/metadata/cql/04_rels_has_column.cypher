@@ -89,14 +89,6 @@ UNWIND [
   {
     "table_full_name": "public.fact_store_sales_month",
     "column_full_name": "public.fact_store_sales_month.amount"
-  },
-  {
-    "table_full_name": "public.table_name",
-    "column_full_name": "public.table_name.column_name"
-  },
-  {
-    "table_full_name": "public.table_name",
-    "column_full_name": "public.table_name.column_name"
   }
 ] AS hc
 MATCH (t:Table {full_name: hc.table_full_name})

@@ -84,13 +84,36 @@ class JSONReader:
         columns = []
         has_column_rels = []
 
-        json_files = list(self.json_dir.glob("*.json"))
-        logger.info(f"找到 {len(json_files)} 个 JSON 文件")
+        # 获取所有 JSON 文件，但过滤掉模板文件
+        all_json_files = list(self.json_dir.glob("*.json"))
+        json_files = []
+
+        for f in all_json_files:
+            # 跳过以 _ 或 . 开头的文件（模板文件和隐藏文件）
+            if f.name.startswith("_") or f.name.startswith("."):
+                logger.debug(f"跳过模板文件: {f.name}")
+                continue
+            json_files.append(f)
+
+        logger.info(
+            f"找到 {len(json_files)} 个有效 JSON 文件"
+            f"（已过滤 {len(all_json_files) - len(json_files)} 个模板文件）"
+        )
 
         for json_file in json_files:
             try:
                 with open(json_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
+
+                # 验证表名不是占位符
+                table_info = data.get("table_info", {})
+                table_name = table_info.get("table_name", "")
+
+                if not table_name or table_name in ["table_name", "placeholder", "example"]:
+                    logger.warning(
+                        f"跳过占位符表: {json_file.name} (table_name={table_name})"
+                    )
+                    continue
 
                 # 提取表信息
                 table = self._extract_table(data)
@@ -145,8 +168,12 @@ class JSONReader:
                 "target_columns": fk_data.get("target_columns", [])
             })
 
-        # 提取索引
-        indexes = physical_constraints.get("indexes", [])
+        # 提取索引（只保留列名列表，符合 list<list<string>> 规范）
+        indexes = []
+        for idx_data in physical_constraints.get("indexes", []):
+            columns = idx_data.get("columns", [])
+            if columns:  # 只添加非空的列列表
+                indexes.append(columns)
 
         # 提取候选逻辑主键（confidence >= 0.8）
         logic_pk = []

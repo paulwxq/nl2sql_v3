@@ -34,12 +34,17 @@
 - `logic_pk`（list<list<string>>）: 候选逻辑主键集合（来自 Step 2 logical_keys）
 - `logic_fk`（list<list<string>>）: 逻辑外键（来自 Step 3 关系，源端列集合）
 - `logic_uk`（list<list<string>>）: 逻辑唯一集合（可空/预留，来自 Step 2 画像推断，若有）
-- `indexes`（list<list<string>>）: 索引集合（含复合索引）
+- `indexes`（list<list<string>>）: 物理索引集合（含复合索引）
 
 说明：
 - 同时保留 `id` 和 `full_name` 两个属性，值相同，确保向后兼容（SQL 子图模块使用 `id` 查询）
 - `full_name` 语义更清晰，建议优先使用
 - 两者均建立唯一约束
+- **物理约束与逻辑约束严格分离**：
+  - 物理约束（`pk`、`uk`、`fk`、`indexes`）：来自数据库 DDL 的实际约束
+  - 逻辑约束（`logic_pk`、`logic_fk`、`logic_uk`）：来自 Step 2/3 的推断和发现
+  - Table 节点同时保留物理和逻辑约束，便于不同场景使用
+  - Column 节点的 `is_pk`/`is_uk`/`is_fk` 仅反映物理约束，不包含逻辑约束
 
 ### 2.3 `Column` 节点属性
 - `full_name`（string, unique）: `schema.table.column`
@@ -49,9 +54,9 @@
 - `comment`（string, 可空）
 - `data_type`（string）
 - `semantic_role`（string, 可空）: identifier/datetime/enum/metric/audit/attribute
-- `is_pk`（boolean）
-- `is_uk`（boolean）
-- `is_fk`（boolean）
+- `is_pk`（boolean）：是否为物理主键
+- `is_uk`（boolean）：是否在物理唯一约束中
+- `is_fk`（boolean）：是否为物理外键
 - `is_time`（boolean，来自 semantic_role=datetime）
 - `is_measure`（boolean，来自 semantic_role=metric）
 - `pk_position`（int，主键序号，非主键为 0）
@@ -88,10 +93,10 @@
   - `full_name`/`schema`/`table`/`name`
   - `data_type`，`comment`（若有）
   - `semantic_role`：来自 `column_profiles[*].semantic_analysis.semantic_role`
-  - `is_pk`/`is_uk`/`is_fk`：
-    - `is_pk`：若列在物理主键中
-    - `is_uk`：若列出现在任一唯一约束集合中
-    - `is_fk`：若列在任一外键 source_columns 或本表在 Step 3 作为源端时的 from_columns 中
+  - `is_pk`/`is_uk`/`is_fk`（仅物理约束，不包含逻辑约束）：
+    - `is_pk`：若列在物理主键（physical_constraints.primary_key）中
+    - `is_uk`：若列出现在任一物理唯一约束（physical_constraints.unique_constraints）集合中
+    - `is_fk`：若列在任一物理外键（physical_constraints.foreign_keys）的 source_columns 中
   - `is_time`：semantic_role=datetime；`is_measure`：semantic_role=metric
   - `pk_position`：主键中的位置，否则 0
 

@@ -1,7 +1,7 @@
 // 00_import_all.cypher
 // Neo4j 元数据导入汇总脚本（可一次性执行）
-// 生成时间: 2025-11-27T17:35:30.213393
-// 统计: 8 张表, 24 个列, 6 个关系
+// 生成时间: 2025-11-27T22:38:11.112901
+// 统计: 6 张表, 22 个列, 6 个关系
 
 // =====================================================================
 // 01. 创建唯一约束
@@ -134,97 +134,6 @@ UNWIND [
         "product_type_id"
       ]
     ],
-    "logic_fk": [],
-    "logic_uk": [],
-    "indexes": []
-  },
-  {
-    "full_name": "public.table_name",
-    "schema": "public",
-    "name": "table_name",
-    "comment": "表注释",
-    "pk": [
-      {
-        "constraint_name": "pk_name",
-        "columns": [
-          "column1"
-        ]
-      }
-    ],
-    "uk": [
-      {
-        "constraint_name": "uk_single_column",
-        "columns": [
-          "column1"
-        ]
-      },
-      {
-        "constraint_name": "uk_composite",
-        "columns": [
-          "column1",
-          "column2",
-          "column3"
-        ]
-      }
-    ],
-    "fk": [
-      {
-        "constraint_name": "fk_name",
-        "source_columns": [
-          "local_column"
-        ],
-        "target_schema": "public",
-        "target_table": "referenced_table",
-        "target_columns": [
-          "referenced_column"
-        ]
-      }
-    ],
-    "logic_pk": [
-      [
-        "column1"
-      ]
-    ],
-    "logic_fk": [],
-    "logic_uk": [],
-    "indexes": [
-      {
-        "index_name": "idx_single",
-        "columns": [
-          "column1"
-        ],
-        "is_unique": false,
-        "index_type": "btree"
-      },
-      {
-        "index_name": "idx_composite",
-        "columns": [
-          "column1",
-          "column2"
-        ],
-        "is_unique": false,
-        "index_type": "btree"
-      },
-      {
-        "index_name": "idx_unique_composite",
-        "columns": [
-          "column2",
-          "column3"
-        ],
-        "is_unique": true,
-        "index_type": "btree"
-      }
-    ]
-  },
-  {
-    "full_name": "public.table_name",
-    "schema": "public",
-    "name": "table_name",
-    "comment": "",
-    "pk": [],
-    "uk": [],
-    "fk": [],
-    "logic_pk": [],
     "logic_fk": [],
     "logic_uk": [],
     "indexes": []
@@ -621,40 +530,6 @@ UNWIND [
     "pk_position": 0,
     "uniqueness": 0.75,
     "null_rate": 0.0
-  },
-  {
-    "full_name": "public.table_name.column_name",
-    "schema": "public",
-    "table": "table_name",
-    "name": "column_name",
-    "comment": "列注释",
-    "data_type": "integer",
-    "semantic_role": "identifier",
-    "is_pk": false,
-    "is_uk": false,
-    "is_fk": false,
-    "is_time": false,
-    "is_measure": false,
-    "pk_position": 0,
-    "uniqueness": 1.0,
-    "null_rate": 0.0
-  },
-  {
-    "full_name": "public.table_name.column_name",
-    "schema": "public",
-    "table": "table_name",
-    "name": "column_name",
-    "comment": "",
-    "data_type": "integer",
-    "semantic_role": "attribute",
-    "is_pk": false,
-    "is_uk": false,
-    "is_fk": false,
-    "is_time": false,
-    "is_measure": false,
-    "pk_position": 0,
-    "uniqueness": 0.0,
-    "null_rate": 0.0
   }
 ] AS c
 MERGE (n:Column {full_name: c.full_name})
@@ -765,14 +640,6 @@ UNWIND [
   {
     "table_full_name": "public.fact_store_sales_month",
     "column_full_name": "public.fact_store_sales_month.amount"
-  },
-  {
-    "table_full_name": "public.table_name",
-    "column_full_name": "public.table_name.column_name"
-  },
-  {
-    "table_full_name": "public.table_name",
-    "column_full_name": "public.table_name.column_name"
   }
 ] AS hc
 MATCH (t:Table {full_name: hc.table_full_name})
