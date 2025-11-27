@@ -149,13 +149,29 @@ class JSONReader:
         name = table_info.get("table_name", "")
         full_name = f"{schema}.{name}"
 
-        # 提取物理主键
-        pk = physical_constraints.get("primary_key") or []
-        if not isinstance(pk, list):
-            pk = [pk] if pk else []
+        # 提取物理主键（符合 list<string> 规范）
+        pk_data = physical_constraints.get("primary_key")
+        if pk_data and isinstance(pk_data, dict):
+            # Step 2 格式: {"constraint_name": "...", "columns": [...]}
+            pk = pk_data.get("columns", [])
+        elif pk_data and isinstance(pk_data, list):
+            # 已经是列表格式
+            pk = pk_data
+        else:
+            pk = []
 
-        # 提取唯一约束
-        uk = physical_constraints.get("unique_constraints", [])
+        # 提取唯一约束（符合 list<list<string>> 规范）
+        uk = []
+        for uk_data in physical_constraints.get("unique_constraints", []):
+            if isinstance(uk_data, dict):
+                # Step 2 格式: {"constraint_name": "...", "columns": [...]}
+                columns = uk_data.get("columns", [])
+                if columns:
+                    uk.append(columns)
+            elif isinstance(uk_data, list):
+                # 已经是列表格式
+                if uk_data:
+                    uk.append(uk_data)
 
         # 提取外键（转换为字典列表）
         fk = []
@@ -210,15 +226,27 @@ class JSONReader:
         table_profile = data.get("table_profile", {})
         physical_constraints = table_profile.get("physical_constraints", {})
 
-        # 获取物理主键列表
-        pk_columns = physical_constraints.get("primary_key") or []
-        if not isinstance(pk_columns, list):
-            pk_columns = [pk_columns] if pk_columns else []
+        # 获取物理主键列表（提取 columns 字段）
+        pk_data = physical_constraints.get("primary_key")
+        if pk_data and isinstance(pk_data, dict):
+            # Step 2 格式: {"constraint_name": "...", "columns": [...]}
+            pk_columns = pk_data.get("columns", [])
+        elif pk_data and isinstance(pk_data, list):
+            # 已经是列表格式
+            pk_columns = pk_data
+        else:
+            pk_columns = []
 
-        # 获取唯一约束列表（扁平化）
+        # 获取唯一约束列表（扁平化，提取 columns 字段）
         uk_columns = set()
-        for uk_list in physical_constraints.get("unique_constraints", []):
-            uk_columns.update(uk_list)
+        for uk_data in physical_constraints.get("unique_constraints", []):
+            if isinstance(uk_data, dict):
+                # Step 2 格式: {"constraint_name": "...", "columns": [...]}
+                columns = uk_data.get("columns", [])
+                uk_columns.update(columns)
+            elif isinstance(uk_data, list):
+                # 已经是列表格式
+                uk_columns.update(uk_data)
 
         # 获取外键列表（扁平化）
         fk_columns = set()
