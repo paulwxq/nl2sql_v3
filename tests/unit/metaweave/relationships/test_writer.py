@@ -397,3 +397,51 @@ class TestRelationshipWriter:
 
         # 验证使用 global
         assert writer.rel_granularity == "global"
+
+    def test_markdown_title_with_column_names(self, writer, temp_output_dir, config):
+        """测试 Markdown 标题包含列名"""
+        # 创建单列关系
+        single_rel = Relation(
+            relationship_id="rel_single_001",
+            source_schema="public",
+            source_table="dim_company",
+            source_columns=["company_id"],
+            target_schema="public",
+            target_table="dim_store",
+            target_columns=["company_id"],
+            relationship_type="inferred",
+            cardinality="N:1",
+            composite_score=0.90,
+            score_details={},
+            inference_method="single_active_search"
+        )
+
+        # 创建复合键关系
+        composite_rel = Relation(
+            relationship_id="rel_composite_001",
+            source_schema="public",
+            source_table="fact_sales",
+            source_columns=["store_id", "date_day"],
+            target_schema="public",
+            target_table="dim_store_calendar",
+            target_columns=["store_id", "date_day"],
+            relationship_type="inferred",
+            cardinality="N:1",
+            composite_score=0.92,
+            score_details={},
+            inference_method="composite_physical"
+        )
+
+        # 写入 Markdown
+        writer.write_results([single_rel, composite_rel], [], config)
+
+        # 读取 Markdown 文件
+        md_file = temp_output_dir / "relationships_global.md"
+        with open(md_file, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        # 验证单列关系标题包含列名
+        assert "### 1. public.dim_company.company_id → public.dim_store.company_id" in content
+
+        # 验证复合键关系标题包含列名（方括号格式）
+        assert "### 2. public.fact_sales.[store_id, date_day] → public.dim_store_calendar.[store_id, date_day]" in content

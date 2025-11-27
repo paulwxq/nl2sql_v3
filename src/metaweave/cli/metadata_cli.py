@@ -79,6 +79,46 @@ def metadata_command(
 
         click.echo(f"📋 加载配置: {config_path}")
 
+        # Step 4: CQL 生成
+        if step == "cql":
+            from src.metaweave.core.cql_generator.generator import CQLGenerator
+
+            click.echo("🔧 开始生成 Neo4j CQL...")
+            click.echo("")
+
+            generator = CQLGenerator(config_path)
+            result = generator.generate()
+
+            # 显示结果统计
+            click.echo("")
+            click.echo("=" * 60)
+            click.echo("📊 CQL 生成结果统计")
+            click.echo("=" * 60)
+            click.echo(f"✅ 表节点: {result.tables_count} 个")
+            click.echo(f"✅ 列节点: {result.columns_count} 个")
+            click.echo(f"✅ 关系: {result.relationships_count} 个")
+            click.echo(f"📁 输出文件: {len(result.output_files)} 个")
+
+            for file_path in result.output_files:
+                click.echo(f"  - {Path(file_path).name}")
+
+            if result.errors:
+                click.echo(f"\n⚠️  错误列表:")
+                for error in result.errors[:5]:
+                    click.echo(f"  - {error}", err=True)
+                if len(result.errors) > 5:
+                    click.echo(f"  ... 还有 {len(result.errors) - 5} 个错误", err=True)
+
+            click.echo("=" * 60)
+
+            if result.success:
+                click.echo("✨ CQL 生成完成！")
+            else:
+                click.echo("⚠️  CQL 生成完成，但存在错误", err=True)
+                raise click.Abort()
+
+            return
+
         # Step 3: 关系发现
         if step == "rel":
             from src.metaweave.core.relationships.pipeline import RelationshipDiscoveryPipeline

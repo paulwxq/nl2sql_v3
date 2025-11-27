@@ -69,6 +69,32 @@ class Relation:
         return f"{self.target_schema}.{self.target_table}"
 
     @property
+    def source_full_name_with_columns(self) -> str:
+        """源表全名（包含列名）
+
+        单列关系: public.dim_company.company_id
+        复合键关系: public.dim_company.[store_id, date_day]
+        """
+        if self.is_single_column:
+            return f"{self.source_schema}.{self.source_table}.{self.source_columns[0]}"
+        else:
+            cols = ', '.join(self.source_columns)
+            return f"{self.source_schema}.{self.source_table}.[{cols}]"
+
+    @property
+    def target_full_name_with_columns(self) -> str:
+        """目标表全名（包含列名）
+
+        单列关系: public.dim_store.company_id
+        复合键关系: public.dim_store.[store_id, date_day]
+        """
+        if self.is_single_column:
+            return f"{self.target_schema}.{self.target_table}.{self.target_columns[0]}"
+        else:
+            cols = ', '.join(self.target_columns)
+            return f"{self.target_schema}.{self.target_table}.[{cols}]"
+
+    @property
     def table_pair(self) -> str:
         """表对标识（用于抑制规则）"""
         return f"{self.source_full_name}->{self.target_full_name}"

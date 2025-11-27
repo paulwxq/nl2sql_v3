@@ -18,7 +18,8 @@
       "Bash(pip install:*)",
       "Bash(python3 -m pytest tests/unit/metaweave/relationships/test_repository.py -v)",
       "Bash(xargs cat:*)",
-      "Bash(xargs ls:*)"
+      "Bash(xargs ls:*)",
+      "Bash(python -m src.metaweave.cli.main metadata:*)"
     ],
     "deny": [],
     "ask": []

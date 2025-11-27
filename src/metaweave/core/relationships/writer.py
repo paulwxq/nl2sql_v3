@@ -440,7 +440,7 @@ class RelationshipWriter:
         lines.append("## 关系详情\n")
 
         for i, rel in enumerate(relations, 1):
-            lines.append(f"### {i}. {rel.source_full_name} → {rel.target_full_name}\n")
+            lines.append(f"### {i}. {rel.source_full_name_with_columns} → {rel.target_full_name_with_columns}\n")
 
             # 类型
             rel_type = "复合键" if rel.is_composite else "单列"

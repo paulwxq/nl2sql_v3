@@ -1,6 +1,8 @@
-当前模块的主要执行步骤，Step 1-> Step2 ->Step3->step4, 以及 Step 1-> Step 5.
+当前模块的主要执行步骤，Step 1-> Step2 ->Step3->step4->step5, 以及 Step 1-> Step 6.
 Step 1.生成 ddl，连接到数据库，获取表结构，生成ddl，包括注释。 文件类型为 *.sql，路径为：\output\metaweave\metadata\ddl，在当前的基础上添加3条记录，需要设计一个格式，保存3条记录。
 Step 2.生成 json(表和字段的数据画像)，基于step 1生成的ddl语句，为字段和表生成画像，写入到json中, 路径为：\output\metaweave\metadata\json。关于表结构，要从前面的ddl获取，包括里面的主外键和唯一约束等信息，不要从表中获取。
 step 3.生成 json(表之间的关联关系)，基于step2生成数据画像的json文件，按照预订的算法，找出来表之间的关联关系，并写入到Json文件中，路径为：\output\metaweave\metadata\rel 
 Step 4.生成 neo4j cql，基于step 2生成的数据画像json和step 3生成的关联关系，以及从数据库中获取的数据和统计指标，生成neo4j的cql，它的路径为：\output\metaweave\metadata\cql . 这里的neo4j的cql，可以直接执行，写入到neo4j中。 
-Step 5.生成 md 文件,基于 Step 1生成的ddl，生成md文件，包括每个字段的样例数据，3条记录。 生成的md 文件，它的路径为：\output\metaweave\metadata\md
+Step 5.数据加载：
+  - cql : 根据 step 3 和 step 4 生成的结果，把step 4生产的neo4j cql，写入到neo4j中。
+Step 6.生成 md 文件,基于 Step 1生成的ddl，生成md文件，包括每个字段的样例数据，3条记录。 生成的md 文件，它的路径为：\output\metaweave\metadata\md

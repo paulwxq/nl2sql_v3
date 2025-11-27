@@ -1,0 +1,120 @@
+// Step 4 Neo4j .cypher 模板（供生成器参考，不直接执行）
+// 作用：指导代码按约定结构生成可幂等的 Cypher 文件，供 Step 5 加载器依次执行。
+// 说明：
+// - 使用纯 Cypher（不包含 :source/:param 等 Browser 元命令）
+// - 多次执行不应造成重复（使用 CREATE CONSTRAINT IF NOT EXISTS / MERGE + SET）
+// - 建议最终生成 01~05 拆分文件，或合并成单一文件供 cypher-shell -f 执行
+
+// =====================================================================
+// 01_constraints.cypher 约束（幂等）
+// =====================================================================
+CREATE CONSTRAINT table_id IF NOT EXISTS FOR (t:Table) REQUIRE t.id IS UNIQUE;
+CREATE CONSTRAINT table_full_name IF NOT EXISTS FOR (t:Table) REQUIRE t.full_name IS UNIQUE;
+CREATE CONSTRAINT column_full_name IF NOT EXISTS FOR (c:Column) REQUIRE c.full_name IS UNIQUE;
+
+// =====================================================================
+// 02_nodes_tables.cypher 生成 Table 节点（UNWIND 模式）
+// =====================================================================
+// 生成器将 <<TABLES>> 替换为字面量数组：
+// [
+//   {
+//     full_name: "public.dim_store",
+//     schema:    "public",
+//     name:      "dim_store",
+//     comment:   "店铺维表",
+//     pk:        ["store_id"],
+//     uk:        [["store_name"]],
+//     fk:        [ { constraint_name: "fk_store_company", source_columns:["company_id"], target_schema:"public", target_table:"dim_company", target_columns:["company_id"] } ],
+//     logic_pk:  [["store_id"]],
+//     logic_fk:  [],
+//     logic_uk:  [],
+//     indexes:   [["store_id"],["company_id"]]
+//   }
+// ]
+UNWIND <<TABLES>> AS t
+MERGE (n:Table {full_name: t.full_name})
+SET n.id       = t.full_name,
+    n.schema   = t.schema,
+    n.name     = t.name,
+    n.comment  = t.comment,
+    n.pk       = t.pk,
+    n.uk       = t.uk,
+    n.fk       = t.fk,
+    n.logic_pk = t.logic_pk,
+    n.logic_fk = t.logic_fk,
+    n.logic_uk = t.logic_uk,
+    n.indexes  = t.indexes;
+
+// =====================================================================
+// 03_nodes_columns.cypher 生成 Column 节点（UNWIND 模式）
+// =====================================================================
+// 生成器将 <<COLUMNS>> 替换为字面量数组：
+// [
+//   {
+//     full_name:"public.dim_store.store_id",
+//     schema:"public", table:"dim_store", name:"store_id",
+//     comment:"店铺ID（主键）",
+//     data_type:"integer", semantic_role:"identifier",
+//     is_pk:true, is_uk:false, is_fk:false, is_time:false, is_measure:false,
+//     pk_position:1,
+//     uniqueness:1.0, null_rate:0.0
+//   }
+// ]
+UNWIND <<COLUMNS>> AS c
+MERGE (n:Column {full_name: c.full_name})
+SET n.schema       = c.schema,
+    n.table        = c.table,
+    n.name         = c.name,
+    n.comment      = c.comment,
+    n.data_type    = c.data_type,
+    n.semantic_role= c.semantic_role,
+    n.is_pk        = c.is_pk,
+    n.is_uk        = c.is_uk,
+    n.is_fk        = c.is_fk,
+    n.is_time      = c.is_time,
+    n.is_measure   = c.is_measure,
+    n.pk_position  = c.pk_position,
+    n.uniqueness   = c.uniqueness,
+    n.null_rate    = c.null_rate;
+
+// =====================================================================
+// 04_rels_has_column.cypher 建立 HAS_COLUMN 关系
+// =====================================================================
+// 生成器将 <<HAS_COLUMNS>> 替换为字面量数组：
+// [ { table_full_name:"public.dim_store", column_full_name:"public.dim_store.store_id" } ]
+UNWIND <<HAS_COLUMNS>> AS hc
+MATCH (t:Table  {full_name: hc.table_full_name})
+MATCH (c:Column {full_name: hc.column_full_name})
+MERGE (t)-[:HAS_COLUMN]->(c);
+
+// =====================================================================
+// 05_rels_join_on.cypher 建立 JOIN_ON 关系
+// =====================================================================
+// 生成器将 <<JOINS>> 替换为字面量数组：
+// [
+//   {
+//     src_full_name:"public.fact_sales",
+//     dst_full_name:"public.dim_store",
+//     cardinality:"N:1",
+//     constraint_name:null,
+//     join_type:"INNER JOIN",
+//     source_columns:["store_id"],
+//     target_columns:["store_id"],
+//     on:"SRC.store_id = DST.store_id"
+//   }
+// ]
+UNWIND <<JOINS>> AS j
+MATCH (src:Table {full_name: j.src_full_name})
+MATCH (dst:Table {full_name: j.dst_full_name})
+MERGE (src)-[r:JOIN_ON]->(dst)
+SET r.cardinality     = j.cardinality,
+    r.constraint_name = j.constraint_name,
+    r.join_type       = coalesce(j.join_type, 'INNER JOIN'),
+    r.on              = j.on,
+    r.source_columns  = j.source_columns,
+    r.target_columns  = j.target_columns;
+
+// 备注：
+// - 以上 <<PLACEHOLDER>> 由 Step 4 生成器代码替换为实际字面量数组，或将本模板拆分为 01~05 文件并写入完整语句集合。
+// - Step 5 加载器按 01→05 顺序依次提交事务即可。
+

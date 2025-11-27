@@ -143,11 +143,16 @@ logical_key_detection:
 output:
   output_dir: output/metaweave/metadata
 
+  # Step 2: 表/列画像输出配置
+  json_directory: output/metaweave/metadata/json  # Step 2 输出 / Step 3&4 输入
+
   # Step 3: 关系发现输出配置
-  json_directory: output/metaweave/metadata/json  # Step 2 输出 / Step 3 输入
-  rel_directory: output/metaweave/metadata/rel    # Step 3 输出
+  rel_directory: output/metaweave/metadata/rel    # Step 3 输出 / Step 4 输入
   rel_granularity: global  # global | schema (Phase 1只支持global)
   rel_id_salt: ""          # 关系ID哈希盐值（可选）
+
+  # Step 4: CQL 生成输出配置
+  cql_directory: output/metaweave/metadata/cql    # Step 4 输出 / Step 5 输入
 
   # 输出格式
   formats:
