@@ -19,9 +19,11 @@ logger = logging.getLogger("metaweave.relationships.writer")
 class RelationshipWriter:
     """关系输出器
 
-    输出文件：
-    - relationships_global.json（所有关系，v3.2格式）
-    - relationships_global.md（可读报告）
+    输出文件（当前版本仅支持 global 粒度）：
+    - relationships_{granularity}.json（所有关系，v3.2格式）
+    - relationships_{granularity}.md（可读报告）
+
+    注意：Phase 1 仅支持 rel_granularity='global'，schema 粒度将在后续版本实现。
     """
 
     def __init__(self, config: dict):
@@ -34,6 +36,14 @@ class RelationshipWriter:
 
         self.rel_dir = Path(output_config.get("rel_directory", "output/metaweave/metadata/rel"))
         self.rel_granularity = output_config.get("rel_granularity", "global")
+
+        # 验证粒度配置（Phase 1 仅支持 global）
+        if self.rel_granularity != "global":
+            logger.warning(
+                f"当前版本仅支持 rel_granularity='global'，配置值 '{self.rel_granularity}' 将被忽略。"
+                f"Schema 粒度输出功能计划在后续版本实现。"
+            )
+            self.rel_granularity = "global"  # 强制使用 global
 
         # 决策阈值（用于置信度分类）
         decision_config = config.get("decision", {})
@@ -132,8 +142,8 @@ class RelationshipWriter:
             "relationships": relationships_v32
         }
 
-        # 写入文件
-        json_file = self.rel_dir / "relationships_global.json"
+        # 写入文件（使用配置的粒度，当前仅支持 global）
+        json_file = self.rel_dir / f"relationships_{self.rel_granularity}.json"
         with open(json_file, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
@@ -470,8 +480,8 @@ class RelationshipWriter:
 
             lines.append("")  # 空行
 
-        # 写入文件
-        md_file = self.rel_dir / "relationships_global.md"
+        # 写入文件（使用配置的粒度，当前仅支持 global）
+        md_file = self.rel_dir / f"relationships_{self.rel_granularity}.md"
         with open(md_file, "w", encoding="utf-8") as f:
             f.write("\n".join(lines))
 

@@ -765,3 +765,97 @@ class TestCandidateGenerator:
 
         # 完全相同
         assert generator._calculate_name_similarity("store_id", "store_id") == 1.0
+
+    def test_get_type_compatibility_score(self):
+        """测试类型兼容性分数计算（用于阈值比较）"""
+        config = {"single_column": {}, "composite": {}}
+        fk_sigs = set()
+        generator = CandidateGenerator(config, fk_sigs)
+
+        # 完全相同类型
+        assert generator._get_type_compatibility_score("integer", "integer") == 1.0
+        assert generator._get_type_compatibility_score("varchar", "varchar") == 1.0
+
+        # 整数类型族（完全兼容）
+        assert generator._get_type_compatibility_score("integer", "bigint") == 1.0
+        assert generator._get_type_compatibility_score("int4", "int8") == 1.0
+
+        # 字符串类型族（部分兼容，0.5）
+        assert generator._get_type_compatibility_score("varchar", "text") == 0.5
+        assert generator._get_type_compatibility_score("char", "varchar") == 0.5
+
+        # 数值类型族（高度兼容，0.8）
+        assert generator._get_type_compatibility_score("numeric", "decimal") == 0.8
+        assert generator._get_type_compatibility_score("float", "double precision") == 0.8
+
+        # 整数与数值（部分兼容，0.6）
+        assert generator._get_type_compatibility_score("integer", "numeric") == 0.6
+        assert generator._get_type_compatibility_score("bigint", "decimal") == 0.6
+
+        # 日期时间类型族
+        assert generator._get_type_compatibility_score("date", "timestamp") == 1.0
+
+        # 不兼容类型
+        assert generator._get_type_compatibility_score("integer", "varchar") == 0.0
+        assert generator._get_type_compatibility_score("date", "integer") == 0.0
+
+    def test_is_compatible_combination_with_type_threshold(self):
+        """测试复合键匹配应用 min_type_compatibility 阈值"""
+        # 配置 min_type_compatibility = 0.8
+        config = {
+            "single_column": {},
+            "composite": {
+                "min_name_similarity": 0.7,
+                "min_type_compatibility": 0.8  # ← 阈值设为 0.8
+            }
+        }
+        fk_sigs = set()
+        generator = CandidateGenerator(config, fk_sigs)
+
+        # 场景1：类型兼容性 0.5 < 0.8，应该被过滤
+        source_cols = ["name", "code"]
+        target_cols = ["name", "code"]
+        source_profiles = {
+            "name": {"data_type": "varchar"},  # varchar vs text = 0.5
+            "code": {"data_type": "varchar"}   # varchar vs text = 0.5
+        }
+        target_profiles = {
+            "name": {"data_type": "text"},
+            "code": {"data_type": "text"}
+        }
+        # 平均类型兼容性 = (0.5 + 0.5) / 2 = 0.5 < 0.8，应该返回 False
+        assert not generator._is_compatible_combination(
+            source_cols, target_cols, source_profiles, target_profiles
+        )
+
+        # 场景2：类型兼容性 1.0 >= 0.8，应该通过（名称相似度也满足）
+        source_cols2 = ["user_id", "order_id"]
+        target_cols2 = ["user_id", "order_id"]
+        source_profiles2 = {
+            "user_id": {"data_type": "integer"},
+            "order_id": {"data_type": "bigint"}
+        }
+        target_profiles2 = {
+            "user_id": {"data_type": "int4"},   # integer vs int4 = 1.0
+            "order_id": {"data_type": "int8"}   # bigint vs int8 = 1.0
+        }
+        # 平均类型兼容性 = (1.0 + 1.0) / 2 = 1.0 >= 0.8，且名称完全匹配，应该返回 True
+        assert generator._is_compatible_combination(
+            source_cols2, target_cols2, source_profiles2, target_profiles2
+        )
+
+        # 场景3：类型兼容性 0.8 = 0.8，刚好达到阈值，应该通过
+        source_cols3 = ["amount", "total"]
+        target_cols3 = ["amount", "total"]
+        source_profiles3 = {
+            "amount": {"data_type": "numeric"},
+            "total": {"data_type": "decimal"}
+        }
+        target_profiles3 = {
+            "amount": {"data_type": "decimal"},  # numeric vs decimal = 0.8
+            "total": {"data_type": "numeric"}    # decimal vs numeric = 0.8
+        }
+        # 平均类型兼容性 = (0.8 + 0.8) / 2 = 0.8 >= 0.8，应该返回 True
+        assert generator._is_compatible_combination(
+            source_cols3, target_cols3, source_profiles3, target_profiles3
+        )

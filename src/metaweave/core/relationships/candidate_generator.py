@@ -245,7 +245,7 @@ class CandidateGenerator:
 
         用于物理/逻辑约束匹配，需要同时满足：
         1. 平均名称相似度 >= min_name_similarity
-        2. 所有列的类型兼容性 >= min_type_compatibility
+        2. 平均类型兼容性 >= min_type_compatibility（与评分阶段一致）
 
         Args:
             source_cols: 源列列表
@@ -260,25 +260,30 @@ class CandidateGenerator:
             return False
 
         total_name_sim = 0
+        total_type_compat = 0
+
         for src_col, tgt_col in zip(source_cols, target_cols):
             # 1. 名称相似度检查
             name_sim = self._calculate_name_similarity(src_col, tgt_col)
             total_name_sim += name_sim
 
-            # 2. 类型兼容性检查
+            # 2. 类型兼容性检查（数值分数）
             src_profile = source_profiles.get(src_col, {})
             tgt_profile = target_profiles.get(tgt_col, {})
 
             src_type = src_profile.get("data_type", "")
             tgt_type = tgt_profile.get("data_type", "")
 
-            # 如果类型不兼容，直接返回 False
-            if not self._is_type_compatible(src_type, tgt_type):
-                return False
+            # 计算类型兼容性分数（与 scorer 一致）
+            type_compat = self._get_type_compatibility_score(src_type, tgt_type)
+            total_type_compat += type_compat
 
-        # 检查平均名称相似度是否满足阈值
+        # 检查平均值是否满足阈值
         avg_name_sim = total_name_sim / len(source_cols)
-        return avg_name_sim >= self.min_name_similarity
+        avg_type_compat = total_type_compat / len(source_cols)
+
+        return (avg_name_sim >= self.min_name_similarity and
+                avg_type_compat >= self.min_type_compatibility)
 
     def _find_dynamic_same_name(
             self,
@@ -374,6 +379,52 @@ class CandidateGenerator:
             return True
 
         return False
+
+    def _get_type_compatibility_score(self, type1: str, type2: str) -> float:
+        """计算两个类型的兼容性分数（用于阈值比较）
+
+        与 scorer 的逻辑保持一致，返回数值分数用于与 min_type_compatibility 比较。
+
+        Args:
+            type1: 类型1
+            type2: 类型2
+
+        Returns:
+            兼容性分数：1.0 (完全兼容) | 0.8 (高度兼容) | 0.6 (部分兼容) | 0.5 (低度兼容) | 0.0 (不兼容)
+        """
+        # 标准化类型
+        t1 = self._normalize_type(type1)
+        t2 = self._normalize_type(type2)
+
+        # 完全相同
+        if t1 == t2:
+            return 1.0
+
+        # 整数类型族
+        int_types = {"integer", "int", "int4", "bigint", "int8", "smallint", "int2", "serial", "bigserial"}
+        if t1 in int_types and t2 in int_types:
+            return 1.0
+
+        # 字符串类型族（部分兼容，因长度可能不同）
+        str_types = {"varchar", "character varying", "char", "character", "text", "bpchar"}
+        if t1 in str_types and t2 in str_types:
+            return 0.5
+
+        # 数值类型族
+        num_types = {"numeric", "decimal", "real", "double precision", "float", "float4", "float8"}
+        if t1 in num_types and t2 in num_types:
+            return 0.8
+
+        # 整数与数值类型可以部分兼容
+        if (t1 in int_types and t2 in num_types) or (t1 in num_types and t2 in int_types):
+            return 0.6
+
+        # 日期/时间类型族
+        date_types = {"date", "timestamp", "timestamp without time zone", "timestamp with time zone", "timestamptz"}
+        if t1 in date_types and t2 in date_types:
+            return 1.0
+
+        return 0.0
 
     def _normalize_type(self, data_type: str) -> str:
         """标准化数据类型"""

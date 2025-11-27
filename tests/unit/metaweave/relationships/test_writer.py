@@ -349,3 +349,51 @@ class TestRelationshipWriter:
         assert rel4["discovery_method"] == "dynamic_same_name"
         assert rel4["source_type"] == "candidate_logical_key"
         assert rel4.get("source_constraint") is None
+
+    def test_schema_granularity_warning(self, sample_relations, tmp_path, config, caplog):
+        """测试配置 schema 粒度时给出警告并强制使用 global"""
+        import logging
+
+        # 配置 schema 粒度
+        schema_config = config.copy()
+        schema_config["output"] = {
+            "rel_directory": str(tmp_path / "rel"),
+            "rel_granularity": "schema"  # ← 配置 schema
+        }
+
+        # 创建 writer（应该触发警告）
+        with caplog.at_level(logging.WARNING):
+            writer = RelationshipWriter(schema_config)
+
+        # 验证警告信息
+        assert any("仅支持 rel_granularity='global'" in record.message for record in caplog.records)
+        assert any("schema" in record.message for record in caplog.records)
+
+        # 验证强制使用 global
+        assert writer.rel_granularity == "global"
+
+        # 验证输出文件名仍然是 global
+        writer.write_results(sample_relations, [], schema_config)
+        assert (tmp_path / "rel" / "relationships_global.json").exists()
+        assert (tmp_path / "rel" / "relationships_global.md").exists()
+
+    def test_global_granularity_no_warning(self, sample_relations, tmp_path, config, caplog):
+        """测试配置 global 粒度时不给出警告"""
+        import logging
+
+        # 配置 global 粒度（默认值）
+        global_config = config.copy()
+        global_config["output"] = {
+            "rel_directory": str(tmp_path / "rel"),
+            "rel_granularity": "global"
+        }
+
+        # 创建 writer（不应该触发警告）
+        with caplog.at_level(logging.WARNING):
+            writer = RelationshipWriter(global_config)
+
+        # 验证没有警告
+        assert not any("仅支持 rel_granularity='global'" in record.message for record in caplog.records)
+
+        # 验证使用 global
+        assert writer.rel_granularity == "global"
