@@ -19,7 +19,10 @@
       "Bash(python3 -m pytest tests/unit/metaweave/relationships/test_repository.py -v)",
       "Bash(xargs cat:*)",
       "Bash(xargs ls:*)",
-      "Bash(python -m src.metaweave.cli.main metadata:*)"
+      "Bash(python -m src.metaweave.cli.main metadata:*)",
+      "Bash(mkdir:*)",
+      "Bash(git checkout:*)",
+      "Bash(python:*)"
     ],
     "deny": [],
     "ask": []

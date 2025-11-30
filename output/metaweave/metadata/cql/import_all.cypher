@@ -1,10 +1,10 @@
-// 00_import_all.cypher
-// Neo4j 元数据导入汇总脚本（可一次性执行）
-// 生成时间: 2025-11-28T00:26:09.490481
+// import_all.cypher
+// Neo4j 元数据导入脚本（global 模式，包含所有表和关系）
+// 生成时间: 2025-11-30T17:12:16.363542
 // 统计: 6 张表, 22 个列, 6 个关系
 
 // =====================================================================
-// 01. 创建唯一约束
+// 1. 创建唯一约束
 // =====================================================================
 
 CREATE CONSTRAINT table_id IF NOT EXISTS FOR (t:Table) REQUIRE t.id IS UNIQUE;
@@ -12,7 +12,7 @@ CREATE CONSTRAINT table_full_name IF NOT EXISTS FOR (t:Table) REQUIRE t.full_nam
 CREATE CONSTRAINT column_full_name IF NOT EXISTS FOR (c:Column) REQUIRE c.full_name IS UNIQUE;
 
 // =====================================================================
-// 02. 创建 Table 节点
+// 2. 创建 Table 节点
 // =====================================================================
 
 UNWIND [
@@ -29,11 +29,7 @@ UNWIND [
         "company_id"
       ]
     ],
-    "logic_fk": [
-      [
-        "company_id"
-      ]
-    ],
+    "logic_fk": [],
     "logic_uk": [],
     "indexes": []
   },
@@ -50,11 +46,7 @@ UNWIND [
         "product_type_id"
       ]
     ],
-    "logic_fk": [
-      [
-        "product_type_id"
-      ]
-    ],
+    "logic_fk": [],
     "logic_uk": [],
     "indexes": []
   },
@@ -71,11 +63,7 @@ UNWIND [
         "region_id"
       ]
     ],
-    "logic_fk": [
-      [
-        "region_id"
-      ]
-    ],
+    "logic_fk": [],
     "logic_uk": [],
     "indexes": []
   },
@@ -92,11 +80,7 @@ UNWIND [
         "store_id"
       ]
     ],
-    "logic_fk": [
-      [
-        "store_id"
-      ]
-    ],
+    "logic_fk": [],
     "logic_uk": [],
     "indexes": []
   },
@@ -153,7 +137,7 @@ SET n.id       = t.full_name,
     n.indexes  = t.indexes;
 
 // =====================================================================
-// 03. 创建 Column 节点
+// 3. 创建 Column 节点
 // =====================================================================
 
 UNWIND [
@@ -549,7 +533,7 @@ SET n.schema       = c.schema,
     n.null_rate    = c.null_rate;
 
 // =====================================================================
-// 04. 建立 HAS_COLUMN 关系
+// 4. 建立 HAS_COLUMN 关系
 // =====================================================================
 
 UNWIND [
@@ -647,13 +631,13 @@ MATCH (c:Column {full_name: hc.column_full_name})
 MERGE (t)-[:HAS_COLUMN]->(c);
 
 // =====================================================================
-// 05. 建立 JOIN_ON 关系
+// 5. 建立 JOIN_ON 关系
 // =====================================================================
 
 UNWIND [
   {
-    "src_full_name": "public.dim_company",
-    "dst_full_name": "public.dim_store",
+    "src_full_name": "public.dim_store",
+    "dst_full_name": "public.dim_company",
     "cardinality": "N:1",
     "constraint_name": null,
     "join_type": "INNER JOIN",
@@ -666,8 +650,8 @@ UNWIND [
     ]
   },
   {
-    "src_full_name": "public.dim_product_type",
-    "dst_full_name": "public.fact_store_sales_day",
+    "src_full_name": "public.fact_store_sales_day",
+    "dst_full_name": "public.dim_product_type",
     "cardinality": "N:1",
     "constraint_name": null,
     "join_type": "INNER JOIN",
@@ -680,8 +664,8 @@ UNWIND [
     ]
   },
   {
-    "src_full_name": "public.dim_product_type",
-    "dst_full_name": "public.fact_store_sales_month",
+    "src_full_name": "public.fact_store_sales_month",
+    "dst_full_name": "public.dim_product_type",
     "cardinality": "N:1",
     "constraint_name": null,
     "join_type": "INNER JOIN",
@@ -694,8 +678,8 @@ UNWIND [
     ]
   },
   {
-    "src_full_name": "public.dim_region",
-    "dst_full_name": "public.dim_store",
+    "src_full_name": "public.dim_store",
+    "dst_full_name": "public.dim_region",
     "cardinality": "N:1",
     "constraint_name": null,
     "join_type": "INNER JOIN",
@@ -708,8 +692,8 @@ UNWIND [
     ]
   },
   {
-    "src_full_name": "public.dim_store",
-    "dst_full_name": "public.fact_store_sales_day",
+    "src_full_name": "public.fact_store_sales_day",
+    "dst_full_name": "public.dim_store",
     "cardinality": "N:1",
     "constraint_name": null,
     "join_type": "INNER JOIN",
@@ -722,8 +706,8 @@ UNWIND [
     ]
   },
   {
-    "src_full_name": "public.dim_store",
-    "dst_full_name": "public.fact_store_sales_month",
+    "src_full_name": "public.fact_store_sales_month",
+    "dst_full_name": "public.dim_store",
     "cardinality": "N:1",
     "constraint_name": null,
     "join_type": "INNER JOIN",

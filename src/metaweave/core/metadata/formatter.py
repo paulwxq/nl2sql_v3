@@ -46,10 +46,15 @@ class OutputFormatter:
             "include_placeholders": sample_records_config.get("include_placeholders", True),
         }
         self.markdown_options = config.get("markdown_options", {})
-        
+        self.markdown_sample_value_count = max(
+            1,
+            int(self.markdown_options.get("sample_value_count", 2))
+        )
+
         # 确保输出目录存在
         ensure_dir(self.output_dir / "ddl")
-        ensure_dir(self.output_dir / "markdown")
+        self.markdown_dir = self.output_dir / "md"
+        ensure_dir(self.markdown_dir)
         ensure_dir(self.output_dir / "json")
         
         logger.info(f"输出格式化器已初始化: {self.output_dir}")
@@ -227,17 +232,24 @@ class OutputFormatter:
         """
         if sample_data is None or sample_data.empty:
             return "null"
-        
+
         if column_name not in sample_data.columns:
             return "null"
-        
-        # 获取第一个非空值
+
         non_null_values = sample_data[column_name].dropna()
         if non_null_values.empty:
             return "null"
-        
-        first_value = non_null_values.iloc[0]
-        return str(first_value)
+
+        sample_values = (
+            non_null_values.iloc[: self.markdown_sample_value_count]
+            .astype(str)
+            .tolist()
+        )
+
+        if not sample_values:
+            return "null"
+
+        return ", ".join(sample_values)
     
     def generate_markdown(
         self,
@@ -370,7 +382,7 @@ class OutputFormatter:
         """保存 Markdown 文档"""
         try:
             md_content = self.generate_markdown(metadata, sample_data)
-            file_path = self.output_dir / "markdown" / f"{metadata.schema_name}.{metadata.table_name}.md"
+            file_path = self.markdown_dir / f"{metadata.schema_name}.{metadata.table_name}.md"
             save_text(md_content, file_path)
             logger.info(f"保存 Markdown: {file_path}")
             return file_path

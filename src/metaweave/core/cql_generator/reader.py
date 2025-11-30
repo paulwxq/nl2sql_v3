@@ -58,8 +58,9 @@ class JSONReader:
         # 读取 Step 3 表间关系
         join_on_rels = self._read_relationships()
 
-        # 更新 Table.logic_fk（从关系中提取）
-        self._update_logic_fk(tables, join_on_rels)
+        # 注意：不再动态回填 logic_fk
+        # logic_fk 保持 Step 2 画像中的初始值（通常为空列表）
+        # 关系方向已在 Step 3 输出时翻转为标准 ER 语义
 
         logger.info(
             f"读取完成: "
@@ -340,27 +341,34 @@ class JSONReader:
         return join_on_rels
 
     def _extract_join_relation(self, rel: Dict[str, Any]) -> JOINOnRelation:
-        """从关系 JSON 中提取 JOIN_ON 关系"""
-        # 源表和目标表
-        from_table = rel.get("from_table", {})
-        to_table = rel.get("to_table", {})
+        """从关系 JSON 中提取 JOIN_ON 关系
 
-        src_schema = from_table.get("schema", "")
-        src_table = from_table.get("table", "")
-        dst_schema = to_table.get("schema", "")
-        dst_table = to_table.get("table", "")
+        **重要说明**：
+        - 输入语义（relationships_global.json）：from=主键表（发现驱动表），to=外键表（被查找的表）
+        - 输出语义（CQL）：src=外键表（引用端），dst=主键表（被引用端）
+        - 此方法在读取时翻转语义，确保 CQL 符合标准 ER 关系语义
+        """
+        # 读取原始的 from/to（发现语义）
+        from_table = rel.get("from_table", {})  # 主键表（发现语义）
+        to_table = rel.get("to_table", {})      # 外键表（发现语义）
 
-        src_full_name = f"{src_schema}.{src_table}"
-        dst_full_name = f"{dst_schema}.{dst_table}"
+        # 翻转为 ER 语义：src=外键表，dst=主键表
+        src_schema = to_table.get("schema", "")   # 外键表（翻转）
+        src_table = to_table.get("table", "")
+        dst_schema = from_table.get("schema", "") # 主键表（翻转）
+        dst_table = from_table.get("table", "")
 
-        # 列信息
+        src_full_name = f"{src_schema}.{src_table}"  # 外键表
+        dst_full_name = f"{dst_schema}.{dst_table}"  # 主键表
+
+        # 列信息（同样翻转）
         rel_type = rel.get("type", "")
         if rel_type == "single_column":
-            source_columns = [rel.get("from_column", "")]
-            target_columns = [rel.get("to_column", "")]
+            source_columns = [rel.get("to_column", "")]    # 外键列（翻转）
+            target_columns = [rel.get("from_column", "")]  # 主键列（翻转）
         else:  # composite
-            source_columns = rel.get("from_columns", [])
-            target_columns = rel.get("to_columns", [])
+            source_columns = rel.get("to_columns", [])     # 外键列（翻转）
+            target_columns = rel.get("from_columns", [])   # 主键列（翻转）
 
         # 基数（默认 N:1）
         cardinality = rel.get("cardinality", "N:1")
@@ -375,29 +383,13 @@ class JSONReader:
         on_expr = " AND ".join(on_parts)
 
         return JOINOnRelation(
-            src_full_name=src_full_name,
-            dst_full_name=dst_full_name,
+            src_full_name=src_full_name,    # 外键表（ER 语义）
+            dst_full_name=dst_full_name,    # 主键表（ER 语义）
             cardinality=cardinality,
             join_type="INNER JOIN",
             on=on_expr,
-            source_columns=source_columns,
-            target_columns=target_columns,
+            source_columns=source_columns,  # 外键列
+            target_columns=target_columns,  # 主键列
             constraint_name=constraint_name
         )
 
-    def _update_logic_fk(
-        self,
-        tables: List[TableNode],
-        join_rels: List[JOINOnRelation]
-    ):
-        """更新 Table.logic_fk（从关系中提取源端列集合）"""
-        # 构建表索引
-        table_dict = {t.full_name: t for t in tables}
-
-        # 遍历关系，更新源表的 logic_fk
-        for rel in join_rels:
-            src_table = table_dict.get(rel.src_full_name)
-            if src_table:
-                # 将源端列集合添加到 logic_fk
-                if rel.source_columns and rel.source_columns not in src_table.logic_fk:
-                    src_table.logic_fk.append(rel.source_columns)

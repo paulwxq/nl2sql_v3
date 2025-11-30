@@ -157,7 +157,7 @@ print(f"识别逻辑主键: {result.logical_keys_found} 个")
 
 示例：`public.users.sql`
 
-### Markdown 文件 (`markdown/`)
+### Markdown 文件 (`md/`)
 
 可读性强的文档，包含：
 - 表基本信息

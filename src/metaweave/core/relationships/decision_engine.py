@@ -3,13 +3,13 @@
 应用决策规则和抑制逻辑，过滤候选关系。
 """
 
-import logging
 from typing import List, Dict, Tuple, Any
 
 from src.metaweave.core.relationships.models import Relation
 from src.metaweave.core.relationships.repository import MetadataRepository
+from src.metaweave.utils.logger import get_metaweave_logger
 
-logger = logging.getLogger("metaweave.relationships.decision_engine")
+logger = get_metaweave_logger("relationships.decision_engine")
 
 
 class DecisionEngine:
@@ -62,8 +62,20 @@ class DecisionEngine:
             composite_score = candidate.get("composite_score", 0)
             if composite_score >= self.accept_threshold:
                 above_threshold.append(candidate)
+                logger.debug(
+                    "通过阈值 %.2f: %s (score=%.4f)",
+                    self.accept_threshold,
+                    self._format_candidate(candidate),
+                    composite_score,
+                )
             else:
                 below_threshold.append(candidate)
+                logger.debug(
+                    "低于阈值 %.2f: %s (score=%.4f)",
+                    self.accept_threshold,
+                    self._format_candidate(candidate),
+                    composite_score,
+                )
 
         logger.info(f"阈值过滤: {len(above_threshold)} 个通过，{len(below_threshold)} 个未达标")
 
@@ -132,18 +144,36 @@ class DecisionEngine:
             if composite_relations:
                 # 有复合关系，保留复合关系
                 accepted.extend(composite_relations)
+                for rel in composite_relations:
+                    logger.debug(
+                        "保留复合关系: %s",
+                        self._format_candidate(rel),
+                    )
 
                 # 检查单列关系是否有独立约束
                 for single_rel in single_relations:
                     if self._has_independent_constraint(single_rel):
                         # 有独立约束，保留
                         accepted.append(single_rel)
+                        logger.debug(
+                            "保留单列关系（独立约束）: %s",
+                            self._format_candidate(single_rel),
+                        )
                     else:
                         # 无独立约束，抑制
                         suppressed.append(single_rel)
+                        logger.debug(
+                            "抑制单列关系（存在复合关系）: %s",
+                            self._format_candidate(single_rel),
+                        )
             else:
                 # 没有复合关系，保留所有单列关系
                 accepted.extend(single_relations)
+                for rel in single_relations:
+                    logger.debug(
+                        "保留单列关系: %s",
+                        self._format_candidate(rel),
+                    )
 
         return accepted, suppressed
 
@@ -235,3 +265,17 @@ class DecisionEngine:
             score_details=candidate.get("score_details"),
             inference_method=inference_method
         )
+
+    def _format_candidate(self, candidate: Dict[str, Any]) -> str:
+        """格式化候选信息用于日志"""
+
+        def _fmt(table_meta: Dict[str, Any]) -> str:
+            info = table_meta.get("table_info", {})
+            return f"{info.get('schema_name')}.{info.get('table_name')}"
+
+        source = _fmt(candidate["source"])
+        target = _fmt(candidate["target"])
+        src_cols = ",".join(candidate.get("source_columns", []))
+        tgt_cols = ",".join(candidate.get("target_columns", []))
+        cand_type = candidate.get("candidate_type")
+        return f"{source}[{src_cols}] -> {target}[{tgt_cols}] ({cand_type})"

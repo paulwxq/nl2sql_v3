@@ -194,6 +194,7 @@ single_column:
     - audit
     - metric
   logical_key_min_confidence: 0.8
+  min_type_compatibility: 0.5  # 最低类型兼容性阈值（0.5允许字符串类型互相匹配）
 
 # 复合键候选配置
 composite:

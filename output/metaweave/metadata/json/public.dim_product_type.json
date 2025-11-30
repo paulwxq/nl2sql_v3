@@ -1,6 +1,6 @@
 {
   "metadata_version": "2.0",
-  "generated_at": "2025-11-25T10:42:42.849110Z",
+  "generated_at": "2025-11-28T15:31:09.291740Z",
   "table_info": {
     "schema_name": "public",
     "table_name": "dim_product_type",
@@ -153,7 +153,7 @@
     "sample_method": "random",
     "sample_size": 4,
     "total_rows": 4,
-    "sampled_at": "2025-11-22T16:27:25.807775Z",
+    "sampled_at": "2025-11-28T04:41:11.153941Z",
     "records": [
       {
         "product_type_id": 1,

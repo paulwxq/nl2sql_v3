@@ -5,13 +5,13 @@
 
 import json
 import hashlib
-import logging
 from pathlib import Path
 from typing import Dict, List, Tuple, Set, Any
 
 from src.metaweave.core.relationships.models import Relation
+from src.metaweave.utils.logger import get_metaweave_logger
 
-logger = logging.getLogger("metaweave.relationships.repository")
+logger = get_metaweave_logger("relationships.repository")
 
 
 class MetadataRepository:

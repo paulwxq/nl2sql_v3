@@ -15,9 +15,10 @@ from src.metaweave.core.relationships.scorer import RelationshipScorer
 from src.metaweave.core.relationships.decision_engine import DecisionEngine
 from src.metaweave.core.relationships.writer import RelationshipWriter
 from src.metaweave.utils.file_utils import get_project_root
+from src.metaweave.utils.logger import get_metaweave_logger
 from src.services.config_loader import ConfigLoader
 
-logger = logging.getLogger("metaweave.relationships.pipeline")
+logger = get_metaweave_logger("relationships.pipeline")
 
 
 class RelationshipDiscoveryPipeline:
@@ -104,6 +105,16 @@ class RelationshipDiscoveryPipeline:
             tables = self.repository.load_all_tables()
             fk_relations, fk_sigs = self.repository.collect_foreign_keys(tables)
 
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "表样例: %s",
+                    list(tables.keys())[:3],
+                )
+                logger.debug(
+                    "外键直通样例: %s",
+                    [self._format_relation_debug(rel) for rel in fk_relations[:3]],
+                )
+
             result.foreign_key_relations = len(fk_relations)
             logger.info(f"外键直通关系: {result.foreign_key_relations} 个")
 
@@ -112,11 +123,21 @@ class RelationshipDiscoveryPipeline:
             self.candidate_generator = CandidateGenerator(self.config, fk_sigs)
             candidates = self.candidate_generator.generate_candidates(tables)
             logger.info(f"候选关系: {len(candidates)} 个")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "候选样例: %s",
+                    [self._format_candidate_debug(c) for c in candidates[:3]],
+                )
 
             # Stage 3: 候选评分
             logger.info("阶段3: 评分候选关系（6维度 + 数据库采样）")
             scored_candidates = self.scorer.score_candidates(candidates, tables)
             logger.info(f"评分完成: {len(scored_candidates)} 个")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "评分样例: %s",
+                    [self._format_candidate_debug(c) for c in scored_candidates[:3]],
+                )
 
             # Stage 4: 决策过滤 + 抑制
             logger.info("阶段4: 决策过滤和抑制规则")
@@ -125,6 +146,15 @@ class RelationshipDiscoveryPipeline:
             result.inferred_relations = len(inferred_relations)
             result.suppressed_count = len(suppressed)
             logger.info(f"推断关系: {result.inferred_relations} 个，抑制: {result.suppressed_count} 个")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "接受样例: %s",
+                    [self._format_relation_debug(rel) for rel in inferred_relations[:3]],
+                )
+                logger.debug(
+                    "被抑制样例: %s",
+                    [self._format_candidate_debug(c) for c in suppressed[:3]],
+                )
 
             # 统计置信度分布
             decision_config = self.config.get("decision", {})
@@ -142,9 +172,10 @@ class RelationshipDiscoveryPipeline:
             all_relations = fk_relations + inferred_relations
             result.total_relations = len(all_relations)
 
-            output_files = self.writer.write_results(all_relations, suppressed, self.config)
+            output_files = self.writer.write_results(all_relations, suppressed, self.config, tables)
             for file_path in output_files:
                 result.add_output_file(file_path)
+                logger.debug("输出文件: %s", file_path)
 
             logger.info("=" * 60)
             logger.info("关系发现完成")
@@ -166,3 +197,26 @@ class RelationshipDiscoveryPipeline:
             self.connector.close()
 
         return result
+
+    @staticmethod
+    def _format_candidate_debug(candidate: Dict[str, Any]) -> str:
+        if not candidate:
+            return "<empty>"
+        src_info = candidate["source"].get("table_info", {})
+        tgt_info = candidate["target"].get("table_info", {})
+        src = f"{src_info.get('schema_name')}.{src_info.get('table_name')}"
+        tgt = f"{tgt_info.get('schema_name')}.{tgt_info.get('table_name')}"
+        src_cols = ",".join(candidate.get("source_columns", []))
+        tgt_cols = ",".join(candidate.get("target_columns", []))
+        score = candidate.get("composite_score")
+        cand_type = candidate.get("candidate_type")
+        return f"{src}[{src_cols}] -> {tgt}[{tgt_cols}] ({cand_type}, score={score})"
+
+    @staticmethod
+    def _format_relation_debug(rel) -> str:
+        if rel is None:
+            return "<empty>"
+        return (
+            f"{rel.source_schema}.{rel.source_table}[{', '.join(rel.source_columns)}] -> "
+            f"{rel.target_schema}.{rel.target_table}[{', '.join(rel.target_columns)}]"
+        )

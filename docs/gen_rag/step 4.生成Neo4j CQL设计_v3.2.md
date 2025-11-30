@@ -8,13 +8,10 @@
   - Step 3 关系目录：`./output/metaweave/metadata/rel/*.json`（v3.2 格式）
 - 输出：
   - Cypher 脚本目录：`./output/metaweave/metadata/cql/`
-  - 建议产物（文件扩展名 .cypher）：
-    - `01_constraints.cypher`（唯一约束）
-    - `02_nodes_tables.cypher`（Table 节点）
-    - `03_nodes_columns.cypher`（Column 节点）
-    - `04_rels_has_column.cypher`（HAS_COLUMN）
-    - `05_rels_join_on.cypher`（JOIN_ON）
-    - `00_import_all.cypher`（可选：汇总为一体化纯 Cypher 脚本，便于一次性执行）
+  - 产物（文件扩展名 .cypher）：
+    - **global 模式**（默认）：`import_all.cypher` - 包含所有表和关系的完整 CQL 脚本
+    - **schema 模式**（未来支持）：按 schema 拆分的多个 CQL 文件
+    - **table 模式**（未来支持）：按 table 拆分的多个 CQL 文件
 - Neo4j 版本：>= 5.7.x；Step 4 不需要连接 Neo4j（连接信息供 Step 5 使用）。
 
 ## 2. 图数据模型（节点/关系/属性）

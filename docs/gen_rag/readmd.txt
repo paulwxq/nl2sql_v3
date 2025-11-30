@@ -1,8 +1,12 @@
-当前模块的主要执行步骤，Step 1-> Step2 ->Step3->step4->step5, 以及 Step 1-> Step 6.
+当前模块的主要执行步骤，Step 1-> Step2 ->Step3->step4->6, 以及 Step 1-> step5,最后执行Step7.
 Step 1.生成 ddl，连接到数据库，获取表结构，生成ddl，包括注释。 文件类型为 *.sql，路径为：\output\metaweave\metadata\ddl，在当前的基础上添加3条记录，需要设计一个格式，保存3条记录。
 Step 2.生成 json(表和字段的数据画像)，基于step 1生成的ddl语句，为字段和表生成画像，写入到json中, 路径为：\output\metaweave\metadata\json。关于表结构，要从前面的ddl获取，包括里面的主外键和唯一约束等信息，不要从表中获取。
 step 3.生成 json(表之间的关联关系)，基于step2生成数据画像的json文件，按照预订的算法，找出来表之间的关联关系，并写入到Json文件中，路径为：\output\metaweave\metadata\rel 
 Step 4.生成 neo4j cql，基于step 2生成的数据画像json和step 3生成的关联关系，以及从数据库中获取的数据和统计指标，生成neo4j的cql，它的路径为：\output\metaweave\metadata\cql . 这里的neo4j的cql，可以直接执行，写入到neo4j中。 
-Step 5.数据加载：
+Step 5.生成 md 文件,基于 Step 1生成的ddl，生成md文件，包括每个字段的样例数据，3条记录。 生成的md 文件，它的路径为：\output\metaweave\metadata\md
+Step 6.生成 样例SQL文件，根据当前的表结构，生成一些样例SQL文件，它的路径为：\output\metaweave\metadata\sql
+Step 7.数据文件加载：
   - cql : 根据 step 3 和 step 4 生成的结果，把step 4生产的neo4j cql，写入到neo4j中。
-Step 6.生成 md 文件,基于 Step 1生成的ddl，生成md文件，包括每个字段的样例数据，3条记录。 生成的md 文件，它的路径为：\output\metaweave\metadata\md
+  - md : 根据 step 5 生成的md文件，把md文件加载到向量数据库(pgvector/Milvus)中，md文件主要包含的是表的定义信息。
+  - 维表数据：根据一个yaml配置文件，把yaml文件中列出来的维表数据，加载到向量数据库(pgvector/Milvus)中，维表数据主要包含的是维表的维度值的向量化的数据。
+  - sql : 根据 step 6 生成的样例SQL文件，把样例SQL文件加载到向量数据库(pgvector/Milvus)中，样例SQL文件主要包含的是样例SQL的向量化的数据。

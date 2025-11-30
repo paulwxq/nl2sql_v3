@@ -3,13 +3,13 @@
 为候选关系计算6维度评分（必须使用数据库采样）。
 """
 
-import logging
 from typing import Dict, List, Tuple, Any, Set
 from difflib import SequenceMatcher
 
 from src.metaweave.core.metadata.connector import DatabaseConnector
+from src.metaweave.utils.logger import get_metaweave_logger
 
-logger = logging.getLogger("metaweave.relationships.scorer")
+logger = get_metaweave_logger("relationships.scorer")
 
 # 默认评分权重
 DEFAULT_WEIGHTS = {
@@ -89,6 +89,21 @@ class RelationshipScorer:
                 # 添加评分信息到候选
                 candidate["composite_score"] = composite_score
                 candidate["score_details"] = score_details
+
+                source_info = source_table.get("table_info", {})
+                target_info = target_table.get("table_info", {})
+                relation_label = (
+                    f"{source_info.get('schema_name')}.{source_info.get('table_name')}"
+                    f"[{', '.join(source_columns)}] -> "
+                    f"{target_info.get('schema_name')}.{target_info.get('table_name')}"
+                    f"[{', '.join(target_columns)}]"
+                )
+                logger.debug(
+                    "评分完成 %s: %s, composite=%.4f",
+                    relation_label,
+                    score_details,
+                    composite_score,
+                )
 
                 scored_candidates.append(candidate)
 

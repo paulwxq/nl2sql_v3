@@ -208,8 +208,9 @@ output:
                   to_table={'schema': to_schema, 'table': to_table},
                   source_columns=from_cols,
                   target_columns=to_cols,
-                  source_type='foreign_key',
+                  target_source_type='foreign_key',
                   discovery_method='physical_constraint',
+                  source_constraint=None,
                   composite_score=1.0,
                   confidence_level='high',
                   metrics=None,
@@ -247,8 +248,9 @@ class TableJson:
 - `type`: `"composite_key" | "single_column"`
 - `from_table` / `to_table`: `{schema, table}`
 - `from_columns` / `to_columns`: list[str]
-- `source_type`: 枚举值（primary_key/unique_constraint/index/candidate_logical_key/dynamic_same_name/active_search）
+- ~~`source_type`~~ → `target_source_type`: 枚举值（见下方字段重命名说明）
 - `discovery_method`: `"standard_matching" | "active_search" | "logical_key_matching" | ...`
+- `source_constraint`: 源列的物理约束类型（见下方字段说明）
 
 `CandidateMetrics`：与算法文档第 4 章一致，包括 `inclusion_rate`, `jaccard_index`, `uniqueness`, `name_similarity`, `type_compatibility`, `semantic_role_bonus`, `composite_score`, `confidence_level`。
 
@@ -262,6 +264,75 @@ class RelationshipReport:
 ```
 
 其中 `RelationshipRecord` 需支持嵌套 `suppressed_single_relations` 数组，以存储被抑制的候选（algorithm v3.2 核心特性）。
+
+#### 2.3.1 关系字段重命名与约束检测（v3.2.1 更新）
+
+**背景**：原设计中 `source_type` 字段命名容易混淆（看似指源列类型，实际指目标列的来源），且 `source_constraint` 未正确检测源列的实际物理约束，导致信息丢失。
+
+**修改内容**（已实施）：
+
+1. **字段重命名**：`source_type` → `target_source_type`
+   - **新语义**：目标列（to_column）是从什么类型的约束/键列表中筛选出来的
+   - **取值**：
+     - `null`：不从目标列的约束中筛选（如 active_search 只依据同名）
+     - `"candidate_logical_key"`：从目标表的候选逻辑主键中筛选
+     - `"physical_constraints"`：从目标表的物理约束中筛选
+     - `"foreign_key"`：外键直通关系
+
+2. **`source_constraint` 修复**：正确检测源列的实际物理约束
+   - **实现**：新增 `_get_source_constraint(rel)` 方法，从源表的 `column_profiles.structure_flags` 检测
+   - **检测优先级**：
+     1. `is_primary_key` → `"single_field_primary_key"`
+     2. `is_unique_constraint` → `"single_field_unique_constraint"`
+     3. `is_indexed` → `"single_field_index"`
+     4. 其他（如仅 `is_unique: true`）→ `null`（无物理约束）
+   - **修改前问题**：硬编码返回 `"single_field_index"`，未区分物理约束和逻辑唯一
+   - **修改后效果**：准确反映源列的物理约束类型
+
+**映射表**（修改后）：
+
+| discovery_method | target_source_type | source_constraint | 说明 |
+|-----------------|-------------------|-------------------|------|
+| `active_search` | `null` | 检测源列实际约束 | 主动搜索同名列 |
+| `logical_key_matching` | `"candidate_logical_key"` | `null` | 目标列是逻辑主键 |
+| `physical_constraint_matching` | `"physical_constraints"` | `null` | 目标列有物理约束 |
+| `dynamic_same_name` | `"candidate_logical_key"` | `null` | 动态同名复合键 |
+| `foreign_key_constraint` | `"foreign_key"` | `null` | 外键直通 |
+
+**示例**（修改后）：
+
+```json
+{
+  "from_table": {"schema": "public", "table": "dim_store"},
+  "to_table": {"schema": "public", "table": "fact_store_sales_day"},
+  "from_column": "store_id",
+  "to_column": "store_id",
+  "discovery_method": "active_search",
+  "target_source_type": null,
+  "source_constraint": null,
+  "composite_score": 0.90625,
+  "confidence_level": "high"
+}
+```
+
+**说明**：
+- `target_source_type: null` - 目标列不是从特定约束筛选的（只是同名）
+- `source_constraint: null` - 源列虽然数据唯一（`is_unique: true`），但没有物理约束
+
+**实现位置**：
+- `src/metaweave/core/relationships/writer.py`
+  - `_parse_discovery_info()` - 字段重命名和映射
+  - `_get_source_constraint()` - 新增，检测源列实际约束
+
+**向后兼容性**：
+- CQL 生成器不受影响（不读取这两个字段）
+- 仅影响 JSON 输出格式
+- 旧版本的 JSON 文件无法直接使用，需重新生成
+
+**验证建议**：
+- 检查 `relationships_global.json` 中所有关系的 `target_source_type` 和 `source_constraint` 字段
+- 对于 `active_search` 类型，验证 `source_constraint` 是否准确反映源列的物理约束
+- 确保没有硬编码的 `"single_field_index"` 出现在实际没有索引的列上
 
 ### 2.4 阶段到函数的映射
 
@@ -360,7 +431,7 @@ class RelationshipReport:
 3. **性能**：
    - JSON 加载后建立内存索引，避免重复解析。
    - 候选生成阶段不访问数据库，评分阶段才访问数据库，遵守设计文档要求。
-4. **输出一致性**：`relationships` 数组需记录 `relationship_id`（确定性哈希ID，见下文）、`type`（含 `foreign_key`/`composite_key`/`single_column`）、`from_table`、`to_table`、`metrics`、`confidence_level`、`discovery_method`、`suppressed_single_relations` 等字段。`foreign_key` 类型为直通关系，不参与评分，`metrics` 可为 `null`。
+4. **输出一致性**：`relationships` 数组需记录 `relationship_id`（确定性哈希ID，见下文）、`type`（含 `foreign_key`/`composite_key`/`single_column`）、`from_table`、`to_table`、`metrics`、`confidence_level`、`discovery_method`、`target_source_type`、`source_constraint`、`suppressed_single_relations` 等字段。`foreign_key` 类型为直通关系，不参与评分，`metrics` 可为 `null`。
 5. **扩展性**：代码结构应允许未来加入 LLM/Embedding 评分（v3.2 预留 `semantic_analysis`，请勿在数据结构中写死字段）。
 
 ---
@@ -708,7 +779,7 @@ def _calculate_statistics(self, pre_existing_relations: list[dict], discovered_r
 
     dynamic_comp_cnt = sum(
         1 for r in all_rel
-        if is_comp(r) and (r.get('discovery_method') == 'dynamic_same_name' or r.get('source_type') == 'dynamic_same_name')
+        if is_comp(r) and (r.get('discovery_method') == 'dynamic_same_name' or r.get('target_source_type') == 'dynamic_same_name')
     )
 
     return {
@@ -725,4 +796,4 @@ def _calculate_statistics(self, pre_existing_relations: list[dict], discovered_r
 实现要点：
 - `discovered_relations` 不包含被抑制的单字段；被抑制的单字段仅在复合键对象的 `suppressed_single_relations` 中计数。
 - `foreign_key_relationships` 通常仅来自 `pre_existing_relations`，但实现上可对 `all_rel` 做统一判定（兼容性更好）。
-- `dynamic_composite_discoveries` 可依据 `discovery_method == 'dynamic_same_name'` 或 `source_type == 'dynamic_same_name'`，以防某些实现只填其中一个字段。
+- `dynamic_composite_discoveries` 可依据 `discovery_method == 'dynamic_same_name'` 或 `target_source_type == 'dynamic_same_name'`，以防某些实现只填其中一个字段。

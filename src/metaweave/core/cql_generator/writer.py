@@ -42,7 +42,7 @@ class CypherWriter:
         has_column_rels: List[HASColumnRelation],
         join_on_rels: List[JOINOnRelation]
     ) -> List[str]:
-        """写入所有 Cypher 文件
+        """写入 Cypher 文件（默认 global 模式，生成单个完整文件）
 
         Args:
             tables: Table 节点列表
@@ -55,35 +55,15 @@ class CypherWriter:
         """
         output_files = []
 
-        logger.info("开始生成 Cypher 文件...")
+        logger.info("开始生成 Cypher 文件 (global 模式)...")
 
-        # 01_constraints.cypher
-        file_01 = self._write_constraints()
-        output_files.append(str(file_01))
-
-        # 02_nodes_tables.cypher
-        file_02 = self._write_table_nodes(tables)
-        output_files.append(str(file_02))
-
-        # 03_nodes_columns.cypher
-        file_03 = self._write_column_nodes(columns)
-        output_files.append(str(file_03))
-
-        # 04_rels_has_column.cypher
-        file_04 = self._write_has_column_rels(has_column_rels)
-        output_files.append(str(file_04))
-
-        # 05_rels_join_on.cypher
-        file_05 = self._write_join_on_rels(join_on_rels)
-        output_files.append(str(file_05))
-
-        # 00_import_all.cypher（可选：汇总脚本）
-        file_00 = self._write_import_all(
+        # 生成单个完整的 import_all.cypher 文件
+        import_all_file = self._write_import_all(
             tables, columns, has_column_rels, join_on_rels
         )
-        output_files.append(str(file_00))
+        output_files.append(str(import_all_file))
 
-        logger.info(f"Cypher 文件生成完成，共 {len(output_files)} 个文件")
+        logger.info(f"Cypher 文件生成完成: {import_all_file.name}")
         return output_files
 
     def _write_constraints(self) -> Path:
@@ -230,8 +210,8 @@ SET r.cardinality     = j.cardinality,
         has_column_rels: List[HASColumnRelation],
         join_on_rels: List[JOINOnRelation]
     ) -> Path:
-        """生成 00_import_all.cypher（汇总脚本）"""
-        output_file = self.output_dir / "00_import_all.cypher"
+        """生成 import_all.cypher（完整的 global 模式 CQL 脚本）"""
+        output_file = self.output_dir / "import_all.cypher"
 
         timestamp = datetime.now().isoformat()
 
@@ -246,13 +226,13 @@ SET r.cardinality     = j.cardinality,
         has_column_json = json.dumps(has_column_data, ensure_ascii=False, indent=2)
         join_on_json = json.dumps(join_on_data, ensure_ascii=False, indent=2)
 
-        content = f"""// 00_import_all.cypher
-// Neo4j 元数据导入汇总脚本（可一次性执行）
+        content = f"""// import_all.cypher
+// Neo4j 元数据导入脚本（global 模式，包含所有表和关系）
 // 生成时间: {timestamp}
 // 统计: {len(tables)} 张表, {len(columns)} 个列, {len(join_on_rels)} 个关系
 
 // =====================================================================
-// 01. 创建唯一约束
+// 1. 创建唯一约束
 // =====================================================================
 
 CREATE CONSTRAINT table_id IF NOT EXISTS FOR (t:Table) REQUIRE t.id IS UNIQUE;
@@ -260,7 +240,7 @@ CREATE CONSTRAINT table_full_name IF NOT EXISTS FOR (t:Table) REQUIRE t.full_nam
 CREATE CONSTRAINT column_full_name IF NOT EXISTS FOR (c:Column) REQUIRE c.full_name IS UNIQUE;
 
 // =====================================================================
-// 02. 创建 Table 节点
+// 2. 创建 Table 节点
 // =====================================================================
 
 UNWIND {tables_json} AS t
@@ -278,7 +258,7 @@ SET n.id       = t.full_name,
     n.indexes  = t.indexes;
 
 // =====================================================================
-// 03. 创建 Column 节点
+// 3. 创建 Column 节点
 // =====================================================================
 
 UNWIND {columns_json} AS c
@@ -299,7 +279,7 @@ SET n.schema       = c.schema,
     n.null_rate    = c.null_rate;
 
 // =====================================================================
-// 04. 建立 HAS_COLUMN 关系
+// 4. 建立 HAS_COLUMN 关系
 // =====================================================================
 
 UNWIND {has_column_json} AS hc
@@ -308,7 +288,7 @@ MATCH (c:Column {{full_name: hc.column_full_name}})
 MERGE (t)-[:HAS_COLUMN]->(c);
 
 // =====================================================================
-// 05. 建立 JOIN_ON 关系
+// 5. 建立 JOIN_ON 关系
 // =====================================================================
 
 UNWIND {join_on_json} AS j
@@ -326,5 +306,5 @@ SET r.cardinality     = j.cardinality,
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(content)
 
-        logger.info(f"生成汇总脚本: {output_file}")
+        logger.info(f"生成 global 模式 CQL 脚本: {output_file}")
         return output_file

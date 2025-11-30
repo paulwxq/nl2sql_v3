@@ -1,19 +1,20 @@
 // Step 4 Neo4j .cypher 模板（供生成器参考，不直接执行）
-// 作用：指导代码按约定结构生成可幂等的 Cypher 文件，供 Step 5 加载器依次执行。
+// 作用：指导代码按约定结构生成可幂等的 Cypher 文件，供 Step 5 加载器执行。
 // 说明：
 // - 使用纯 Cypher（不包含 :source/:param 等 Browser 元命令）
 // - 多次执行不应造成重复（使用 CREATE CONSTRAINT IF NOT EXISTS / MERGE + SET）
-// - 建议最终生成 01~05 拆分文件，或合并成单一文件供 cypher-shell -f 执行
+// - global 模式（默认）：生成单个 import_all.cypher 文件
+// - 未来支持 schema/table 模式：按需拆分多个文件
 
 // =====================================================================
-// 01_constraints.cypher 约束（幂等）
+// 1. 创建唯一约束（幂等）
 // =====================================================================
 CREATE CONSTRAINT table_id IF NOT EXISTS FOR (t:Table) REQUIRE t.id IS UNIQUE;
 CREATE CONSTRAINT table_full_name IF NOT EXISTS FOR (t:Table) REQUIRE t.full_name IS UNIQUE;
 CREATE CONSTRAINT column_full_name IF NOT EXISTS FOR (c:Column) REQUIRE c.full_name IS UNIQUE;
 
 // =====================================================================
-// 02_nodes_tables.cypher 生成 Table 节点（UNWIND 模式）
+// 2. 创建 Table 节点（UNWIND 模式）
 // =====================================================================
 // 生成器将 <<TABLES>> 替换为字面量数组：
 // [
@@ -46,7 +47,7 @@ SET n.id       = t.full_name,
     n.indexes  = t.indexes;
 
 // =====================================================================
-// 03_nodes_columns.cypher 生成 Column 节点（UNWIND 模式）
+// 3. 创建 Column 节点（UNWIND 模式）
 // =====================================================================
 // 生成器将 <<COLUMNS>> 替换为字面量数组：
 // [
@@ -78,7 +79,7 @@ SET n.schema       = c.schema,
     n.null_rate    = c.null_rate;
 
 // =====================================================================
-// 04_rels_has_column.cypher 建立 HAS_COLUMN 关系
+// 4. 建立 HAS_COLUMN 关系
 // =====================================================================
 // 生成器将 <<HAS_COLUMNS>> 替换为字面量数组：
 // [ { table_full_name:"public.dim_store", column_full_name:"public.dim_store.store_id" } ]
@@ -88,7 +89,7 @@ MATCH (c:Column {full_name: hc.column_full_name})
 MERGE (t)-[:HAS_COLUMN]->(c);
 
 // =====================================================================
-// 05_rels_join_on.cypher 建立 JOIN_ON 关系
+// 5. 建立 JOIN_ON 关系
 // =====================================================================
 // 生成器将 <<JOINS>> 替换为字面量数组：
 // [

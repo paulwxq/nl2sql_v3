@@ -166,7 +166,7 @@ python scripts/metaweave/run_metadata_generation.py --step json
 ## 相关文件
 
 - 源数据: `output/metaweave/metadata/ddl/*.sql`
-- Markdown 文档: `output/metaweave/metadata/markdown/*.md`
+- Markdown 文档: `output/metaweave/metadata/md/*.md`
 
 ---
 

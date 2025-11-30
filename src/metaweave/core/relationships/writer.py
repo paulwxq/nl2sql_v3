@@ -4,7 +4,6 @@
 """
 
 import json
-import logging
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional
@@ -12,8 +11,9 @@ from collections import defaultdict
 
 from src.metaweave.core.relationships.models import Relation
 from src.metaweave.utils.file_utils import ensure_dir
+from src.metaweave.utils.logger import get_metaweave_logger
 
-logger = logging.getLogger("metaweave.relationships.writer")
+logger = get_metaweave_logger("relationships.writer")
 
 
 class RelationshipWriter:
@@ -59,7 +59,8 @@ class RelationshipWriter:
             self,
             relations: List[Relation],
             suppressed: List[Dict[str, Any]],
-            config: Dict[str, Any]
+            config: Dict[str, Any],
+            tables: Optional[Dict[str, dict]] = None
     ) -> List[str]:
         """输出关系发现结果（v3.2格式）
 
@@ -67,10 +68,14 @@ class RelationshipWriter:
             relations: 接受的关系列表（外键+推断）
             suppressed: 被抑制的候选列表
             config: 完整配置
+            tables: 表元数据字典（用于获取列的约束信息）
 
         Returns:
             输出文件路径列表
         """
+        # 保存 tables 供后续使用
+        self.tables = tables or {}
+        
         output_files = []
 
         # 1. 输出JSON（v3.2格式）
@@ -105,6 +110,12 @@ class RelationshipWriter:
         # 将被抑制的单列关系按表对分组
         suppressed_by_table_pair = self._group_suppressed_by_table_pair(suppressed)
 
+        logger.debug(
+            "开始转换 JSON，关系=%d，被抑制=%d",
+            len(relations),
+            len(suppressed),
+        )
+
         # 转换关系为v3.2格式，并嵌入被抑制的单列
         relationships_v32 = []
         for rel in relations:
@@ -117,6 +128,10 @@ class RelationshipWriter:
                     rel_dict["suppressed_single_relations"] = suppressed_by_table_pair[table_pair]
 
             relationships_v32.append(rel_dict)
+
+        if relationships_v32:
+            sample_ids = [rel.get("relationship_id") for rel in relationships_v32[:3]]
+            logger.debug("JSON 样例关系ID: %s", sample_ids)
 
         # 计算统计数据（v3.2口径）
         stats = self._calculate_statistics_v32(relations, suppressed)
@@ -240,13 +255,13 @@ class RelationshipWriter:
         # 发现方法、来源类型、约束类型（规范化映射）
         if rel.relationship_type == "foreign_key":
             result["discovery_method"] = "foreign_key_constraint"
-            result["source_type"] = "foreign_key"
+            result["target_source_type"] = "foreign_key"
             result["source_constraint"] = None
         else:
             # 从 inference_method (candidate_type) 拆分为规范字段
             discovery_info = self._parse_discovery_info(rel.inference_method, rel)
             result["discovery_method"] = discovery_info["discovery_method"]
-            result["source_type"] = discovery_info.get("source_type")
+            result["target_source_type"] = discovery_info.get("target_source_type")
             result["source_constraint"] = discovery_info.get("source_constraint")
 
         # 评分相关字段（仅推断关系有）
@@ -262,14 +277,14 @@ class RelationshipWriter:
             inference_method: Optional[str],
             rel: Relation
     ) -> Dict[str, Optional[str]]:
-        """解析 inference_method 为 discovery_method, source_type, source_constraint
+        """解析 inference_method 为 discovery_method, target_source_type, source_constraint
 
         映射规则（基于v3.2文档）：
-        - single_active_search -> discovery_method: "active_search", source_constraint: "single_field_index"
-        - single_logical_key -> discovery_method: "logical_key_matching", source_type: "candidate_logical_key"
-        - composite_physical -> discovery_method: "physical_constraint_matching", source_type: "physical_constraints"
-        - composite_logical -> discovery_method: "logical_key_matching", source_type: "candidate_logical_key"
-        - composite_dynamic_same_name -> discovery_method: "dynamic_same_name", source_type: "candidate_logical_key"
+        - single_active_search -> discovery_method: "active_search", source_constraint: 实际检查源列约束
+        - single_logical_key -> discovery_method: "logical_key_matching", target_source_type: "candidate_logical_key"
+        - composite_physical -> discovery_method: "physical_constraint_matching", target_source_type: "physical_constraints"
+        - composite_logical -> discovery_method: "logical_key_matching", target_source_type: "candidate_logical_key"
+        - composite_dynamic_same_name -> discovery_method: "dynamic_same_name", target_source_type: "candidate_logical_key"
         - 其他 -> discovery_method: "standard_matching"
 
         Args:
@@ -277,28 +292,30 @@ class RelationshipWriter:
             rel: 关系对象
 
         Returns:
-            包含 discovery_method, source_type, source_constraint 的字典
+            包含 discovery_method, target_source_type, source_constraint 的字典
         """
         if not inference_method:
             return {
                 "discovery_method": "standard_matching",
-                "source_type": None,
+                "target_source_type": None,
                 "source_constraint": None
             }
 
         # 单列主动搜索
         if inference_method == "single_active_search":
+            # 检查源列的实际约束类型
+            constraint = self._get_source_constraint(rel)
             return {
                 "discovery_method": "active_search",
-                "source_type": None,
-                "source_constraint": "single_field_index"  # 简化版，实际可能是其他约束
+                "target_source_type": None,
+                "source_constraint": constraint
             }
 
         # 单列逻辑主键匹配
         if inference_method == "single_logical_key":
             return {
                 "discovery_method": "logical_key_matching",
-                "source_type": "candidate_logical_key",
+                "target_source_type": "candidate_logical_key",
                 "source_constraint": None
             }
 
@@ -306,7 +323,7 @@ class RelationshipWriter:
         if inference_method == "composite_physical":
             return {
                 "discovery_method": "physical_constraint_matching",
-                "source_type": "physical_constraints",  # 简化版，实际可能是 primary_key/unique_constraint/index
+                "target_source_type": "physical_constraints",  # 简化版，实际可能是 primary_key/unique_constraint/index
                 "source_constraint": None
             }
 
@@ -314,7 +331,7 @@ class RelationshipWriter:
         if inference_method == "composite_logical":
             return {
                 "discovery_method": "logical_key_matching",
-                "source_type": "candidate_logical_key",
+                "target_source_type": "candidate_logical_key",
                 "source_constraint": None
             }
 
@@ -322,7 +339,7 @@ class RelationshipWriter:
         if inference_method == "composite_dynamic_same_name":
             return {
                 "discovery_method": "dynamic_same_name",
-                "source_type": "candidate_logical_key",
+                "target_source_type": "candidate_logical_key",
                 "source_constraint": None
             }
 
@@ -330,9 +347,56 @@ class RelationshipWriter:
         logger.warning(f"未知的 inference_method: {inference_method}，使用 standard_matching")
         return {
             "discovery_method": "standard_matching",
-            "source_type": None,
+            "target_source_type": None,
             "source_constraint": None
         }
+
+    def _get_source_constraint(self, rel: Relation) -> Optional[str]:
+        """获取源列的实际约束类型
+        
+        Args:
+            rel: 关系对象
+            
+        Returns:
+            约束类型字符串，可能的值：
+            - "single_field_primary_key": 单列主键
+            - "single_field_unique_constraint": 单列唯一约束
+            - "single_field_index": 单列索引
+            - None: 没有物理约束（只是数据唯一或逻辑主键）
+        """
+        if not hasattr(self, 'tables') or not self.tables or not rel.is_single_column:
+            return None
+        
+        # 构建源表的完整名称
+        source_table_key = f"{rel.source_schema}.{rel.source_table}"
+        source_table = self.tables.get(source_table_key)
+        
+        if not source_table:
+            logger.debug(f"未找到源表元数据: {source_table_key}")
+            return None
+        
+        # 获取源列的 profile
+        column_profiles = source_table.get("column_profiles", {})
+        source_column = rel.source_columns[0]
+        col_profile = column_profiles.get(source_column)
+        
+        if not col_profile:
+            logger.debug(f"未找到源列元数据: {source_table_key}.{source_column}")
+            return None
+        
+        # 检查 structure_flags
+        structure_flags = col_profile.get("structure_flags", {})
+        
+        # 按优先级检查约束类型
+        if structure_flags.get("is_primary_key"):
+            return "single_field_primary_key"
+        elif structure_flags.get("is_unique_constraint"):
+            return "single_field_unique_constraint"
+        elif structure_flags.get("is_indexed"):
+            return "single_field_index"
+        else:
+            # 没有物理约束（可能只是数据唯一或逻辑主键）
+            return None
 
     def _calculate_statistics_v32(
             self,
