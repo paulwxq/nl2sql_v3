@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>单列字段关系发现完整流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            border-left: 4px solid #3498db;
+            padding-left: 10px;
+        }
+        .legend {
+            background-color: #ecf0f1;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .legend-item {
+            display: inline-block;
+            margin: 5px 15px 5px 0;
+        }
+        .legend-color {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            margin-right: 5px;
+            vertical-align: middle;
+            border-radius: 3px;
+        }
+        .threshold-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background-color: white;
+        }
+        .threshold-table th,
+        .threshold-table td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        .threshold-table th {
+            background-color: #3498db;
+            color: white;
+            font-weight: bold;
+        }
+        .threshold-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .code-source {
+            font-family: 'Courier New', monospace;
+            background-color: #f8f9fa;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+        .yaml-config {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+        }
+        .code-hardcoded {
+            background-color: #fff3e0;
+            color: #e65100;
+        }
+        .note {
+            background-color: #fff9c4;
+            border-left: 4px solid #fbc02d;
+            padding: 10px 15px;
+            margin: 15px 0;
+        }
+        .mermaid {
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>单列字段关系发现完整流程图</h1>
+
+        <div class="note">
+            <strong>说明：</strong>本流程图展示了从源表单列字段筛选、目标表候选列匹配，到综合评分的完整过程。
+            包含候选生成的两个分支（主动搜索 & 逻辑主键匹配）以及评分阶段的6个维度。
+        </div>
+
+        <h2>完整流程图</h2>
+
+        <div class="mermaid">
+flowchart TB
+    Start([开始: 遍历源表所有列])
+
+    Start --> CheckSourceRole{检查源列语义角色}
+
+    CheckSourceRole -->|是 metric 或 audit| SkipSource[跳过该源列]
+    CheckSourceRole -->|不是 metric 或 audit| CheckSourceType{判断源列类型}
+
+    %% 分支A: 主动搜索
+    CheckSourceType -->|有重要约束| BranchA[分支A: 主动搜索]
+
+    BranchA --> CheckConstraint{检查重要约束}
+    CheckConstraint --> C1["PK/UK/Index<br/>在 important_constraints 中"]
+    C1 --> SearchSame[搜索同名列<br/>大小写不敏感]
+
+    SearchSame --> FoundSame{找到同名列?}
+    FoundSame -->|否| NoCandidate1[无候选]
+    FoundSame -->|是| CheckRole1{目标列角色检查}
+
+    CheckRole1 -->|是 metric/audit| NoCandidate1
+    CheckRole1 -->|否| CheckType1{类型兼容性}
+
+    CheckType1 -->|小于 0.5| NoCandidate1
+    CheckType1 -->|大于等于 0.5<br/>YAML配置| CheckFK1{FK去重}
+
+    CheckFK1 -->|已存在| NoCandidate1
+    CheckFK1 -->|不存在| AddCand1[加入候选<br/>single_active_search]
+
+    %% 分支B: 逻辑主键匹配
+    CheckSourceType -->|是逻辑主键| BranchB[分支B: 逻辑主键匹配]
+
+    BranchB --> CheckLogical{逻辑主键条件}
+    CheckLogical --> L1["单列 + confidence >= 0.8<br/>YAML配置"]
+
+    L1 -->|满足| SearchAll[遍历目标表所有列]
+    L1 -->|不满足| NoCandidate2[无候选]
+
+    SearchAll --> CheckRole2{目标列角色检查}
+    CheckRole2 -->|是 metric/audit| NextCol[下一个目标列]
+    CheckRole2 -->|否| CheckQual{约束条件检查}
+
+    CheckQual --> Q1["PK/UK/Index/逻辑主键"]
+    Q1 -->|不满足| NextCol
+    Q1 -->|满足| CheckName{名称相似度}
+
+    CheckName -->|小于 0.6<br/>硬编码| NextCol
+    CheckName -->|大于等于 0.6| CheckType2{类型兼容性}
+
+    CheckType2 -->|小于 0.5| NextCol
+    CheckType2 -->|大于等于 0.5<br/>YAML配置| CheckFK2{FK去重}
+
+    CheckFK2 -->|已存在| NextCol
+    CheckFK2 -->|不存在| AddCand2[加入候选<br/>single_logical_key]
+
+    NextCol --> SearchAll
+
+    %% 评分阶段
+    AddCand1 --> Scoring[评分阶段]
+    AddCand2 --> Scoring
+
+    Scoring --> S1[inclusion_rate<br/>权重30%]
+    Scoring --> S2[jaccard_index<br/>权重15%]
+    Scoring --> S3[uniqueness<br/>权重10%]
+    Scoring --> S4[name_similarity<br/>权重20%]
+    Scoring --> S5[type_compatibility<br/>权重20%]
+    Scoring --> S6[semantic_role_bonus<br/>权重5%]
+
+    S1 --> Composite[综合评分计算]
+    S2 --> Composite
+    S3 --> Composite
+    S4 --> Composite
+    S5 --> Composite
+    S6 --> Composite
+
+    %% 决策过滤
+    Composite --> Decision{决策过滤}
+
+    Decision -->|大于等于 0.80<br/>YAML配置| Accept[接受关系]
+    Decision -->|小于 0.80| Reject[拒绝关系]
+
+    Accept --> End([结束])
+    Reject --> End
+    SkipSource --> End
+    NoCandidate1 --> End
+    NoCandidate2 --> End
+
+    %% 样式定义
+    classDef sourceStyle fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    classDef branchStyle fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef targetStyle fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef scoreStyle fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    classDef decisionStyle fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef skipStyle fill:#eeeeee,stroke:#757575,stroke-width:1px
+
+    class Start,CheckSourceRole sourceStyle
+    class BranchA,BranchB,CheckConstraint,CheckLogical branchStyle
+    class SearchSame,SearchAll,CheckRole1,CheckRole2,CheckQual targetStyle
+    class Scoring,S1,S2,S3,S4,S5,S6,Composite scoreStyle
+    class Decision,Accept,Reject decisionStyle
+    class SkipSource,NoCandidate1,NoCandidate2,NextCol skipStyle
+        </div>
+
+        <h2>关键阈值汇总表</h2>
+
+        <table class="threshold-table">
+            <thead>
+                <tr>
+                    <th>阶段</th>
+                    <th>参数名称</th>
+                    <th>默认值</th>
+                    <th>来源</th>
+                    <th>代码位置</th>
+                    <th>说明</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- 候选生成阶段 - 单列配置 -->
+                <tr>
+                    <td rowspan="5"><strong>候选生成<br/>单列配置</strong></td>
+                    <td>min_type_compatibility</td>
+                    <td>0.5</td>
+                    <td><span class="code-source yaml-config">YAML配置</span></td>
+                    <td>metadata_config.yaml:197<br/>candidate_generator.py:42</td>
+                    <td>最低类型兼容性阈值<br/>（两个分支都使用）</td>
+                </tr>
+                <tr>
+                    <td>active_search_same_name</td>
+                    <td>true</td>
+                    <td><span class="code-source yaml-config">YAML配置</span></td>
+                    <td>metadata_config.yaml:188<br/>candidate_generator.py:34</td>
+                    <td>启用主动同名搜索</td>
+                </tr>
+                <tr>
+                    <td>important_constraints</td>
+                    <td>[single_field_primary_key,<br/>single_field_unique_constraint,<br/>single_field_index]</td>
+                    <td><span class="code-source yaml-config">YAML配置</span></td>
+                    <td>metadata_config.yaml:189-192<br/>candidate_generator.py:35-39</td>
+                    <td>主动搜索的重要约束类型</td>
+                </tr>
+                <tr>
+                    <td>exclude_semantic_roles</td>
+                    <td>[audit, metric]</td>
+                    <td><span class="code-source yaml-config">YAML配置</span></td>
+                    <td>metadata_config.yaml:193-195<br/>candidate_generator.py:40</td>
+                    <td>排除的语义角色</td>
+                </tr>
+                <tr>
+                    <td>logical_key_min_confidence</td>
+                    <td>0.8</td>
+                    <td><span class="code-source yaml-config">YAML配置</span></td>
+                    <td>metadata_config.yaml:196<br/>candidate_generator.py:41</td>
+                    <td>逻辑主键最低置信度</td>
+                </tr>
+
+                <!-- 候选生成阶段 - 硬编码 -->
+                <tr>
+                    <td rowspan="1"><strong>候选生成<br/>硬编码</strong></td>
+                    <td>name_similarity (逻辑主键分支)</td>
+                    <td>0.6</td>
+                    <td><span class="code-source code-hardcoded">代码硬编码</span></td>
+                    <td>candidate_generator.py:592</td>
+                    <td>⚠️ 仅逻辑主键匹配分支使用<br/>主动搜索要求精确同名</td>
+                </tr>
+
+                <!-- 评分阶段 - 权重 -->
+                <tr>
+                    <td rowspan="6"><strong>评分阶段<br/>权重配置</strong></td>
+                    <td>weights.inclusion_rate</td>
+                    <td>0.30</td>
+                    <td><span class="code-source yaml-config">YAML配置</span></td>
+                    <td>metadata_config.yaml:218<br/>scorer.py:16,46</td>
+                    <td>包含率权重（30%）</td>
+                </tr>
+                <tr>
+                    <td>weights.jaccard_index</td>
+                    <td>0.15</td>
+                    <td><span class="code-source yaml-config">YAML配置</span></td>
+                    <td>metadata_config.yaml:219<br/>scorer.py:17,46</td>
+                    <td>Jaccard相似度权重（15%）</td>
+                </tr>
+                <tr>
+                    <td>weights.uniqueness</td>
+                    <td>0.10</td>
+                    <td><span class="code-source yaml-config">YAML配置</span></td>
+                    <td>metadata_config.yaml:220<br/>scorer.py:18,46</td>
+                    <td>唯一性权重（10%）</td>
+                </tr>
+                <tr>
+                    <td>weights.name_similarity</td>
+                    <td>0.20</td>
+                    <td><span class="code-source yaml-config">YAML配置</span></td>
+                    <td>metadata_config.yaml:221<br/>scorer.py:19,46</td>
+                    <td>名称相似度权重（20%）</td>
+                </tr>
+                <tr>
+                    <td>weights.type_compatibility</td>
+                    <td>0.20</td>
+                    <td><span class="code-source yaml-config">YAML配置</span></td>
+                    <td>metadata_config.yaml:222<br/>scorer.py:20,46</td>
+                    <td>类型兼容性权重（20%）</td>
+                </tr>
+                <tr>
+                    <td>weights.semantic_role_bonus</td>
+                    <td>0.05</td>
+                    <td><span class="code-source yaml-config">YAML配置</span></td>
+                    <td>metadata_config.yaml:223<br/>scorer.py:21,46</td>
+                    <td>语义角色加分权重（5%）</td>
+                </tr>
+
+                <!-- 评分阶段 - 采样 -->
+                <tr>
+                    <td rowspan="1"><strong>评分阶段<br/>采样配置</strong></td>
+                    <td>sampling.sample_size</td>
+                    <td>1000</td>
+                    <td><span class="code-source yaml-config">YAML配置</span></td>
+                    <td>metadata_config.yaml:28<br/>scorer.py:50</td>
+                    <td>数据库采样大小</td>
+                </tr>
+
+                <!-- 决策阶段 -->
+                <tr>
+                    <td rowspan="3"><strong>决策阶段<br/>阈值配置</strong></td>
+                    <td>decision.accept_threshold</td>
+                    <td>0.80</td>
+                    <td><span class="code-source yaml-config">YAML配置</span></td>
+                    <td>metadata_config.yaml:211<br/>decision_engine.py</td>
+                    <td>最低接受阈值（80%）</td>
+                </tr>
+                <tr>
+                    <td>decision.high_confidence_threshold</td>
+                    <td>0.90</td>
+                    <td><span class="code-source yaml-config">YAML配置</span></td>
+                    <td>metadata_config.yaml:212</td>
+                    <td>高置信度阈值（90%）</td>
+                </tr>
+                <tr>
+                    <td>decision.medium_confidence_threshold</td>
+                    <td>0.80</td>
+                    <td><span class="code-source yaml-config">YAML配置</span></td>
+                    <td>metadata_config.yaml:213</td>
+                    <td>中等置信度阈值（80%）</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>两个分支的关键差异</h2>
+
+        <table class="threshold-table">
+            <thead>
+                <tr>
+                    <th>维度</th>
+                    <th>分支A：主动搜索<br/>(single_active_search)</th>
+                    <th>分支B：逻辑主键匹配<br/>(single_logical_key)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>源列条件</strong></td>
+                    <td>
+                        • 有重要约束（PK/UK/Index）<br/>
+                        • 约束类型在 important_constraints 配置中
+                    </td>
+                    <td>
+                        • 是单列逻辑主键<br/>
+                        • confidence >= 0.8 (YAML配置)
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>目标列名称匹配</strong></td>
+                    <td>
+                        ✅ <strong>精确同名</strong>（大小写不敏感）<br/>
+                        ❌ 不需要名称相似度检查
+                    </td>
+                    <td>
+                        ✅ 名称相似度 >= 0.6 <br/>
+                        ⚠️ <span class="code-source code-hardcoded">硬编码</span> 在代码中
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>目标列约束要求</strong></td>
+                    <td>
+                        ❌ <strong>不需要约束</strong><br/>
+                        （同名已经是强信号）
+                    </td>
+                    <td>
+                        ✅ <strong>必须有约束</strong><br/>
+                        • is_primary_key 或<br/>
+                        • is_unique 或<br/>
+                        • is_indexed 或<br/>
+                        • 单列逻辑主键 (confidence >= 0.8)
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>语义角色检查</strong></td>
+                    <td colspan="2" style="text-align:center">
+                        ✅ 两个分支都排除 metric 和 audit
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>类型兼容性</strong></td>
+                    <td colspan="2" style="text-align:center">
+                        ✅ 两个分支都要求 >= 0.5 (YAML配置)
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>FK去重</strong></td>
+                    <td colspan="2" style="text-align:center">
+                        ✅ 两个分支都检查
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>设计意图</strong></td>
+                    <td>
+                        快速发现明显的同名关系<br/>
+                        （如 company_id → company_id）
+                    </td>
+                    <td>
+                        发现相似名称的潜在关系<br/>
+                        （如 company_code → comp_cd）<br/>
+                        要求目标列也有键特征以降低误报
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>评分维度详解</h2>
+
+        <table class="threshold-table">
+            <thead>
+                <tr>
+                    <th>维度</th>
+                    <th>计算方式</th>
+                    <th>数据来源</th>
+                    <th>权重</th>
+                    <th>说明</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>1. inclusion_rate</strong></td>
+                    <td>|source ∩ target| / |source|</td>
+                    <td>数据库采样<br/>(sample_size=1000)</td>
+                    <td>30%</td>
+                    <td>源列值在目标列中的包含率<br/>越高说明越可能是外键关系</td>
+                </tr>
+                <tr>
+                    <td><strong>2. jaccard_index</strong></td>
+                    <td>|source ∩ target| / |source ∪ target|</td>
+                    <td>数据库采样<br/>(sample_size=1000)</td>
+                    <td>15%</td>
+                    <td>Jaccard相似系数<br/>衡量两个集合的相似程度</td>
+                </tr>
+                <tr>
+                    <td><strong>3. uniqueness</strong></td>
+                    <td>目标列的唯一值比例<br/>（从statistics.uniqueness读取）</td>
+                    <td>JSON元数据</td>
+                    <td>10%</td>
+                    <td>目标列的唯一性<br/>越高说明越可能是主键</td>
+                </tr>
+                <tr>
+                    <td><strong>4. name_similarity</strong></td>
+                    <td>SequenceMatcher.ratio()<br/>（Levenshtein距离）</td>
+                    <td>字符串计算</td>
+                    <td>20%</td>
+                    <td>列名的字符串相似度<br/>⚠️ 这是第二次计算（用于评分，无阈值）</td>
+                </tr>
+                <tr>
+                    <td><strong>5. type_compatibility</strong></td>
+                    <td>类型族匹配度<br/>1.0(完全) / 0.8(高度) /<br/>0.6(部分) / 0.5(低度) / 0.0(不兼容)</td>
+                    <td>类型映射表</td>
+                    <td>20%</td>
+                    <td>数据类型的兼容程度<br/>整数族、字符串族、数值族等</td>
+                </tr>
+                <tr>
+                    <td><strong>6. semantic_role_bonus</strong></td>
+                    <td>identifier列数量 / 总列数</td>
+                    <td>JSON元数据<br/>(semantic_analysis)</td>
+                    <td>5%</td>
+                    <td>识别为identifier的列给予加分<br/>全部是identifier得1.0分</td>
+                </tr>
+                <tr>
+                    <td colspan="3" style="text-align:right"><strong>综合评分</strong></td>
+                    <td colspan="2">composite_score = ∑(维度分数 × 权重)<br/>
+                    范围: 0.0 ~ 1.0</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="note">
+            <strong>⚠️ 重要提示：</strong>
+            <ul>
+                <li><strong>硬编码阈值</strong>：名称相似度 0.6 目前硬编码在 <code>candidate_generator.py:592</code>，建议迁移到YAML配置</li>
+                <li><strong>两次计算</strong>：name_similarity 在候选生成阶段（有阈值过滤）和评分阶段（无阈值评分）各计算一次</li>
+                <li><strong>type_compatibility</strong>：同样在两个阶段都计算，但用途不同（过滤 vs 评分）</li>
+                <li><strong>权重总和</strong>：6个评分维度的权重总和必须为 1.0（100%）</li>
+            </ul>
+        </div>
+
+        <h2>流程优化建议</h2>
+
+        <div class="note">
+            <strong>配置化建议：</strong>
+            <ol>
+                <li>将硬编码的 <code>name_similarity 阈值 0.6</code> 迁移到YAML配置文件的 <code>single_column.min_name_similarity</code></li>
+                <li>考虑为两个分支分别配置不同的阈值（主动搜索可能不需要,逻辑主键匹配需要）</li>
+                <li>将 <code>_is_qualified_target_column</code> 的约束检查逻辑也配置化</li>
+            </ol>
+        </div>
+
+        <p style="margin-top: 30px; color: #7f8c8d; font-size: 0.9em;">
+            <strong>文档生成时间：</strong>2025-01-30<br/>
+            <strong>代码版本：</strong>基于 candidate_generator.py 和 scorer.py 的最新实现<br/>
+            <strong>配置文件：</strong>configs/metaweave/metadata_config.yaml
+        </p>
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'default',
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true,
+                curve: 'basis'
+            }
+        });
+    </script>
+</body>
+</html>

@@ -252,10 +252,15 @@ class SampleData:
 @dataclass
 class StructureFlags:
     is_primary_key: bool = False
+    is_composite_primary_key_member: bool = False
     is_foreign_key: bool = False
+    is_composite_foreign_key_member: bool = False
     is_unique: bool = False
+    is_composite_unique_member: bool = False
     is_unique_constraint: bool = False
+    is_composite_unique_constraint_member: bool = False
     is_indexed: bool = False
+    is_composite_indexed_member: bool = False
     is_nullable: bool = True
 
     def to_dict(self) -> Dict[str, Any]:

@@ -267,8 +267,8 @@ class MetadataProfiler:
         metadata: TableMetadata,
         sample_df: Optional[pd.DataFrame],
     ) -> Dict[str, ColumnProfile]:
-        pk_columns = self._collect_pk_columns(metadata)
-        unique_constraint_columns = self._collect_unique_constraint_columns(metadata)
+        pk_info = self._collect_pk_columns(metadata)
+        unique_constraint_info = self._collect_unique_constraint_columns(metadata)
         fk_info = self._collect_foreign_key_map(metadata)
         index_info = self._collect_index_map(metadata)
         logical_map = self._collect_logical_key_map(metadata)
@@ -276,12 +276,48 @@ class MetadataProfiler:
         profiles: Dict[str, ColumnProfile] = {}
         for column in metadata.columns:
             stats = self._ensure_statistics(column, sample_df)
+            col_lower = column.column_name.lower()
+            
+            # 判断主键约束
+            pk_data = pk_info.get(col_lower)
+            is_pk_composite = pk_data["is_composite"] if pk_data else False
+            is_pk = pk_data is not None
+            
+            # 判断外键约束
+            fk_list = fk_info.get(col_lower, [])
+            is_fk_composite = fk_list[0]["is_composite"] if fk_list else False
+            is_fk = len(fk_list) > 0
+            
+            # 判断唯一约束
+            uc_data = unique_constraint_info.get(col_lower)
+            is_uc_composite = uc_data["is_composite"] if uc_data else False
+            is_uc = uc_data is not None
+            
+            # 判断索引
+            idx_list = index_info.get(col_lower, [])
+            is_idx_composite = idx_list[0]["is_composite"] if idx_list else False
+            is_idx = len(idx_list) > 0
+            
+            # 判断数据唯一性（不是约束，只是统计特征）
+            is_data_unique = self._is_unique(stats)
+            
             struct_flags = StructureFlags(
-                is_primary_key=column.column_name.lower() in pk_columns,
-                is_foreign_key=column.column_name.lower() in fk_info,
-                is_unique=self._is_unique(stats),
-                is_unique_constraint=column.column_name.lower() in unique_constraint_columns,
-                is_indexed=column.column_name.lower() in index_info,
+                # 主键：单列约束 vs 复合约束成员（互斥）
+                is_primary_key=is_pk and not is_pk_composite,
+                is_composite_primary_key_member=is_pk and is_pk_composite,
+                # 外键：单列约束 vs 复合约束成员（互斥）
+                is_foreign_key=is_fk and not is_fk_composite,
+                is_composite_foreign_key_member=is_fk and is_fk_composite,
+                # 数据唯一性：没有唯一约束但数据唯一 vs 有复合唯一约束且数据唯一
+                is_unique=is_data_unique and not is_uc,
+                is_composite_unique_member=is_data_unique and is_uc and is_uc_composite,
+                # 唯一约束：单列约束 vs 复合约束成员（互斥）
+                is_unique_constraint=is_uc and not is_uc_composite,
+                is_composite_unique_constraint_member=is_uc and is_uc_composite,
+                # 索引：单列索引 vs 复合索引成员（互斥）
+                is_indexed=is_idx and not is_idx_composite,
+                is_composite_indexed_member=is_idx and is_idx_composite,
+                # 可空性
                 is_nullable=column.is_nullable,
             )
             (
@@ -295,18 +331,20 @@ class MetadataProfiler:
                 inference_basis,
             ) = self._classify_semantics(column, stats, struct_flags)
 
-            pk_info = None
-            if struct_flags.is_primary_key:
-                pk_info = PrimaryKeyProfileInfo(
+            pk_profile = None
+            if struct_flags.is_primary_key or struct_flags.is_composite_primary_key_member:
+                # 获取主键的所有列
+                pk_cols = metadata.primary_keys[0].columns if metadata.primary_keys else []
+                pk_profile = PrimaryKeyProfileInfo(
                     source="constraint",
                     confidence=None,
-                    is_single_column=len(pk_columns) <= 1,
-                    composite_columns=list(pk_columns) if len(pk_columns) > 1 else None,
+                    is_single_column=len(pk_cols) == 1,
+                    composite_columns=pk_cols if len(pk_cols) > 1 else None,
                 )
             elif not metadata.primary_keys and logical_map:
                 logical_details = logical_map.get(column.column_name.lower())
                 if logical_details:
-                    pk_info = PrimaryKeyProfileInfo(
+                    pk_profile = PrimaryKeyProfileInfo(
                         source="logical",
                         confidence=logical_details.get("confidence"),
                         is_single_column=len(logical_details.get("columns", [])) <= 1,
@@ -314,7 +352,7 @@ class MetadataProfiler:
                     )
 
             fk_profile = None
-            if struct_flags.is_foreign_key:
+            if struct_flags.is_foreign_key or struct_flags.is_composite_foreign_key_member:
                 fk_entry = fk_info[column.column_name.lower()][0]
                 fk_profile = ForeignKeyProfileInfo(
                     target_schema=fk_entry["target_schema"],
@@ -325,8 +363,9 @@ class MetadataProfiler:
                 )
 
             idx_profile = None
-            if struct_flags.is_indexed:
-                idx = index_info[column.column_name.lower()][0]
+            if struct_flags.is_indexed or struct_flags.is_composite_indexed_member:
+                idx_data = index_info[column.column_name.lower()][0]
+                idx = idx_data["index_info"]
                 idx_profile = IndexProfileInfo(
                     index_name=idx.index_name,
                     index_type=idx.index_type,
@@ -344,7 +383,7 @@ class MetadataProfiler:
                 datetime_info=datetime_info,
                 enum_info=enum_info,
                 audit_info=audit_info,
-                primary_key_info=pk_info,
+                primary_key_info=pk_profile,
                 foreign_key_info=fk_profile,
                 index_info=idx_profile,
                 inference_basis=inference_basis,
@@ -424,21 +463,41 @@ class MetadataProfiler:
     # Helper utilities
     # -----------------------------------------------------------------------
 
-    def _collect_pk_columns(self, metadata: TableMetadata) -> List[str]:
-        cols: List[str] = []
+    def _collect_pk_columns(self, metadata: TableMetadata) -> Dict[str, Dict]:
+        """收集主键列信息
+        
+        Returns:
+            Dict[str, Dict]: {列名: {"is_composite": bool}}
+        """
+        result: Dict[str, Dict] = {}
         for pk in metadata.primary_keys:
-            cols.extend([c.lower() for c in pk.columns])
-        return cols
+            is_composite = len(pk.columns) > 1
+            for col in pk.columns:
+                result[col.lower()] = {"is_composite": is_composite}
+        return result
 
-    def _collect_unique_constraint_columns(self, metadata: TableMetadata) -> List[str]:
-        cols: List[str] = []
+    def _collect_unique_constraint_columns(self, metadata: TableMetadata) -> Dict[str, Dict]:
+        """收集唯一约束列信息
+        
+        Returns:
+            Dict[str, Dict]: {列名: {"is_composite": bool}}
+        """
+        result: Dict[str, Dict] = {}
         for uc in metadata.unique_constraints:
-            cols.extend([c.lower() for c in uc.columns])
-        return cols
+            is_composite = len(uc.columns) > 1
+            for col in uc.columns:
+                result[col.lower()] = {"is_composite": is_composite}
+        return result
 
     def _collect_foreign_key_map(self, metadata: TableMetadata) -> Dict[str, List[Dict]]:
+        """收集外键列信息
+        
+        Returns:
+            Dict[str, List[Dict]]: {列名: [{"target_schema": str, ..., "is_composite": bool}]}
+        """
         mapping: Dict[str, List[Dict]] = {}
         for fk in metadata.foreign_keys:
+            is_composite = len(fk.source_columns) > 1
             for column in fk.source_columns:
                 mapping.setdefault(column.lower(), []).append(
                     {
@@ -447,15 +506,27 @@ class MetadataProfiler:
                         "target_columns": fk.target_columns,
                         "on_delete": fk.on_delete,
                         "on_update": fk.on_update,
+                        "is_composite": is_composite,
                     }
                 )
         return mapping
 
-    def _collect_index_map(self, metadata: TableMetadata) -> Dict[str, List[IndexInfo]]:
-        mapping: Dict[str, List[IndexInfo]] = {}
+    def _collect_index_map(self, metadata: TableMetadata) -> Dict[str, List[Dict]]:
+        """收集索引列信息
+        
+        Returns:
+            Dict[str, List[Dict]]: {列名: [{"index_info": IndexInfo, "is_composite": bool}]}
+        """
+        mapping: Dict[str, List[Dict]] = {}
         for index in metadata.indexes:
+            is_composite = len(index.columns) > 1
             for column in index.columns:
-                mapping.setdefault(column.lower(), []).append(index)
+                mapping.setdefault(column.lower(), []).append(
+                    {
+                        "index_info": index,
+                        "is_composite": is_composite,
+                    }
+                )
         return mapping
 
     def _collect_logical_key_map(self, metadata: TableMetadata) -> Dict[str, Dict]:
@@ -659,10 +730,14 @@ class MetadataProfiler:
         if not (is_string_type or is_small_int):
             return False
         
-        # 条件3: 非主键、非外键、非唯一约束
+        # 条件3: 非主键、非外键、非唯一约束（包括复合约束成员）
         if (struct_flags.is_primary_key or 
+            struct_flags.is_composite_primary_key_member or
             struct_flags.is_foreign_key or 
-            struct_flags.is_unique):
+            struct_flags.is_composite_foreign_key_member or
+            struct_flags.is_unique or
+            struct_flags.is_unique_constraint or
+            struct_flags.is_composite_unique_constraint_member):
             return False
         
         # 条件4: 非空比例较低
@@ -728,14 +803,15 @@ class MetadataProfiler:
         """规则1：物理约束检查
         
         检查字段是否有 PRIMARY KEY、FOREIGN KEY 或 UNIQUE 约束
+        （包括单列约束和复合约束成员）
         
         返回: (是否有约束, 置信度, 约束类型)
         """
-        if struct_flags.is_primary_key:
+        if struct_flags.is_primary_key or struct_flags.is_composite_primary_key_member:
             return (True, 1.0, "primary_key")
-        if struct_flags.is_foreign_key:
+        if struct_flags.is_foreign_key or struct_flags.is_composite_foreign_key_member:
             return (True, 1.0, "foreign_key")
-        if struct_flags.is_unique_constraint:  # 只检查物理约束，不检查统计唯一性
+        if struct_flags.is_unique_constraint or struct_flags.is_composite_unique_constraint_member:
             return (True, 1.0, "unique_constraint")
         return (False, 0.0, "")
 
@@ -965,8 +1041,14 @@ class MetadataProfiler:
         audit_count = sum(1 for profile in column_profiles.values() if profile.semantic_role == "audit")
         # enum_count = sum(1 for profile in column_profiles.values() if profile.semantic_role == "enum")  # 已删除
         attribute_count = sum(1 for profile in column_profiles.values() if profile.semantic_role == "attribute")
-        primary_key_count = sum(1 for profile in column_profiles.values() if profile.structure_flags.is_primary_key)
-        foreign_key_count = sum(1 for profile in column_profiles.values() if profile.structure_flags.is_foreign_key)
+        primary_key_count = sum(
+            1 for profile in column_profiles.values() 
+            if profile.structure_flags.is_primary_key or profile.structure_flags.is_composite_primary_key_member
+        )
+        foreign_key_count = sum(
+            1 for profile in column_profiles.values() 
+            if profile.structure_flags.is_foreign_key or profile.structure_flags.is_composite_foreign_key_member
+        )
 
         return ColumnStatisticsSummary(
             total_columns=len(column_profiles),
@@ -988,7 +1070,8 @@ class MetadataProfiler:
         primary_keys = metadata.primary_keys[0].columns if metadata.primary_keys else []
         logical_primary_keys = metadata.candidate_logical_primary_keys[0].columns if metadata.candidate_logical_primary_keys else []
         foreign_keys = sorted(
-            {name for name, profile in column_profiles.items() if profile.structure_flags.is_foreign_key}
+            {name for name, profile in column_profiles.items() 
+             if profile.structure_flags.is_foreign_key or profile.structure_flags.is_composite_foreign_key_member}
         )
         return KeyColumnsSummary(
             primary_keys=primary_keys,

@@ -1,6 +1,6 @@
 {
   "metadata_version": "2.0",
-  "generated_at": "2025-11-28T15:31:09.294744Z",
+  "generated_at": "2025-12-01T08:02:48.675658Z",
   "table_info": {
     "schema_name": "public",
     "table_name": "dim_company",
@@ -47,10 +47,15 @@
       },
       "structure_flags": {
         "is_primary_key": false,
+        "is_composite_primary_key_member": false,
         "is_foreign_key": false,
+        "is_composite_foreign_key_member": false,
         "is_unique": true,
+        "is_composite_unique_member": false,
         "is_unique_constraint": false,
+        "is_composite_unique_constraint_member": false,
         "is_indexed": false,
+        "is_composite_indexed_member": false,
         "is_nullable": false
       },
       "role_specific_info": {
@@ -92,10 +97,15 @@
       },
       "structure_flags": {
         "is_primary_key": false,
+        "is_composite_primary_key_member": false,
         "is_foreign_key": false,
+        "is_composite_foreign_key_member": false,
         "is_unique": true,
+        "is_composite_unique_member": false,
         "is_unique_constraint": false,
+        "is_composite_unique_constraint_member": false,
         "is_indexed": false,
+        "is_composite_indexed_member": false,
         "is_nullable": false
       },
       "role_specific_info": {}

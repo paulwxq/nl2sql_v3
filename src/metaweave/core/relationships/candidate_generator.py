@@ -383,49 +383,162 @@ class CandidateGenerator:
         return False
 
     def _get_type_compatibility_score(self, type1: str, type2: str) -> float:
-        """计算两个类型的兼容性分数（用于阈值比较）
-
-        与 scorer 的逻辑保持一致，返回数值分数用于与 min_type_compatibility 比较。
-
+        """计算PostgreSQL两个类型的JOIN兼容性分数
+        
+        评分标准：
+        - 1.0: 类型完全相同
+        - 0.9: 同类型族，完全互换，零损失（如 INTEGER ↔ BIGINT, INTEGER ↔ NUMERIC）
+        - 0.85: 同大类，高度兼容，实际使用无影响（如 VARCHAR ↔ TEXT）
+        - 0.8: 同大族，兼容但有细微差异（如 CHAR参与, NUMERIC不同精度, TIMESTAMP时区转换）
+        - 0.6: 可以JOIN但有精度问题（如 INTEGER ↔ FLOAT）
+        - 0.5: 可以JOIN但精度损失明显（如 DATE ↔ TIMESTAMP, NUMERIC ↔ FLOAT）
+        - 0.0: JOIN会报错，完全不兼容
+        
         Args:
-            type1: 类型1
-            type2: 类型2
-
+            type1: PostgreSQL类型1
+            type2: PostgreSQL类型2
+            
         Returns:
-            兼容性分数：1.0 (完全兼容) | 0.8 (高度兼容) | 0.6 (部分兼容) | 0.5 (低度兼容) | 0.0 (不兼容)
+            float: 兼容性分数 [0.0, 1.0]
         """
         # 标准化类型
         t1 = self._normalize_type(type1)
         t2 = self._normalize_type(type2)
-
-        # 完全相同
+        
+        # 1.0 - 完全相同
         if t1 == t2:
             return 1.0
-
-        # 整数类型族
-        int_types = {"integer", "int", "int4", "bigint", "int8", "smallint", "int2", "serial", "bigserial"}
-        if t1 in int_types and t2 in int_types:
-            return 1.0
-
-        # 字符串类型族（部分兼容，因长度可能不同）
-        str_types = {"varchar", "character varying", "char", "character", "text", "bpchar"}
-        if t1 in str_types and t2 in str_types:
-            return 0.5
-
-        # 数值类型族
-        num_types = {"numeric", "decimal", "real", "double precision", "float", "float4", "float8"}
-        if t1 in num_types and t2 in num_types:
+        
+        # ===== 整数类型族 =====
+        int_small = {"smallint", "int2", "smallserial"}
+        int_standard = {"integer", "int", "int4", "serial"}
+        int_big = {"bigint", "int8", "bigserial"}
+        int_all = int_small | int_standard | int_big
+        
+        # 0.9 - 整数族内部，完全互换
+        if t1 in int_all and t2 in int_all:
+            return 0.9
+        
+        # ===== 字符串类型族 =====
+        # VARCHAR/TEXT 组（无padding问题）
+        str_varchar = {"varchar", "character varying", "text"}
+        # CHAR 组（有padding陷阱）
+        str_char = {"char", "character", "bpchar"}
+        str_all = str_varchar | str_char
+        
+        # 0.85 - VARCHAR/TEXT之间（安全）
+        if t1 in str_varchar and t2 in str_varchar:
+            return 0.85
+        
+        # 0.8 - CHAR参与时（有padding陷阱）
+        if t1 in str_all and t2 in str_all:
             return 0.8
-
-        # 整数与数值类型可以部分兼容
-        if (t1 in int_types and t2 in num_types) or (t1 in num_types and t2 in int_types):
+        
+        # ===== 精确数值类型族 =====
+        numeric_types = {"numeric", "decimal"}
+        
+        # 0.8 - NUMERIC/DECIMAL之间（精度可能不同）
+        if t1 in numeric_types and t2 in numeric_types:
+            return 0.8
+        
+        # ===== 浮点数值类型族 =====
+        float_types = {"real", "float4", "double precision", "float8", "float"}
+        
+        # 0.8 - 浮点类型之间
+        if t1 in float_types and t2 in float_types:
+            return 0.8
+        
+        # ===== 整数与数值类型交叉 =====
+        # 0.9 - 整数与NUMERIC（整数可以无损转为NUMERIC）
+        if (t1 in int_all and t2 in numeric_types) or (t1 in numeric_types and t2 in int_all):
+            return 0.9
+        
+        # 0.6 - 整数与浮点（有精度损失）
+        if (t1 in int_all and t2 in float_types) or (t1 in float_types and t2 in int_all):
             return 0.6
-
-        # 日期/时间类型族
-        date_types = {"date", "timestamp", "timestamp without time zone", "timestamp with time zone", "timestamptz"}
+        
+        # 0.5 - NUMERIC与浮点（精确数值vs浮点，精度损失明显）
+        if (t1 in numeric_types and t2 in float_types) or (t1 in float_types and t2 in numeric_types):
+            return 0.5
+        
+        # ===== 日期时间类型族 =====
+        date_types = {"date"}
+        
+        timestamp_without_tz = {"timestamp", "timestamp without time zone"}
+        
+        timestamp_with_tz = {"timestamp with time zone", "timestamptz"}
+        
+        timestamp_all = timestamp_without_tz | timestamp_with_tz
+        
+        time_types = {"time", "time without time zone", "time with time zone", "timetz"}
+        
+        # 1.0 - DATE 与 DATE
         if t1 in date_types and t2 in date_types:
             return 1.0
-
+        
+        # 0.9 - TIMESTAMP系列内部（同义词）
+        if t1 in timestamp_without_tz and t2 in timestamp_without_tz:
+            return 0.9
+        
+        if t1 in timestamp_with_tz and t2 in timestamp_with_tz:
+            return 0.9
+        
+        # 0.8 - TIMESTAMP WITH TZ vs WITHOUT TZ（有时区转换）
+        if (t1 in timestamp_without_tz and t2 in timestamp_with_tz) or \
+           (t1 in timestamp_with_tz and t2 in timestamp_without_tz):
+            return 0.8
+        
+        # 0.5 - DATE vs TIMESTAMP（精度损失明显：DATE只能匹配午夜00:00:00）
+        if (t1 in date_types and t2 in timestamp_all) or \
+           (t1 in timestamp_all and t2 in date_types):
+            return 0.5
+        
+        # 0.85 - TIME系列内部
+        if t1 in time_types and t2 in time_types:
+            return 0.85
+        
+        # 0.0 - TIME vs DATE/TIMESTAMP（不能JOIN）
+        if (t1 in time_types and (t2 in date_types or t2 in timestamp_all)) or \
+           ((t1 in date_types or t1 in timestamp_all) and t2 in time_types):
+            return 0.0
+        
+        # ===== 布尔类型 =====
+        bool_types = {"boolean", "bool"}
+        
+        if t1 in bool_types and t2 in bool_types:
+            return 0.9  # 同义词
+        
+        # 0.6 - BOOLEAN vs INTEGER（可JOIN但语义奇怪）
+        if (t1 in bool_types and t2 in int_all) or (t1 in int_all and t2 in bool_types):
+            return 0.6
+        
+        # ===== UUID类型 =====
+        uuid_types = {"uuid"}
+        
+        if t1 in uuid_types and t2 in uuid_types:
+            return 1.0
+        
+        # ===== 跨大类：全部不兼容 =====
+        # 数值类型 vs 字符串类型 → 0.0
+        all_numeric = int_all | numeric_types | float_types
+        if (t1 in all_numeric and t2 in str_all) or (t1 in str_all and t2 in all_numeric):
+            return 0.0
+        
+        # 时间类型 vs 字符串类型 → 0.0
+        all_time = date_types | timestamp_all | time_types
+        if (t1 in all_time and t2 in str_all) or (t1 in str_all and t2 in all_time):
+            return 0.0
+        
+        # UUID vs 其他类型 → 0.0
+        if (t1 in uuid_types and t2 not in uuid_types) or (t1 not in uuid_types and t2 in uuid_types):
+            return 0.0
+        
+        # 布尔 vs 其他非数值类型 → 0.0
+        if (t1 in bool_types and t2 not in (bool_types | int_all)) or \
+           (t1 not in (bool_types | int_all) and t2 in bool_types):
+            return 0.0
+        
+        # ===== 其他未知类型组合 =====
         return 0.0
 
     def _normalize_type(self, data_type: str) -> str:
@@ -473,7 +586,7 @@ class CandidateGenerator:
                     continue
                 
                 # 优先级1：主动搜索（重要约束列 -> 同名搜索）
-                if self.active_search_enabled and self._has_important_constraint(col_profile):
+                if self.active_search_enabled and self._has_defined_constraint(col_profile):
                     logger.debug("[active_search] 源列满足约束: %s.%s", source_full_name, col_name)
                     # 在所有目标表中搜索同名列（大小写不敏感）
                     for target_name, target_table in tables.items():
@@ -554,7 +667,7 @@ class CandidateGenerator:
                                 target_col_name,
                             )                
                 # 优先级2：逻辑主键匹配（源列是逻辑主键 -> 目标表符合约束的列）
-                elif self._is_logical_primary_key(col_name, source_table):
+                if self._is_logical_primary_key(col_name, source_table):
                     logger.debug("[logical_key] 源列逻辑主键: %s.%s", source_full_name, col_name)
                     for target_name, target_table in tables.items():
                         if target_name == source_name:
@@ -649,7 +762,7 @@ class CandidateGenerator:
 
         return candidates
 
-    def _has_important_constraint(self, col_profile: dict) -> bool:
+    def _has_defined_constraint(self, col_profile: dict) -> bool:
         """检查列是否有重要约束"""
         structure_flags = col_profile.get("structure_flags", {})
 
@@ -664,9 +777,9 @@ class CandidateGenerator:
                 return True
 
         # 检查单列索引
-        if structure_flags.get("is_indexed"):
-            if "single_field_index" in self.important_constraints:
-                return True
+        # if structure_flags.get("is_indexed"):
+        #     if "single_field_index" in self.important_constraints:
+        #         return True
 
         return False
 

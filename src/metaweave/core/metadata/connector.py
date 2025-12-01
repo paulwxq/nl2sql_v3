@@ -96,6 +96,12 @@ class DatabaseConnector:
         conn = None
         try:
             conn = self.pool.getconn()
+
+            # 使用 autocommit 模式以避免长事务占用连接
+            # 当前所有对 PostgreSQL 的操作均为只读查询，使用 autocommit 更加安全、简单
+            if not conn.autocommit:
+                conn.autocommit = True
+
             yield conn
         except Exception as e:
             logger.error(f"获取数据库连接失败: {e}")
