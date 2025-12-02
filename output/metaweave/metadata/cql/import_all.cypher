@@ -1,7 +1,7 @@
 // import_all.cypher
 // Neo4j 元数据导入脚本（global 模式，包含所有表和关系）
-// 生成时间: 2025-11-30T17:12:16.363542
-// 统计: 6 张表, 22 个列, 6 个关系
+// 生成时间: 2025-12-02T18:42:56.368128
+// 统计: 9 张表, 41 个列, 7 个关系
 
 // =====================================================================
 // 1. 创建唯一约束
@@ -85,6 +85,19 @@ UNWIND [
     "indexes": []
   },
   {
+    "full_name": "public.equipment_config",
+    "schema": "public",
+    "name": "equipment_config",
+    "comment": "设备配置维度表：描述设备在某个配置版本下的关键配置属性，用于按“设备ID + 配置版本”关联到工单事实。",
+    "pk": [],
+    "uk": [],
+    "fk": [],
+    "logic_pk": [],
+    "logic_fk": [],
+    "logic_uk": [],
+    "indexes": []
+  },
+  {
     "full_name": "public.fact_store_sales_day",
     "schema": "public",
     "name": "fact_store_sales_day",
@@ -118,6 +131,37 @@ UNWIND [
         "product_type_id"
       ]
     ],
+    "logic_fk": [],
+    "logic_uk": [],
+    "indexes": []
+  },
+  {
+    "full_name": "public.fault_catalog",
+    "schema": "public",
+    "name": "fault_catalog",
+    "comment": "故障码字典维度表：按“产线/产品线 + 子系统 + 故障码”定义故障含义与处理建议，避免同码异义。",
+    "pk": [],
+    "uk": [],
+    "fk": [],
+    "logic_pk": [
+      [
+        "product_line_code",
+        "fault_code"
+      ]
+    ],
+    "logic_fk": [],
+    "logic_uk": [],
+    "indexes": []
+  },
+  {
+    "full_name": "public.maintenance_work_order",
+    "schema": "public",
+    "name": "maintenance_work_order",
+    "comment": "维修工单事实表：粒度为“工单-行/条目”，记录设备故障发生时间、故障码上下文、以及停机与成本等关键指标。",
+    "pk": [],
+    "uk": [],
+    "fk": [],
+    "logic_pk": [],
     "logic_fk": [],
     "logic_uk": [],
     "indexes": []
@@ -380,6 +424,74 @@ UNWIND [
     "null_rate": 0.0
   },
   {
+    "full_name": "public.equipment_config.equipment_id",
+    "schema": "public",
+    "table": "equipment_config",
+    "name": "equipment_id",
+    "comment": "设备ID（资产编号）",
+    "data_type": "integer",
+    "semantic_role": "identifier",
+    "is_pk": false,
+    "is_uk": false,
+    "is_fk": false,
+    "is_time": false,
+    "is_measure": false,
+    "pk_position": 0,
+    "uniqueness": 0.5,
+    "null_rate": 0.0
+  },
+  {
+    "full_name": "public.equipment_config.config_version",
+    "schema": "public",
+    "table": "equipment_config",
+    "name": "config_version",
+    "comment": "配置版本/改造批次（可为语义化版本或批次号）",
+    "data_type": "character varying",
+    "semantic_role": "audit",
+    "is_pk": false,
+    "is_uk": false,
+    "is_fk": false,
+    "is_time": false,
+    "is_measure": false,
+    "pk_position": 0,
+    "uniqueness": 0.1667,
+    "null_rate": 0.0
+  },
+  {
+    "full_name": "public.equipment_config.controller_model",
+    "schema": "public",
+    "table": "equipment_config",
+    "name": "controller_model",
+    "comment": "控制器型号",
+    "data_type": "character varying",
+    "semantic_role": "attribute",
+    "is_pk": false,
+    "is_uk": false,
+    "is_fk": false,
+    "is_time": false,
+    "is_measure": false,
+    "pk_position": 0,
+    "uniqueness": 0.5,
+    "null_rate": 0.0
+  },
+  {
+    "full_name": "public.equipment_config.firmware_version",
+    "schema": "public",
+    "table": "equipment_config",
+    "name": "firmware_version",
+    "comment": "固件版本号（语义化版本等）",
+    "data_type": "character varying",
+    "semantic_role": "audit",
+    "is_pk": false,
+    "is_uk": false,
+    "is_fk": false,
+    "is_time": false,
+    "is_measure": false,
+    "pk_position": 0,
+    "uniqueness": 0.75,
+    "null_rate": 0.0
+  },
+  {
     "full_name": "public.fact_store_sales_day.store_id",
     "schema": "public",
     "table": "fact_store_sales_day",
@@ -514,6 +626,261 @@ UNWIND [
     "pk_position": 0,
     "uniqueness": 0.75,
     "null_rate": 0.0
+  },
+  {
+    "full_name": "public.fault_catalog.product_line_code",
+    "schema": "public",
+    "table": "fault_catalog",
+    "name": "product_line_code",
+    "comment": "产线/产品线编码",
+    "data_type": "character varying",
+    "semantic_role": "identifier",
+    "is_pk": false,
+    "is_uk": false,
+    "is_fk": false,
+    "is_time": false,
+    "is_measure": false,
+    "pk_position": 0,
+    "uniqueness": 0.1667,
+    "null_rate": 0.0
+  },
+  {
+    "full_name": "public.fault_catalog.subsystem_code",
+    "schema": "public",
+    "table": "fault_catalog",
+    "name": "subsystem_code",
+    "comment": "子系统编码",
+    "data_type": "character varying",
+    "semantic_role": "identifier",
+    "is_pk": false,
+    "is_uk": false,
+    "is_fk": false,
+    "is_time": false,
+    "is_measure": false,
+    "pk_position": 0,
+    "uniqueness": 0.2222,
+    "null_rate": 0.0
+  },
+  {
+    "full_name": "public.fault_catalog.fault_code",
+    "schema": "public",
+    "table": "fault_catalog",
+    "name": "fault_code",
+    "comment": "故障码",
+    "data_type": "character varying",
+    "semantic_role": "identifier",
+    "is_pk": false,
+    "is_uk": false,
+    "is_fk": false,
+    "is_time": false,
+    "is_measure": false,
+    "pk_position": 0,
+    "uniqueness": 0.7222,
+    "null_rate": 0.0
+  },
+  {
+    "full_name": "public.fault_catalog.fault_name",
+    "schema": "public",
+    "table": "fault_catalog",
+    "name": "fault_name",
+    "comment": "故障名称（标准名）",
+    "data_type": "character varying",
+    "semantic_role": "attribute",
+    "is_pk": false,
+    "is_uk": false,
+    "is_fk": false,
+    "is_time": false,
+    "is_measure": false,
+    "pk_position": 0,
+    "uniqueness": 1.0,
+    "null_rate": 0.0
+  },
+  {
+    "full_name": "public.fault_catalog.recommended_action",
+    "schema": "public",
+    "table": "fault_catalog",
+    "name": "recommended_action",
+    "comment": "建议处理措施/排查步骤（长文本）",
+    "data_type": "text",
+    "semantic_role": "attribute",
+    "is_pk": false,
+    "is_uk": false,
+    "is_fk": false,
+    "is_time": false,
+    "is_measure": false,
+    "pk_position": 0,
+    "uniqueness": 1.0,
+    "null_rate": 0.0
+  },
+  {
+    "full_name": "public.maintenance_work_order.wo_id",
+    "schema": "public",
+    "table": "maintenance_work_order",
+    "name": "wo_id",
+    "comment": "工单ID",
+    "data_type": "integer",
+    "semantic_role": "identifier",
+    "is_pk": false,
+    "is_uk": false,
+    "is_fk": false,
+    "is_time": false,
+    "is_measure": false,
+    "pk_position": 0,
+    "uniqueness": 0.5,
+    "null_rate": 0.0
+  },
+  {
+    "full_name": "public.maintenance_work_order.wo_line_no",
+    "schema": "public",
+    "table": "maintenance_work_order",
+    "name": "wo_line_no",
+    "comment": "工单行号/条目序号",
+    "data_type": "smallint",
+    "semantic_role": "identifier",
+    "is_pk": false,
+    "is_uk": false,
+    "is_fk": false,
+    "is_time": false,
+    "is_measure": false,
+    "pk_position": 0,
+    "uniqueness": 0.01,
+    "null_rate": 0.0
+  },
+  {
+    "full_name": "public.maintenance_work_order.fault_ts",
+    "schema": "public",
+    "table": "maintenance_work_order",
+    "name": "fault_ts",
+    "comment": "故障发生时间",
+    "data_type": "timestamp without time zone",
+    "semantic_role": "audit",
+    "is_pk": false,
+    "is_uk": false,
+    "is_fk": false,
+    "is_time": false,
+    "is_measure": false,
+    "pk_position": 0,
+    "uniqueness": 1.0,
+    "null_rate": 0.0
+  },
+  {
+    "full_name": "public.maintenance_work_order.equipment_id",
+    "schema": "public",
+    "table": "maintenance_work_order",
+    "name": "equipment_id",
+    "comment": "设备ID（资产编号）",
+    "data_type": "integer",
+    "semantic_role": "identifier",
+    "is_pk": false,
+    "is_uk": false,
+    "is_fk": false,
+    "is_time": false,
+    "is_measure": false,
+    "pk_position": 0,
+    "uniqueness": 0.03,
+    "null_rate": 0.0
+  },
+  {
+    "full_name": "public.maintenance_work_order.config_version",
+    "schema": "public",
+    "table": "maintenance_work_order",
+    "name": "config_version",
+    "comment": "设备配置版本/改造批次（与设备配置表形成2列关联）",
+    "data_type": "character varying",
+    "semantic_role": "audit",
+    "is_pk": false,
+    "is_uk": false,
+    "is_fk": false,
+    "is_time": false,
+    "is_measure": false,
+    "pk_position": 0,
+    "uniqueness": 0.01,
+    "null_rate": 0.0
+  },
+  {
+    "full_name": "public.maintenance_work_order.product_line_code",
+    "schema": "public",
+    "table": "maintenance_work_order",
+    "name": "product_line_code",
+    "comment": "产线/产品线编码（与故障码字典形成3列关联之一）",
+    "data_type": "character varying",
+    "semantic_role": "identifier",
+    "is_pk": false,
+    "is_uk": false,
+    "is_fk": false,
+    "is_time": false,
+    "is_measure": false,
+    "pk_position": 0,
+    "uniqueness": 0.015,
+    "null_rate": 0.0
+  },
+  {
+    "full_name": "public.maintenance_work_order.subsystem_code",
+    "schema": "public",
+    "table": "maintenance_work_order",
+    "name": "subsystem_code",
+    "comment": "子系统编码（与故障码字典形成3列关联之一）",
+    "data_type": "character varying",
+    "semantic_role": "identifier",
+    "is_pk": false,
+    "is_uk": false,
+    "is_fk": false,
+    "is_time": false,
+    "is_measure": false,
+    "pk_position": 0,
+    "uniqueness": 0.02,
+    "null_rate": 0.0
+  },
+  {
+    "full_name": "public.maintenance_work_order.fault_code",
+    "schema": "public",
+    "table": "maintenance_work_order",
+    "name": "fault_code",
+    "comment": "故障码（与故障码字典形成3列关联之一）",
+    "data_type": "character varying",
+    "semantic_role": "identifier",
+    "is_pk": false,
+    "is_uk": false,
+    "is_fk": false,
+    "is_time": false,
+    "is_measure": false,
+    "pk_position": 0,
+    "uniqueness": 0.065,
+    "null_rate": 0.0
+  },
+  {
+    "full_name": "public.maintenance_work_order.downtime_minutes",
+    "schema": "public",
+    "table": "maintenance_work_order",
+    "name": "downtime_minutes",
+    "comment": "停机时长（分钟）",
+    "data_type": "integer",
+    "semantic_role": "identifier",
+    "is_pk": false,
+    "is_uk": false,
+    "is_fk": false,
+    "is_time": false,
+    "is_measure": false,
+    "pk_position": 0,
+    "uniqueness": 1.0,
+    "null_rate": 0.0
+  },
+  {
+    "full_name": "public.maintenance_work_order.spare_part_cost",
+    "schema": "public",
+    "table": "maintenance_work_order",
+    "name": "spare_part_cost",
+    "comment": "备件费用（金额）",
+    "data_type": "numeric",
+    "semantic_role": "metric",
+    "is_pk": false,
+    "is_uk": false,
+    "is_fk": false,
+    "is_time": false,
+    "is_measure": true,
+    "pk_position": 0,
+    "uniqueness": 1.0,
+    "null_rate": 0.0
   }
 ] AS c
 MERGE (n:Column {full_name: c.full_name})
@@ -594,6 +961,22 @@ UNWIND [
     "column_full_name": "public.dim_store.region_id"
   },
   {
+    "table_full_name": "public.equipment_config",
+    "column_full_name": "public.equipment_config.equipment_id"
+  },
+  {
+    "table_full_name": "public.equipment_config",
+    "column_full_name": "public.equipment_config.config_version"
+  },
+  {
+    "table_full_name": "public.equipment_config",
+    "column_full_name": "public.equipment_config.controller_model"
+  },
+  {
+    "table_full_name": "public.equipment_config",
+    "column_full_name": "public.equipment_config.firmware_version"
+  },
+  {
     "table_full_name": "public.fact_store_sales_day",
     "column_full_name": "public.fact_store_sales_day.store_id"
   },
@@ -624,6 +1007,66 @@ UNWIND [
   {
     "table_full_name": "public.fact_store_sales_month",
     "column_full_name": "public.fact_store_sales_month.amount"
+  },
+  {
+    "table_full_name": "public.fault_catalog",
+    "column_full_name": "public.fault_catalog.product_line_code"
+  },
+  {
+    "table_full_name": "public.fault_catalog",
+    "column_full_name": "public.fault_catalog.subsystem_code"
+  },
+  {
+    "table_full_name": "public.fault_catalog",
+    "column_full_name": "public.fault_catalog.fault_code"
+  },
+  {
+    "table_full_name": "public.fault_catalog",
+    "column_full_name": "public.fault_catalog.fault_name"
+  },
+  {
+    "table_full_name": "public.fault_catalog",
+    "column_full_name": "public.fault_catalog.recommended_action"
+  },
+  {
+    "table_full_name": "public.maintenance_work_order",
+    "column_full_name": "public.maintenance_work_order.wo_id"
+  },
+  {
+    "table_full_name": "public.maintenance_work_order",
+    "column_full_name": "public.maintenance_work_order.wo_line_no"
+  },
+  {
+    "table_full_name": "public.maintenance_work_order",
+    "column_full_name": "public.maintenance_work_order.fault_ts"
+  },
+  {
+    "table_full_name": "public.maintenance_work_order",
+    "column_full_name": "public.maintenance_work_order.equipment_id"
+  },
+  {
+    "table_full_name": "public.maintenance_work_order",
+    "column_full_name": "public.maintenance_work_order.config_version"
+  },
+  {
+    "table_full_name": "public.maintenance_work_order",
+    "column_full_name": "public.maintenance_work_order.product_line_code"
+  },
+  {
+    "table_full_name": "public.maintenance_work_order",
+    "column_full_name": "public.maintenance_work_order.subsystem_code"
+  },
+  {
+    "table_full_name": "public.maintenance_work_order",
+    "column_full_name": "public.maintenance_work_order.fault_code"
+  },
+  {
+    "table_full_name": "public.maintenance_work_order",
+    "column_full_name": "public.maintenance_work_order.downtime_minutes"
+  },
+  {
+    "table_full_name": "public.maintenance_work_order",
+    "column_full_name": "public.maintenance_work_order.spare_part_cost"
   }
 ] AS hc
 MATCH (t:Table {full_name: hc.table_full_name})
@@ -635,6 +1078,22 @@ MERGE (t)-[:HAS_COLUMN]->(c);
 // =====================================================================
 
 UNWIND [
+  {
+    "src_full_name": "public.maintenance_work_order",
+    "dst_full_name": "public.fault_catalog",
+    "cardinality": "N:1",
+    "constraint_name": null,
+    "join_type": "INNER JOIN",
+    "on": "SRC.product_line_code = DST.product_line_code AND SRC.fault_code = DST.fault_code",
+    "source_columns": [
+      "product_line_code",
+      "fault_code"
+    ],
+    "target_columns": [
+      "product_line_code",
+      "fault_code"
+    ]
+  },
   {
     "src_full_name": "public.dim_store",
     "dst_full_name": "public.dim_company",
@@ -680,7 +1139,7 @@ UNWIND [
   {
     "src_full_name": "public.dim_store",
     "dst_full_name": "public.dim_region",
-    "cardinality": "N:1",
+    "cardinality": "M:N",
     "constraint_name": null,
     "join_type": "INNER JOIN",
     "on": "SRC.region_id = DST.region_id",

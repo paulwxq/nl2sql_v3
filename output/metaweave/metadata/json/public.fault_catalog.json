@@ -1,53 +1,45 @@
 {
   "metadata_version": "2.0",
-  "generated_at": "2025-12-02T10:33:24.504327Z",
+  "generated_at": "2025-12-02T10:33:24.624619Z",
   "table_info": {
     "schema_name": "public",
-    "table_name": "dim_region",
+    "table_name": "fault_catalog",
     "table_type": "table",
-    "comment": "地区维表：省/市/区（含各级名称与ID）",
+    "comment": "故障码字典维度表：按“产线/产品线 + 子系统 + 故障码”定义故障含义与处理建议，避免同码异义。",
     "comment_source": "ddl",
-    "total_rows": 8,
-    "total_columns": 6
+    "total_rows": 18,
+    "total_columns": 5
   },
   "column_profiles": {
-    "region_id": {
-      "column_name": "region_id",
+    "product_line_code": {
+      "column_name": "product_line_code",
       "ordinal_position": 1,
-      "data_type": "integer",
-      "character_maximum_length": null,
-      "numeric_precision": 32,
+      "data_type": "character varying",
+      "character_maximum_length": 32,
+      "numeric_precision": null,
       "numeric_scale": null,
-      "is_nullable": false,
+      "is_nullable": true,
       "column_default": null,
-      "comment": "区（县）ID（主键）",
+      "comment": "产线/产品线编码",
       "comment_source": "ddl",
       "statistics": {
-        "sample_count": 8,
-        "unique_count": 8,
+        "sample_count": 18,
+        "unique_count": 3,
         "null_count": 0,
         "null_rate": 0.0,
-        "uniqueness": 1.0,
-        "min": "320102",
-        "max": "440305",
-        "mean": "380255.125",
+        "uniqueness": 0.1667,
         "value_distribution": {
-          "440106": 1,
-          "440104": 1,
-          "440305": 1,
-          "440304": 1,
-          "320106": 1,
-          "320102": 1,
-          "320506": 1,
-          "320508": 1
+          "LINE_A": 6,
+          "LINE_B": 6,
+          "LINE_C": 6
         }
       },
       "semantic_analysis": {
         "semantic_role": "identifier",
-        "semantic_confidence": 0.95,
+        "semantic_confidence": 0.85,
         "inference_basis": [
           "type_whitelist_passed",
-          "high_uniqueness"
+          "naming_with_uniqueness"
         ]
       },
       "structure_flags": {
@@ -55,48 +47,136 @@
         "is_composite_primary_key_member": false,
         "is_foreign_key": false,
         "is_composite_foreign_key_member": false,
-        "is_unique": true,
+        "is_unique": false,
         "is_composite_unique_member": false,
         "is_unique_constraint": false,
         "is_composite_unique_constraint_member": false,
         "is_indexed": false,
         "is_composite_indexed_member": false,
-        "is_nullable": false
+        "is_nullable": true
       },
       "role_specific_info": {
         "identifier_info": {
-          "naming_pattern": "logical_primary_key",
+          "naming_pattern": "code",
           "is_surrogate": true
         }
       }
     },
-    "region_name": {
-      "column_name": "region_name",
+    "subsystem_code": {
+      "column_name": "subsystem_code",
       "ordinal_position": 2,
       "data_type": "character varying",
-      "character_maximum_length": 100,
+      "character_maximum_length": 32,
       "numeric_precision": null,
       "numeric_scale": null,
-      "is_nullable": false,
+      "is_nullable": true,
       "column_default": null,
-      "comment": "区（县）名称",
+      "comment": "子系统编码",
       "comment_source": "ddl",
       "statistics": {
-        "sample_count": 8,
-        "unique_count": 8,
+        "sample_count": 18,
+        "unique_count": 4,
         "null_count": 0,
         "null_rate": 0.0,
-        "uniqueness": 1.0,
+        "uniqueness": 0.2222,
         "value_distribution": {
-          "天河区": 1,
-          "越秀区": 1,
-          "南山区": 1,
-          "福田区": 1,
-          "鼓楼区": 1,
-          "玄武区": 1,
-          "吴中区": 1,
-          "姑苏区": 1
+          "ELEC": 5,
+          "HYD": 5,
+          "CTRL": 4,
+          "SENS": 4
         }
+      },
+      "semantic_analysis": {
+        "semantic_role": "identifier",
+        "semantic_confidence": 0.85,
+        "inference_basis": [
+          "type_whitelist_passed",
+          "naming_with_uniqueness"
+        ]
+      },
+      "structure_flags": {
+        "is_primary_key": false,
+        "is_composite_primary_key_member": false,
+        "is_foreign_key": false,
+        "is_composite_foreign_key_member": false,
+        "is_unique": false,
+        "is_composite_unique_member": false,
+        "is_unique_constraint": false,
+        "is_composite_unique_constraint_member": false,
+        "is_indexed": false,
+        "is_composite_indexed_member": false,
+        "is_nullable": true
+      },
+      "role_specific_info": {
+        "identifier_info": {
+          "naming_pattern": "code",
+          "is_surrogate": true
+        }
+      }
+    },
+    "fault_code": {
+      "column_name": "fault_code",
+      "ordinal_position": 3,
+      "data_type": "character varying",
+      "character_maximum_length": 32,
+      "numeric_precision": null,
+      "numeric_scale": null,
+      "is_nullable": true,
+      "column_default": null,
+      "comment": "故障码",
+      "comment_source": "ddl",
+      "statistics": {
+        "sample_count": 18,
+        "unique_count": 13,
+        "null_count": 0,
+        "null_rate": 0.0,
+        "uniqueness": 0.7222
+      },
+      "semantic_analysis": {
+        "semantic_role": "identifier",
+        "semantic_confidence": 0.85,
+        "inference_basis": [
+          "type_whitelist_passed",
+          "naming_with_uniqueness"
+        ]
+      },
+      "structure_flags": {
+        "is_primary_key": false,
+        "is_composite_primary_key_member": false,
+        "is_foreign_key": false,
+        "is_composite_foreign_key_member": false,
+        "is_unique": false,
+        "is_composite_unique_member": false,
+        "is_unique_constraint": false,
+        "is_composite_unique_constraint_member": false,
+        "is_indexed": false,
+        "is_composite_indexed_member": false,
+        "is_nullable": true
+      },
+      "role_specific_info": {
+        "identifier_info": {
+          "naming_pattern": "code",
+          "is_surrogate": true
+        }
+      }
+    },
+    "fault_name": {
+      "column_name": "fault_name",
+      "ordinal_position": 4,
+      "data_type": "character varying",
+      "character_maximum_length": 128,
+      "numeric_precision": null,
+      "numeric_scale": null,
+      "is_nullable": true,
+      "column_default": null,
+      "comment": "故障名称（标准名）",
+      "comment_source": "ddl",
+      "statistics": {
+        "sample_count": 18,
+        "unique_count": 18,
+        "null_count": 0,
+        "null_rate": 0.0,
+        "uniqueness": 1.0
       },
       "semantic_analysis": {
         "semantic_role": "attribute",
@@ -116,185 +196,27 @@
         "is_composite_unique_constraint_member": false,
         "is_indexed": false,
         "is_composite_indexed_member": false,
-        "is_nullable": false
+        "is_nullable": true
       },
       "role_specific_info": {}
     },
-    "city_id": {
-      "column_name": "city_id",
-      "ordinal_position": 3,
-      "data_type": "integer",
-      "character_maximum_length": null,
-      "numeric_precision": 32,
-      "numeric_scale": null,
-      "is_nullable": false,
-      "column_default": null,
-      "comment": "城市ID",
-      "comment_source": "ddl",
-      "statistics": {
-        "sample_count": 8,
-        "unique_count": 4,
-        "null_count": 0,
-        "null_rate": 0.0,
-        "uniqueness": 0.5,
-        "min": "3201",
-        "max": "4403",
-        "mean": "3802.5",
-        "value_distribution": {
-          "4401": 2,
-          "4403": 2,
-          "3201": 2,
-          "3205": 2
-        }
-      },
-      "semantic_analysis": {
-        "semantic_role": "identifier",
-        "semantic_confidence": 0.85,
-        "inference_basis": [
-          "type_whitelist_passed",
-          "naming_with_uniqueness"
-        ]
-      },
-      "structure_flags": {
-        "is_primary_key": false,
-        "is_composite_primary_key_member": false,
-        "is_foreign_key": false,
-        "is_composite_foreign_key_member": false,
-        "is_unique": false,
-        "is_composite_unique_member": false,
-        "is_unique_constraint": false,
-        "is_composite_unique_constraint_member": false,
-        "is_indexed": false,
-        "is_composite_indexed_member": false,
-        "is_nullable": false
-      },
-      "role_specific_info": {
-        "identifier_info": {
-          "naming_pattern": "id",
-          "is_surrogate": true
-        }
-      }
-    },
-    "city_name": {
-      "column_name": "city_name",
-      "ordinal_position": 4,
-      "data_type": "character varying",
-      "character_maximum_length": 100,
-      "numeric_precision": null,
-      "numeric_scale": null,
-      "is_nullable": false,
-      "column_default": null,
-      "comment": "城市名称",
-      "comment_source": "ddl",
-      "statistics": {
-        "sample_count": 8,
-        "unique_count": 4,
-        "null_count": 0,
-        "null_rate": 0.0,
-        "uniqueness": 0.5,
-        "value_distribution": {
-          "广州市": 2,
-          "深圳市": 2,
-          "南京市": 2,
-          "苏州市": 2
-        }
-      },
-      "semantic_analysis": {
-        "semantic_role": "attribute",
-        "semantic_confidence": 0.7,
-        "inference_basis": [
-          "fallback_attribute"
-        ]
-      },
-      "structure_flags": {
-        "is_primary_key": false,
-        "is_composite_primary_key_member": false,
-        "is_foreign_key": false,
-        "is_composite_foreign_key_member": false,
-        "is_unique": false,
-        "is_composite_unique_member": false,
-        "is_unique_constraint": false,
-        "is_composite_unique_constraint_member": false,
-        "is_indexed": false,
-        "is_composite_indexed_member": false,
-        "is_nullable": false
-      },
-      "role_specific_info": {}
-    },
-    "province_id": {
-      "column_name": "province_id",
+    "recommended_action": {
+      "column_name": "recommended_action",
       "ordinal_position": 5,
-      "data_type": "integer",
+      "data_type": "text",
       "character_maximum_length": null,
-      "numeric_precision": 32,
-      "numeric_scale": null,
-      "is_nullable": false,
-      "column_default": null,
-      "comment": "省份ID",
-      "comment_source": "ddl",
-      "statistics": {
-        "sample_count": 8,
-        "unique_count": 2,
-        "null_count": 0,
-        "null_rate": 0.0,
-        "uniqueness": 0.25,
-        "min": "32",
-        "max": "44",
-        "mean": "38.0",
-        "value_distribution": {
-          "44": 4,
-          "32": 4
-        }
-      },
-      "semantic_analysis": {
-        "semantic_role": "identifier",
-        "semantic_confidence": 0.85,
-        "inference_basis": [
-          "type_whitelist_passed",
-          "naming_with_uniqueness"
-        ]
-      },
-      "structure_flags": {
-        "is_primary_key": false,
-        "is_composite_primary_key_member": false,
-        "is_foreign_key": false,
-        "is_composite_foreign_key_member": false,
-        "is_unique": false,
-        "is_composite_unique_member": false,
-        "is_unique_constraint": false,
-        "is_composite_unique_constraint_member": false,
-        "is_indexed": false,
-        "is_composite_indexed_member": false,
-        "is_nullable": false
-      },
-      "role_specific_info": {
-        "identifier_info": {
-          "naming_pattern": "id",
-          "is_surrogate": true
-        }
-      }
-    },
-    "province_name": {
-      "column_name": "province_name",
-      "ordinal_position": 6,
-      "data_type": "character varying",
-      "character_maximum_length": 100,
       "numeric_precision": null,
       "numeric_scale": null,
-      "is_nullable": false,
+      "is_nullable": true,
       "column_default": null,
-      "comment": "省份名称",
+      "comment": "建议处理措施/排查步骤（长文本）",
       "comment_source": "ddl",
       "statistics": {
-        "sample_count": 8,
-        "unique_count": 2,
+        "sample_count": 18,
+        "unique_count": 18,
         "null_count": 0,
         "null_rate": 0.0,
-        "uniqueness": 0.25,
-        "value_distribution": {
-          "广东省": 4,
-          "江苏省": 4
-        }
+        "uniqueness": 1.0
       },
       "semantic_analysis": {
         "semantic_role": "attribute",
@@ -308,13 +230,13 @@
         "is_composite_primary_key_member": false,
         "is_foreign_key": false,
         "is_composite_foreign_key_member": false,
-        "is_unique": false,
+        "is_unique": true,
         "is_composite_unique_member": false,
         "is_unique_constraint": false,
         "is_composite_unique_constraint_member": false,
         "is_indexed": false,
         "is_composite_indexed_member": false,
-        "is_nullable": false
+        "is_nullable": true
       },
       "role_specific_info": {}
     }
@@ -326,7 +248,6 @@
       "fact_dimension_columns",
       "dim_identifier_columns",
       "dim_has_primary_key",
-      "dim_name_pattern",
       "dim_comment_keyword"
     ],
     "physical_constraints": {
@@ -336,13 +257,13 @@
       "indexes": []
     },
     "column_statistics": {
-      "total_columns": 6,
+      "total_columns": 5,
       "identifier_count": 3,
       "metric_count": 0,
       "datetime_count": 0,
       "enum_count": 0,
       "audit_count": 0,
-      "attribute_count": 3,
+      "attribute_count": 2,
       "primary_key_count": 0,
       "foreign_key_count": 0
     },
@@ -350,69 +271,64 @@
       "candidate_primary_keys": [
         {
           "columns": [
-            "region_id"
+            "product_line_code",
+            "fault_code"
           ],
-          "confidence_score": 1.0,
+          "confidence_score": 0.88,
           "uniqueness": 1.0,
           "null_rate": 0.0
         }
       ]
     },
     "dim_table_info": {
-      "natural_key": "region_id",
+      "natural_key": "product_line_code",
       "surrogate_key": null,
       "attributes": [
-        "region_name",
-        "city_name",
-        "province_name"
+        "fault_name",
+        "recommended_action"
       ]
     }
   },
   "sample_records": {
     "sample_method": "random",
     "sample_size": 5,
-    "total_rows": 8,
-    "sampled_at": "2025-12-02T10:30:11.328796Z",
+    "total_rows": 18,
+    "sampled_at": "2025-12-02T10:30:11.425193Z",
     "records": [
       {
-        "region_id": 440106,
-        "region_name": "天河区",
-        "city_id": 4401,
-        "city_name": "广州市",
-        "province_id": 44,
-        "province_name": "广东省"
+        "product_line_code": "LINE_A",
+        "subsystem_code": "ELEC",
+        "fault_code": "E101",
+        "fault_name": "电源欠压",
+        "recommended_action": "检查电源输入与UPS；测量24V/48V输出；确认接地与端子紧固。"
       },
       {
-        "region_id": 440104,
-        "region_name": "越秀区",
-        "city_id": 4401,
-        "city_name": "广州市",
-        "province_id": 44,
-        "province_name": "广东省"
+        "product_line_code": "LINE_A",
+        "subsystem_code": "ELEC",
+        "fault_code": "E102",
+        "fault_name": "电源过压",
+        "recommended_action": "检查稳压模块；排查浪涌；必要时更换电源模块。"
       },
       {
-        "region_id": 440305,
-        "region_name": "南山区",
-        "city_id": 4403,
-        "city_name": "深圳市",
-        "province_id": 44,
-        "province_name": "广东省"
+        "product_line_code": "LINE_A",
+        "subsystem_code": "CTRL",
+        "fault_code": "C401",
+        "fault_name": "PLC 通讯超时",
+        "recommended_action": "检查以太网/现场总线；核对IP/站号；观察交换机端口与丢包。"
       },
       {
-        "region_id": 440304,
-        "region_name": "福田区",
-        "city_id": 4403,
-        "city_name": "深圳市",
-        "province_id": 44,
-        "province_name": "广东省"
+        "product_line_code": "LINE_A",
+        "subsystem_code": "SENS",
+        "fault_code": "S301",
+        "fault_name": "温度传感器开路",
+        "recommended_action": "检查传感器线缆与接头；更换传感器；确认量程与标定。"
       },
       {
-        "region_id": 320106,
-        "region_name": "鼓楼区",
-        "city_id": 3201,
-        "city_name": "南京市",
-        "province_id": 32,
-        "province_name": "江苏省"
+        "product_line_code": "LINE_A",
+        "subsystem_code": "HYD",
+        "fault_code": "H201",
+        "fault_name": "液压压力不足",
+        "recommended_action": "检查油位与油温；排查泄漏；检查泵与溢流阀设定。"
       }
     ]
   }

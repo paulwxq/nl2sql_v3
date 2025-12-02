@@ -265,12 +265,15 @@ class MetadataRepository:
             target_schema: str,
             target_table: str
     ) -> str:
-        """推断关系基数
+        """推断外键关系的基数
 
-        规则：
-        - 如果源列是唯一约束/主键 -> 1:1
-        - 如果目标列是唯一约束/主键 -> N:1（默认）
-        - 其他情况 -> M:N
+        优先级：物理约束 > 统计值
+
+        判断逻辑：
+        - 源列唯一 + 目标列唯一 → 1:1
+        - 源列唯一 + 目标列不唯一 → 1:N
+        - 源列不唯一 + 目标列唯一 → N:1
+        - 双方都不唯一 → M:N
 
         Args:
             fk: 外键信息
@@ -282,6 +285,112 @@ class MetadataRepository:
         Returns:
             基数（1:1 | 1:N | N:1 | M:N）
         """
-        # 简化实现：默认N:1（大多数外键都是多对一）
-        # Phase 2可以通过检查uniqueness完善
-        return "N:1"
+        source_columns = fk["source_columns"]
+        target_columns = fk.get("target_columns", fk.get("referenced_columns", []))
+        target_full_name = f"{target_schema}.{target_table}"
+
+        # 判断源列和目标列的唯一性
+        source_is_unique = self._is_columns_unique(tables, source_full_name, source_columns)
+        target_is_unique = self._is_columns_unique(tables, target_full_name, target_columns)
+
+        # 判断基数
+        if source_is_unique and target_is_unique:
+            cardinality = "1:1"
+        elif source_is_unique and not target_is_unique:
+            cardinality = "1:N"
+        elif not source_is_unique and target_is_unique:
+            cardinality = "N:1"
+        else:
+            cardinality = "M:N"
+
+        logger.debug(
+            f"外键基数推断: {source_full_name}{source_columns} -> {target_full_name}{target_columns}, "
+            f"source_unique={source_is_unique}, target_unique={target_is_unique}, cardinality={cardinality}"
+        )
+
+        return cardinality
+
+    def _is_columns_unique(
+            self,
+            tables: Dict[str, dict],
+            full_name: str,
+            columns: List[str]
+    ) -> bool:
+        """判断列（单列或复合列）是否唯一
+
+        优先级：物理约束 > 统计值
+
+        Args:
+            tables: 所有表元数据
+            full_name: 表全名（schema.table）
+            columns: 列名列表
+
+        Returns:
+            True: 列是唯一的
+            False: 列不唯一或无法判断
+        """
+        table = tables.get(full_name)
+        if not table:
+            logger.warning(f"表元数据不存在: {full_name}")
+            return False
+
+        profiles = table.get("column_profiles", {})
+        table_profile = table.get("table_profile", {})
+
+        # === 1. 检查物理约束（优先） ===
+
+        # 单列情况
+        if len(columns) == 1:
+            col_name = columns[0]
+            col_profile = profiles.get(col_name, {})
+            flags = col_profile.get("structure_flags", {})
+
+            # 主键或唯一约束 → 唯一
+            if flags.get("is_primary_key") or flags.get("is_unique_constraint"):
+                logger.debug(f"{full_name}.{col_name}: 物理约束判定为唯一")
+                return True
+
+        # 复合列情况：检查复合主键/唯一约束
+        else:
+            physical = table_profile.get("physical_constraints", {})
+
+            # 检查复合主键
+            pk = physical.get("primary_key")
+            if pk and set(pk.get("columns", [])) == set(columns):
+                logger.debug(f"{full_name}.{columns}: 复合主键，判定为唯一")
+                return True
+
+            # 检查复合唯一约束
+            for uk in physical.get("unique_constraints", []):
+                if set(uk.get("columns", [])) == set(columns):
+                    logger.debug(f"{full_name}.{columns}: 复合唯一约束，判定为唯一")
+                    return True
+
+        # === 2. Fallback 到统计值 ===
+
+        HIGH_UNIQUENESS = 0.95  # 与 scorer 使用相同阈值
+
+        if len(columns) == 1:
+            col_name = columns[0]
+            col_profile = profiles.get(col_name, {})
+            stats = col_profile.get("statistics", {})
+            uniqueness = stats.get("uniqueness", 0.0)
+
+            if uniqueness >= HIGH_UNIQUENESS:
+                logger.debug(f"{full_name}.{col_name}: 统计值 uniqueness={uniqueness:.3f} >= {HIGH_UNIQUENESS}，判定为唯一")
+                return True
+        else:
+            # 复合列：取最小唯一性（保守估计）
+            min_uniqueness = 1.0
+            for col_name in columns:
+                col_profile = profiles.get(col_name, {})
+                stats = col_profile.get("statistics", {})
+                uniqueness = stats.get("uniqueness", 0.0)
+                min_uniqueness = min(min_uniqueness, uniqueness)
+
+            if min_uniqueness >= HIGH_UNIQUENESS:
+                logger.debug(f"{full_name}.{columns}: 组合统计值 min_uniqueness={min_uniqueness:.3f} >= {HIGH_UNIQUENESS}，判定为唯一")
+                return True
+
+        logger.debug(f"{full_name}.{columns}: 未满足唯一条件")
+        return False

@@ -1,6 +1,6 @@
 {
   "metadata_version": "2.0",
-  "generated_at": "2025-12-01T08:02:48.694892Z",
+  "generated_at": "2025-12-02T10:33:24.524086Z",
   "table_info": {
     "schema_name": "public",
     "table_name": "dim_store",
@@ -287,7 +287,7 @@
     "sample_method": "random",
     "sample_size": 5,
     "total_rows": 9,
-    "sampled_at": "2025-11-28T04:41:11.150943Z",
+    "sampled_at": "2025-12-02T10:30:11.316331Z",
     "records": [
       {
         "store_id": 101,

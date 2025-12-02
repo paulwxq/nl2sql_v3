@@ -1,7 +1,7 @@
 -- ====================================
 -- Table: public.dim_product_type
 -- Comment: 商品类型维表
--- Generated: 2025-11-28 12:41:11
+-- Generated: 2025-12-02 18:30:11
 -- ====================================
 
 CREATE TABLE IF NOT EXISTS public.dim_product_type (
@@ -20,7 +20,7 @@ COMMENT ON TABLE public.dim_product_type IS '商品类型维表';
 {
   "version": 1,
   "table": "public.dim_product_type",
-  "generated_at": "2025-11-28T04:41:11.153941Z",
+  "generated_at": "2025-12-02T10:30:11.329797Z",
   "records": [
     {
       "label": "Record 1",

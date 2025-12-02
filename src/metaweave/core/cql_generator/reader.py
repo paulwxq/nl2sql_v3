@@ -370,8 +370,10 @@ class JSONReader:
             source_columns = rel.get("to_columns", [])     # 外键列（翻转）
             target_columns = rel.get("from_columns", [])   # 主键列（翻转）
 
-        # 基数（默认 N:1）
-        cardinality = rel.get("cardinality", "N:1")
+        # 基数翻转（方向翻转时需同步翻转基数）
+        raw_cardinality = rel.get("cardinality", "N:1")
+        cardinality = self._flip_cardinality(raw_cardinality)
+        logger.debug(f"基数翻转: {raw_cardinality} -> {cardinality} ({src_full_name} -> {dst_full_name})")
 
         # 约束名（仅外键直通才有）
         constraint_name = rel.get("constraint_name")
@@ -392,4 +394,30 @@ class JSONReader:
             target_columns=target_columns,  # 主键列
             constraint_name=constraint_name
         )
+
+    def _flip_cardinality(self, cardinality: str) -> str:
+        """翻转基数方向
+
+        当关系方向从 from→to 翻转为 to→from 时，
+        基数也需要相应翻转。
+
+        翻转规则：
+        - "1:N" → "N:1"（1对多 → 多对1）
+        - "N:1" → "1:N"（多对1 → 1对多）
+        - "1:1" → "1:1"（对称，不变）
+        - "M:N" → "M:N"（对称，不变）
+
+        Args:
+            cardinality: 原始基数字符串
+
+        Returns:
+            翻转后的基数字符串
+        """
+        flip_map = {
+            "1:N": "N:1",
+            "N:1": "1:N",
+            "1:1": "1:1",  # 对称，不变
+            "M:N": "M:N",  # 对称，不变
+        }
+        return flip_map.get(cardinality, cardinality)
 

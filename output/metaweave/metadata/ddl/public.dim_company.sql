@@ -1,7 +1,7 @@
 -- ====================================
 -- Table: public.dim_company
 -- Comment: 公司维表
--- Generated: 2025-11-28 12:41:11
+-- Generated: 2025-12-02 18:30:11
 -- ====================================
 
 CREATE TABLE IF NOT EXISTS public.dim_company (
@@ -20,7 +20,7 @@ COMMENT ON TABLE public.dim_company IS '公司维表';
 {
   "version": 1,
   "table": "public.dim_company",
-  "generated_at": "2025-11-28T04:41:11.155948Z",
+  "generated_at": "2025-12-02T10:30:11.327277Z",
   "records": [
     {
       "label": "Record 1",

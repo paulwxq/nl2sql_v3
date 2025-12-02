@@ -245,8 +245,8 @@ class DecisionEngine:
             rel_id_salt=self.rel_id_salt
         )
 
-        # 推断基数（简化实现：默认N:1）
-        cardinality = "N:1"
+        # 从评分结果获取基数（由 scorer 计算）
+        cardinality = candidate.get("cardinality", "N:1")
 
         # 推断方法
         inference_method = candidate.get("candidate_type", "unknown")

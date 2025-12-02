@@ -1,0 +1,644 @@
+{
+  "metadata_version": "2.0",
+  "generated_at": "2025-12-02T10:33:24.861297Z",
+  "table_info": {
+    "schema_name": "public",
+    "table_name": "maintenance_work_order",
+    "table_type": "table",
+    "comment": "维修工单事实表：粒度为“工单-行/条目”，记录设备故障发生时间、故障码上下文、以及停机与成本等关键指标。",
+    "comment_source": "ddl",
+    "total_rows": 200,
+    "total_columns": 10
+  },
+  "column_profiles": {
+    "wo_id": {
+      "column_name": "wo_id",
+      "ordinal_position": 1,
+      "data_type": "integer",
+      "character_maximum_length": null,
+      "numeric_precision": 32,
+      "numeric_scale": null,
+      "is_nullable": true,
+      "column_default": null,
+      "comment": "工单ID",
+      "comment_source": "ddl",
+      "statistics": {
+        "sample_count": 200,
+        "unique_count": 100,
+        "null_count": 0,
+        "null_rate": 0.0,
+        "uniqueness": 0.5,
+        "min": "10000",
+        "max": "10099",
+        "mean": "10049.5"
+      },
+      "semantic_analysis": {
+        "semantic_role": "identifier",
+        "semantic_confidence": 0.85,
+        "inference_basis": [
+          "type_whitelist_passed",
+          "naming_with_uniqueness"
+        ]
+      },
+      "structure_flags": {
+        "is_primary_key": false,
+        "is_composite_primary_key_member": false,
+        "is_foreign_key": false,
+        "is_composite_foreign_key_member": false,
+        "is_unique": false,
+        "is_composite_unique_member": false,
+        "is_unique_constraint": false,
+        "is_composite_unique_constraint_member": false,
+        "is_indexed": false,
+        "is_composite_indexed_member": false,
+        "is_nullable": true
+      },
+      "role_specific_info": {
+        "identifier_info": {
+          "naming_pattern": "id",
+          "is_surrogate": true
+        }
+      }
+    },
+    "wo_line_no": {
+      "column_name": "wo_line_no",
+      "ordinal_position": 2,
+      "data_type": "smallint",
+      "character_maximum_length": null,
+      "numeric_precision": 16,
+      "numeric_scale": null,
+      "is_nullable": true,
+      "column_default": null,
+      "comment": "工单行号/条目序号",
+      "comment_source": "ddl",
+      "statistics": {
+        "sample_count": 200,
+        "unique_count": 2,
+        "null_count": 0,
+        "null_rate": 0.0,
+        "uniqueness": 0.01,
+        "min": "1",
+        "max": "2",
+        "mean": "1.5",
+        "value_distribution": {
+          "1": 100,
+          "2": 100
+        }
+      },
+      "semantic_analysis": {
+        "semantic_role": "identifier",
+        "semantic_confidence": 0.75,
+        "inference_basis": [
+          "type_whitelist_passed",
+          "naming_only"
+        ]
+      },
+      "structure_flags": {
+        "is_primary_key": false,
+        "is_composite_primary_key_member": false,
+        "is_foreign_key": false,
+        "is_composite_foreign_key_member": false,
+        "is_unique": false,
+        "is_composite_unique_member": false,
+        "is_unique_constraint": false,
+        "is_composite_unique_constraint_member": false,
+        "is_indexed": false,
+        "is_composite_indexed_member": false,
+        "is_nullable": true
+      },
+      "role_specific_info": {
+        "identifier_info": {
+          "naming_pattern": "no",
+          "is_surrogate": true
+        }
+      }
+    },
+    "fault_ts": {
+      "column_name": "fault_ts",
+      "ordinal_position": 3,
+      "data_type": "timestamp without time zone",
+      "character_maximum_length": null,
+      "numeric_precision": null,
+      "numeric_scale": null,
+      "is_nullable": true,
+      "column_default": null,
+      "comment": "故障发生时间",
+      "comment_source": "ddl",
+      "statistics": {
+        "sample_count": 200,
+        "unique_count": 200,
+        "null_count": 0,
+        "null_rate": 0.0,
+        "uniqueness": 1.0
+      },
+      "semantic_analysis": {
+        "semantic_role": "audit",
+        "semantic_confidence": 0.95,
+        "inference_basis": [
+          "audit_pattern:_ts$"
+        ]
+      },
+      "structure_flags": {
+        "is_primary_key": false,
+        "is_composite_primary_key_member": false,
+        "is_foreign_key": false,
+        "is_composite_foreign_key_member": false,
+        "is_unique": true,
+        "is_composite_unique_member": false,
+        "is_unique_constraint": false,
+        "is_composite_unique_constraint_member": false,
+        "is_indexed": false,
+        "is_composite_indexed_member": false,
+        "is_nullable": true
+      },
+      "role_specific_info": {
+        "audit_info": {
+          "audit_type": "timestamp",
+          "description": "审计时间戳"
+        }
+      }
+    },
+    "equipment_id": {
+      "column_name": "equipment_id",
+      "ordinal_position": 4,
+      "data_type": "integer",
+      "character_maximum_length": null,
+      "numeric_precision": 32,
+      "numeric_scale": null,
+      "is_nullable": true,
+      "column_default": null,
+      "comment": "设备ID（资产编号）",
+      "comment_source": "ddl",
+      "statistics": {
+        "sample_count": 200,
+        "unique_count": 6,
+        "null_count": 0,
+        "null_rate": 0.0,
+        "uniqueness": 0.03,
+        "min": "1001",
+        "max": "1006",
+        "mean": "1003.46",
+        "value_distribution": {
+          "1001": 34,
+          "1002": 34,
+          "1003": 34,
+          "1004": 34,
+          "1005": 32,
+          "1006": 32
+        }
+      },
+      "semantic_analysis": {
+        "semantic_role": "identifier",
+        "semantic_confidence": 0.75,
+        "inference_basis": [
+          "type_whitelist_passed",
+          "naming_only"
+        ]
+      },
+      "structure_flags": {
+        "is_primary_key": false,
+        "is_composite_primary_key_member": false,
+        "is_foreign_key": false,
+        "is_composite_foreign_key_member": false,
+        "is_unique": false,
+        "is_composite_unique_member": false,
+        "is_unique_constraint": false,
+        "is_composite_unique_constraint_member": false,
+        "is_indexed": false,
+        "is_composite_indexed_member": false,
+        "is_nullable": true
+      },
+      "role_specific_info": {
+        "identifier_info": {
+          "naming_pattern": "id",
+          "is_surrogate": true
+        }
+      }
+    },
+    "config_version": {
+      "column_name": "config_version",
+      "ordinal_position": 5,
+      "data_type": "character varying",
+      "character_maximum_length": 64,
+      "numeric_precision": null,
+      "numeric_scale": null,
+      "is_nullable": true,
+      "column_default": null,
+      "comment": "设备配置版本/改造批次（与设备配置表形成2列关联）",
+      "comment_source": "ddl",
+      "statistics": {
+        "sample_count": 200,
+        "unique_count": 2,
+        "null_count": 0,
+        "null_rate": 0.0,
+        "uniqueness": 0.01,
+        "value_distribution": {
+          "cfg-1.0": 100,
+          "cfg-2.0": 100
+        }
+      },
+      "semantic_analysis": {
+        "semantic_role": "audit",
+        "semantic_confidence": 0.95,
+        "inference_basis": [
+          "audit_pattern:version"
+        ]
+      },
+      "structure_flags": {
+        "is_primary_key": false,
+        "is_composite_primary_key_member": false,
+        "is_foreign_key": false,
+        "is_composite_foreign_key_member": false,
+        "is_unique": false,
+        "is_composite_unique_member": false,
+        "is_unique_constraint": false,
+        "is_composite_unique_constraint_member": false,
+        "is_indexed": false,
+        "is_composite_indexed_member": false,
+        "is_nullable": true
+      },
+      "role_specific_info": {
+        "audit_info": {
+          "audit_type": "version",
+          "description": "版本号"
+        }
+      }
+    },
+    "product_line_code": {
+      "column_name": "product_line_code",
+      "ordinal_position": 6,
+      "data_type": "character varying",
+      "character_maximum_length": 32,
+      "numeric_precision": null,
+      "numeric_scale": null,
+      "is_nullable": true,
+      "column_default": null,
+      "comment": "产线/产品线编码（与故障码字典形成3列关联之一）",
+      "comment_source": "ddl",
+      "statistics": {
+        "sample_count": 200,
+        "unique_count": 3,
+        "null_count": 0,
+        "null_rate": 0.0,
+        "uniqueness": 0.015,
+        "value_distribution": {
+          "LINE_A": 68,
+          "LINE_B": 66,
+          "LINE_C": 66
+        }
+      },
+      "semantic_analysis": {
+        "semantic_role": "identifier",
+        "semantic_confidence": 0.75,
+        "inference_basis": [
+          "type_whitelist_passed",
+          "naming_only"
+        ]
+      },
+      "structure_flags": {
+        "is_primary_key": false,
+        "is_composite_primary_key_member": false,
+        "is_foreign_key": false,
+        "is_composite_foreign_key_member": false,
+        "is_unique": false,
+        "is_composite_unique_member": false,
+        "is_unique_constraint": false,
+        "is_composite_unique_constraint_member": false,
+        "is_indexed": false,
+        "is_composite_indexed_member": false,
+        "is_nullable": true
+      },
+      "role_specific_info": {
+        "identifier_info": {
+          "naming_pattern": "code",
+          "is_surrogate": true
+        }
+      }
+    },
+    "subsystem_code": {
+      "column_name": "subsystem_code",
+      "ordinal_position": 7,
+      "data_type": "character varying",
+      "character_maximum_length": 32,
+      "numeric_precision": null,
+      "numeric_scale": null,
+      "is_nullable": true,
+      "column_default": null,
+      "comment": "子系统编码（与故障码字典形成3列关联之一）",
+      "comment_source": "ddl",
+      "statistics": {
+        "sample_count": 200,
+        "unique_count": 4,
+        "null_count": 0,
+        "null_rate": 0.0,
+        "uniqueness": 0.02,
+        "value_distribution": {
+          "ELEC": 56,
+          "HYD": 55,
+          "CTRL": 45,
+          "SENS": 44
+        }
+      },
+      "semantic_analysis": {
+        "semantic_role": "identifier",
+        "semantic_confidence": 0.75,
+        "inference_basis": [
+          "type_whitelist_passed",
+          "naming_only"
+        ]
+      },
+      "structure_flags": {
+        "is_primary_key": false,
+        "is_composite_primary_key_member": false,
+        "is_foreign_key": false,
+        "is_composite_foreign_key_member": false,
+        "is_unique": false,
+        "is_composite_unique_member": false,
+        "is_unique_constraint": false,
+        "is_composite_unique_constraint_member": false,
+        "is_indexed": false,
+        "is_composite_indexed_member": false,
+        "is_nullable": true
+      },
+      "role_specific_info": {
+        "identifier_info": {
+          "naming_pattern": "code",
+          "is_surrogate": true
+        }
+      }
+    },
+    "fault_code": {
+      "column_name": "fault_code",
+      "ordinal_position": 8,
+      "data_type": "character varying",
+      "character_maximum_length": 32,
+      "numeric_precision": null,
+      "numeric_scale": null,
+      "is_nullable": true,
+      "column_default": null,
+      "comment": "故障码（与故障码字典形成3列关联之一）",
+      "comment_source": "ddl",
+      "statistics": {
+        "sample_count": 200,
+        "unique_count": 13,
+        "null_count": 0,
+        "null_rate": 0.0,
+        "uniqueness": 0.065
+      },
+      "semantic_analysis": {
+        "semantic_role": "identifier",
+        "semantic_confidence": 0.85,
+        "inference_basis": [
+          "type_whitelist_passed",
+          "naming_with_uniqueness"
+        ]
+      },
+      "structure_flags": {
+        "is_primary_key": false,
+        "is_composite_primary_key_member": false,
+        "is_foreign_key": false,
+        "is_composite_foreign_key_member": false,
+        "is_unique": false,
+        "is_composite_unique_member": false,
+        "is_unique_constraint": false,
+        "is_composite_unique_constraint_member": false,
+        "is_indexed": false,
+        "is_composite_indexed_member": false,
+        "is_nullable": true
+      },
+      "role_specific_info": {
+        "identifier_info": {
+          "naming_pattern": "code",
+          "is_surrogate": true
+        }
+      }
+    },
+    "downtime_minutes": {
+      "column_name": "downtime_minutes",
+      "ordinal_position": 9,
+      "data_type": "integer",
+      "character_maximum_length": null,
+      "numeric_precision": 32,
+      "numeric_scale": null,
+      "is_nullable": true,
+      "column_default": null,
+      "comment": "停机时长（分钟）",
+      "comment_source": "ddl",
+      "statistics": {
+        "sample_count": 200,
+        "unique_count": 200,
+        "null_count": 0,
+        "null_rate": 0.0,
+        "uniqueness": 1.0,
+        "min": "6",
+        "max": "244",
+        "mean": "122.9"
+      },
+      "semantic_analysis": {
+        "semantic_role": "identifier",
+        "semantic_confidence": 0.95,
+        "inference_basis": [
+          "type_whitelist_passed",
+          "high_uniqueness"
+        ]
+      },
+      "structure_flags": {
+        "is_primary_key": false,
+        "is_composite_primary_key_member": false,
+        "is_foreign_key": false,
+        "is_composite_foreign_key_member": false,
+        "is_unique": true,
+        "is_composite_unique_member": false,
+        "is_unique_constraint": false,
+        "is_composite_unique_constraint_member": false,
+        "is_indexed": false,
+        "is_composite_indexed_member": false,
+        "is_nullable": true
+      },
+      "role_specific_info": {
+        "identifier_info": {
+          "naming_pattern": "logical_primary_key",
+          "is_surrogate": true
+        }
+      }
+    },
+    "spare_part_cost": {
+      "column_name": "spare_part_cost",
+      "ordinal_position": 10,
+      "data_type": "numeric",
+      "character_maximum_length": null,
+      "numeric_precision": 14,
+      "numeric_scale": 2,
+      "is_nullable": true,
+      "column_default": null,
+      "comment": "备件费用（金额）",
+      "comment_source": "ddl",
+      "statistics": {
+        "sample_count": 200,
+        "unique_count": 200,
+        "null_count": 0,
+        "null_rate": 0.0,
+        "uniqueness": 1.0,
+        "min": "0.97",
+        "max": "194.0",
+        "mean": "97.485"
+      },
+      "semantic_analysis": {
+        "semantic_role": "metric",
+        "semantic_confidence": 0.95,
+        "inference_basis": [
+          "numeric_type",
+          "metric_pattern:cost"
+        ]
+      },
+      "structure_flags": {
+        "is_primary_key": false,
+        "is_composite_primary_key_member": false,
+        "is_foreign_key": false,
+        "is_composite_foreign_key_member": false,
+        "is_unique": true,
+        "is_composite_unique_member": false,
+        "is_unique_constraint": false,
+        "is_composite_unique_constraint_member": false,
+        "is_indexed": false,
+        "is_composite_indexed_member": false,
+        "is_nullable": true
+      },
+      "role_specific_info": {
+        "metric_info": {
+          "metric_category": "amount",
+          "suggested_aggregations": [
+            "SUM",
+            "AVG",
+            "MIN",
+            "MAX"
+          ]
+        }
+      }
+    }
+  },
+  "table_profile": {
+    "table_category": "fact",
+    "confidence": 0.9,
+    "inference_basis": [
+      "fact_has_metric",
+      "fact_dimension_columns",
+      "fact_comment_keyword"
+    ],
+    "physical_constraints": {
+      "primary_key": null,
+      "foreign_keys": [],
+      "unique_constraints": [],
+      "indexes": []
+    },
+    "column_statistics": {
+      "total_columns": 10,
+      "identifier_count": 7,
+      "metric_count": 1,
+      "datetime_count": 0,
+      "enum_count": 0,
+      "audit_count": 2,
+      "attribute_count": 0,
+      "primary_key_count": 0,
+      "foreign_key_count": 0
+    },
+    "logical_keys": {
+      "candidate_primary_keys": [
+        {
+          "columns": [
+            "downtime_minutes"
+          ],
+          "confidence_score": 0.79,
+          "uniqueness": 1.0,
+          "null_rate": 0.0
+        }
+      ]
+    },
+    "fact_table_info": {
+      "grain": [
+        "downtime_minutes"
+      ],
+      "metrics": [
+        "spare_part_cost"
+      ],
+      "dimensions": [
+        "wo_id",
+        "wo_line_no",
+        "equipment_id",
+        "product_line_code",
+        "subsystem_code",
+        "fault_code",
+        "downtime_minutes"
+      ],
+      "time_dimension": null
+    }
+  },
+  "sample_records": {
+    "sample_method": "random",
+    "sample_size": 5,
+    "total_rows": 200,
+    "sampled_at": "2025-12-02T10:30:11.618901Z",
+    "records": [
+      {
+        "wo_id": 10000,
+        "wo_line_no": 1,
+        "fault_ts": "2025-11-01 08:00:00",
+        "equipment_id": 1001,
+        "config_version": "cfg-1.0",
+        "product_line_code": "LINE_A",
+        "subsystem_code": "CTRL",
+        "fault_code": "C401",
+        "downtime_minutes": 12,
+        "spare_part_cost": 0.97
+      },
+      {
+        "wo_id": 10000,
+        "wo_line_no": 2,
+        "fault_ts": "2025-11-01 08:45:00",
+        "equipment_id": 1001,
+        "config_version": "cfg-2.0",
+        "product_line_code": "LINE_A",
+        "subsystem_code": "ELEC",
+        "fault_code": "E101",
+        "downtime_minutes": 19,
+        "spare_part_cost": 1.94
+      },
+      {
+        "wo_id": 10001,
+        "wo_line_no": 1,
+        "fault_ts": "2025-11-01 09:30:00",
+        "equipment_id": 1002,
+        "config_version": "cfg-1.0",
+        "product_line_code": "LINE_A",
+        "subsystem_code": "ELEC",
+        "fault_code": "E102",
+        "downtime_minutes": 26,
+        "spare_part_cost": 2.91
+      },
+      {
+        "wo_id": 10001,
+        "wo_line_no": 2,
+        "fault_ts": "2025-11-01 10:15:00",
+        "equipment_id": 1002,
+        "config_version": "cfg-2.0",
+        "product_line_code": "LINE_A",
+        "subsystem_code": "HYD",
+        "fault_code": "H201",
+        "downtime_minutes": 33,
+        "spare_part_cost": 3.88
+      },
+      {
+        "wo_id": 10002,
+        "wo_line_no": 1,
+        "fault_ts": "2025-11-01 11:00:00",
+        "equipment_id": 1003,
+        "config_version": "cfg-1.0",
+        "product_line_code": "LINE_A",
+        "subsystem_code": "HYD",
+        "fault_code": "H202",
+        "downtime_minutes": 40,
+        "spare_part_cost": 4.85
+      }
+    ]
+  }
+}

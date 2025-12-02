@@ -121,6 +121,11 @@ class TestRelationshipWriter:
         assert "to_table" in rel1
         assert isinstance(rel1["from_table"], dict)
 
+        # 验证 cardinality 字段输出
+        assert "cardinality" in rel1
+        assert rel1["cardinality"] == "N:1"
+        assert data["relationships"][1]["cardinality"] == "N:1"
+
     def test_write_markdown_output(self, writer, sample_relations, temp_output_dir, config):
         """测试Markdown输出"""
         output_files = writer.write_results(sample_relations, [], config)
@@ -251,6 +256,21 @@ class TestRelationshipWriter:
 
     def test_discovery_method_mapping(self, writer, temp_output_dir, config):
         """测试 discovery_method, source_type, source_constraint 字段映射"""
+        # 准备表元数据，用于 _get_source_constraint 方法获取约束类型
+        tables = {
+            "public.fact_sales": {
+                "column_profiles": {
+                    "store_id": {
+                        "structure_flags": {
+                            "is_primary_key": False,
+                            "is_unique_constraint": False,
+                            "is_indexed": True  # 单列索引
+                        }
+                    }
+                }
+            }
+        }
+
         # 创建不同类型的推断关系
         relations = [
             # 单列主动搜索
@@ -315,7 +335,8 @@ class TestRelationshipWriter:
             )
         ]
 
-        output_files = writer.write_results(relations, [], config)
+        # 通过 tables 参数传入表元数据
+        output_files = writer.write_results(relations, [], config, tables=tables)
 
         # 验证JSON输出
         json_file = temp_output_dir / "relationships_global.json"
@@ -325,25 +346,25 @@ class TestRelationshipWriter:
         # 验证单列主动搜索
         rel1 = [r for r in data["relationships"] if r["relationship_id"] == "rel_001"][0]
         assert rel1["discovery_method"] == "active_search"
-        assert rel1.get("source_type") is None
+        assert rel1.get("target_source_type") is None
         assert rel1["source_constraint"] == "single_field_index"
 
         # 验证复合键物理约束
         rel2 = [r for r in data["relationships"] if r["relationship_id"] == "rel_002"][0]
         assert rel2["discovery_method"] == "physical_constraint_matching"
-        assert rel2["source_type"] == "physical_constraints"
+        assert rel2["target_source_type"] == "physical_constraints"
         assert rel2.get("source_constraint") is None
 
         # 验证复合键逻辑主键
         rel3 = [r for r in data["relationships"] if r["relationship_id"] == "rel_003"][0]
         assert rel3["discovery_method"] == "logical_key_matching"
-        assert rel3["source_type"] == "candidate_logical_key"
+        assert rel3["target_source_type"] == "candidate_logical_key"
         assert rel3.get("source_constraint") is None
 
         # 验证复合键动态同名
         rel4 = [r for r in data["relationships"] if r["relationship_id"] == "rel_004"][0]
         assert rel4["discovery_method"] == "dynamic_same_name"
-        assert rel4["source_type"] == "candidate_logical_key"
+        assert rel4["target_source_type"] == "candidate_logical_key"
         assert rel4.get("source_constraint") is None
 
     def test_schema_granularity_warning(self, sample_relations, tmp_path, config, caplog):
@@ -441,3 +462,80 @@ class TestRelationshipWriter:
 
         # 验证复合键关系标题包含列名（方括号格式）
         assert "### 2. public.fact_sales.[store_id, date_day] → public.dim_store_calendar.[store_id, date_day]" in content
+
+    def test_cardinality_output_all_types(self, writer, temp_output_dir, config):
+        """测试所有基数类型在 JSON 输出中的正确性"""
+        # 创建不同基数类型的关系
+        relations = [
+            Relation(
+                relationship_id="rel_1to1",
+                source_schema="public",
+                source_table="users",
+                source_columns=["user_id"],
+                target_schema="public",
+                target_table="user_profiles",
+                target_columns=["user_id"],
+                relationship_type="inferred",
+                cardinality="1:1",  # 一对一
+                composite_score=0.95,
+                score_details={},
+                inference_method="single_active_search"
+            ),
+            Relation(
+                relationship_id="rel_1toN",
+                source_schema="public",
+                source_table="departments",
+                source_columns=["dept_id"],
+                target_schema="public",
+                target_table="employees",
+                target_columns=["dept_id"],
+                relationship_type="inferred",
+                cardinality="1:N",  # 一对多
+                composite_score=0.90,
+                score_details={},
+                inference_method="single_active_search"
+            ),
+            Relation(
+                relationship_id="rel_Nto1",
+                source_schema="public",
+                source_table="orders",
+                source_columns=["customer_id"],
+                target_schema="public",
+                target_table="customers",
+                target_columns=["customer_id"],
+                relationship_type="inferred",
+                cardinality="N:1",  # 多对一
+                composite_score=0.88,
+                score_details={},
+                inference_method="single_active_search"
+            ),
+            Relation(
+                relationship_id="rel_MtoN",
+                source_schema="public",
+                source_table="students",
+                source_columns=["student_id"],
+                target_schema="public",
+                target_table="courses",
+                target_columns=["course_id"],
+                relationship_type="inferred",
+                cardinality="M:N",  # 多对多
+                composite_score=0.75,
+                score_details={},
+                inference_method="single_active_search"
+            ),
+        ]
+
+        output_files = writer.write_results(relations, [], config)
+
+        # 验证 JSON 输出
+        json_file = temp_output_dir / "relationships_global.json"
+        with open(json_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        # 验证每种基数类型
+        rel_by_id = {r["relationship_id"]: r for r in data["relationships"]}
+
+        assert rel_by_id["rel_1to1"]["cardinality"] == "1:1"
+        assert rel_by_id["rel_1toN"]["cardinality"] == "1:N"
+        assert rel_by_id["rel_Nto1"]["cardinality"] == "N:1"
+        assert rel_by_id["rel_MtoN"]["cardinality"] == "M:N"

@@ -1,0 +1,285 @@
+{
+  "metadata_version": "2.0",
+  "generated_at": "2025-12-02T10:33:24.560453Z",
+  "table_info": {
+    "schema_name": "public",
+    "table_name": "equipment_config",
+    "table_type": "table",
+    "comment": "设备配置维度表：描述设备在某个配置版本下的关键配置属性，用于按“设备ID + 配置版本”关联到工单事实。",
+    "comment_source": "ddl",
+    "total_rows": 12,
+    "total_columns": 4
+  },
+  "column_profiles": {
+    "equipment_id": {
+      "column_name": "equipment_id",
+      "ordinal_position": 1,
+      "data_type": "integer",
+      "character_maximum_length": null,
+      "numeric_precision": 32,
+      "numeric_scale": null,
+      "is_nullable": true,
+      "column_default": null,
+      "comment": "设备ID（资产编号）",
+      "comment_source": "ddl",
+      "statistics": {
+        "sample_count": 12,
+        "unique_count": 6,
+        "null_count": 0,
+        "null_rate": 0.0,
+        "uniqueness": 0.5,
+        "min": "1001",
+        "max": "1006",
+        "mean": "1003.5",
+        "value_distribution": {
+          "1001": 2,
+          "1002": 2,
+          "1003": 2,
+          "1004": 2,
+          "1005": 2,
+          "1006": 2
+        }
+      },
+      "semantic_analysis": {
+        "semantic_role": "identifier",
+        "semantic_confidence": 0.85,
+        "inference_basis": [
+          "type_whitelist_passed",
+          "naming_with_uniqueness"
+        ]
+      },
+      "structure_flags": {
+        "is_primary_key": false,
+        "is_composite_primary_key_member": false,
+        "is_foreign_key": false,
+        "is_composite_foreign_key_member": false,
+        "is_unique": false,
+        "is_composite_unique_member": false,
+        "is_unique_constraint": false,
+        "is_composite_unique_constraint_member": false,
+        "is_indexed": false,
+        "is_composite_indexed_member": false,
+        "is_nullable": true
+      },
+      "role_specific_info": {
+        "identifier_info": {
+          "naming_pattern": "id",
+          "is_surrogate": true
+        }
+      }
+    },
+    "config_version": {
+      "column_name": "config_version",
+      "ordinal_position": 2,
+      "data_type": "character varying",
+      "character_maximum_length": 64,
+      "numeric_precision": null,
+      "numeric_scale": null,
+      "is_nullable": true,
+      "column_default": null,
+      "comment": "配置版本/改造批次（可为语义化版本或批次号）",
+      "comment_source": "ddl",
+      "statistics": {
+        "sample_count": 12,
+        "unique_count": 2,
+        "null_count": 0,
+        "null_rate": 0.0,
+        "uniqueness": 0.1667,
+        "value_distribution": {
+          "cfg-1.0": 6,
+          "cfg-2.0": 6
+        }
+      },
+      "semantic_analysis": {
+        "semantic_role": "audit",
+        "semantic_confidence": 0.95,
+        "inference_basis": [
+          "audit_pattern:version"
+        ]
+      },
+      "structure_flags": {
+        "is_primary_key": false,
+        "is_composite_primary_key_member": false,
+        "is_foreign_key": false,
+        "is_composite_foreign_key_member": false,
+        "is_unique": false,
+        "is_composite_unique_member": false,
+        "is_unique_constraint": false,
+        "is_composite_unique_constraint_member": false,
+        "is_indexed": false,
+        "is_composite_indexed_member": false,
+        "is_nullable": true
+      },
+      "role_specific_info": {
+        "audit_info": {
+          "audit_type": "version",
+          "description": "版本号"
+        }
+      }
+    },
+    "controller_model": {
+      "column_name": "controller_model",
+      "ordinal_position": 3,
+      "data_type": "character varying",
+      "character_maximum_length": 64,
+      "numeric_precision": null,
+      "numeric_scale": null,
+      "is_nullable": true,
+      "column_default": null,
+      "comment": "控制器型号",
+      "comment_source": "ddl",
+      "statistics": {
+        "sample_count": 12,
+        "unique_count": 6,
+        "null_count": 0,
+        "null_rate": 0.0,
+        "uniqueness": 0.5,
+        "value_distribution": {
+          "PLC-X1": 2,
+          "PLC-X2": 2,
+          "PLC-Y1": 2,
+          "PLC-Y2": 2,
+          "PLC-Z1": 2,
+          "PLC-Z2": 2
+        }
+      },
+      "semantic_analysis": {
+        "semantic_role": "attribute",
+        "semantic_confidence": 0.7,
+        "inference_basis": [
+          "fallback_attribute"
+        ]
+      },
+      "structure_flags": {
+        "is_primary_key": false,
+        "is_composite_primary_key_member": false,
+        "is_foreign_key": false,
+        "is_composite_foreign_key_member": false,
+        "is_unique": false,
+        "is_composite_unique_member": false,
+        "is_unique_constraint": false,
+        "is_composite_unique_constraint_member": false,
+        "is_indexed": false,
+        "is_composite_indexed_member": false,
+        "is_nullable": true
+      },
+      "role_specific_info": {}
+    },
+    "firmware_version": {
+      "column_name": "firmware_version",
+      "ordinal_position": 4,
+      "data_type": "character varying",
+      "character_maximum_length": 64,
+      "numeric_precision": null,
+      "numeric_scale": null,
+      "is_nullable": true,
+      "column_default": null,
+      "comment": "固件版本号（语义化版本等）",
+      "comment_source": "ddl",
+      "statistics": {
+        "sample_count": 12,
+        "unique_count": 9,
+        "null_count": 0,
+        "null_rate": 0.0,
+        "uniqueness": 0.75,
+        "value_distribution": {
+          "fw-2.0.1": 2,
+          "fw-2.0.0": 2,
+          "fw-2.1.0": 2,
+          "fw-1.2.3": 1,
+          "fw-1.2.4": 1,
+          "fw-1.1.9": 1,
+          "fw-1.1.8": 1,
+          "fw-1.0.5": 1,
+          "fw-1.0.6": 1
+        }
+      },
+      "semantic_analysis": {
+        "semantic_role": "audit",
+        "semantic_confidence": 0.95,
+        "inference_basis": [
+          "audit_pattern:version"
+        ]
+      },
+      "structure_flags": {
+        "is_primary_key": false,
+        "is_composite_primary_key_member": false,
+        "is_foreign_key": false,
+        "is_composite_foreign_key_member": false,
+        "is_unique": false,
+        "is_composite_unique_member": false,
+        "is_unique_constraint": false,
+        "is_composite_unique_constraint_member": false,
+        "is_indexed": false,
+        "is_composite_indexed_member": false,
+        "is_nullable": true
+      },
+      "role_specific_info": {
+        "audit_info": {
+          "audit_type": "version",
+          "description": "版本号"
+        }
+      }
+    }
+  },
+  "table_profile": {
+    "table_category": "unknown",
+    "confidence": 0.5,
+    "inference_basis": [],
+    "physical_constraints": {
+      "primary_key": null,
+      "foreign_keys": [],
+      "unique_constraints": [],
+      "indexes": []
+    },
+    "column_statistics": {
+      "total_columns": 4,
+      "identifier_count": 1,
+      "metric_count": 0,
+      "datetime_count": 0,
+      "enum_count": 0,
+      "audit_count": 2,
+      "attribute_count": 1,
+      "primary_key_count": 0,
+      "foreign_key_count": 0
+    }
+  },
+  "sample_records": {
+    "sample_method": "random",
+    "sample_size": 5,
+    "total_rows": 12,
+    "sampled_at": "2025-12-02T10:30:11.447376Z",
+    "records": [
+      {
+        "equipment_id": 1001,
+        "config_version": "cfg-1.0",
+        "controller_model": "PLC-X1",
+        "firmware_version": "fw-1.2.3"
+      },
+      {
+        "equipment_id": 1001,
+        "config_version": "cfg-2.0",
+        "controller_model": "PLC-X2",
+        "firmware_version": "fw-2.0.1"
+      },
+      {
+        "equipment_id": 1002,
+        "config_version": "cfg-1.0",
+        "controller_model": "PLC-X1",
+        "firmware_version": "fw-1.2.4"
+      },
+      {
+        "equipment_id": 1002,
+        "config_version": "cfg-2.0",
+        "controller_model": "PLC-X2",
+        "firmware_version": "fw-2.0.1"
+      },
+      {
+        "equipment_id": 1003,
+        "config_version": "cfg-1.0",
+        "controller_model": "PLC-Y1",
+        "firmware_version": "fw-1.1.9"
+      }
+    ]
+  }
+}

@@ -270,6 +270,9 @@ class RelationshipWriter:
             result["confidence_level"] = confidence_level
             result["metrics"] = rel.score_details or {}
 
+        # 关系基数（所有关系都有）
+        result["cardinality"] = rel.cardinality
+
         return result
 
     def _parse_discovery_info(
