@@ -185,7 +185,6 @@ logging:
 # Step 3: 关系发现配置
 # 单列候选配置
 single_column:
-  active_search_same_name: true  # 启用主动同名搜索
   important_constraints:
     - single_field_primary_key
     - single_field_unique_constraint
@@ -194,17 +193,19 @@ single_column:
     - audit
     - metric
   logical_key_min_confidence: 0.8
-  min_type_compatibility: 0.5  # 最低类型兼容性阈值（0.5允许字符串类型互相匹配）
+  min_type_compatibility: 0.8  # 最低类型兼容性阈值
+  name_similarity_important_target: 0.6  # 目标列是关键字段时的名称相似度阈值
+  name_similarity_normal_target: 0.9     # 目标列是普通字段时的名称相似度阈值
 
 # 复合键候选配置
 composite:
   max_columns: 3  # 最多考虑3列的复合键
-  target_sources:
-    - physical_constraints
-    - candidate_logical_keys
-    - dynamic_same_name
-  min_name_similarity: 0.7
-  min_type_compatibility: 0.8
+  target_sources: []  # 默认不包含索引（空列表）
+    # 取消下面注释以启用索引收集：
+    # - composite_indexes
+  min_type_compatibility: 0.8  # 类型兼容性阈值
+  logical_key_min_confidence: 0.8  # 逻辑主键最低置信度
+  name_similarity_important_target: 0.6  # 特权模式目标列的名称相似度阈值
 
 # 决策配置
 decision:

@@ -3,8 +3,9 @@
 负责生成候选关系（复合键优先，单列其次），排除已存在的外键。
 """
 
-from typing import Dict, List, Set, Any
+from typing import Dict, List, Set, Any, Optional, Tuple
 from difflib import SequenceMatcher
+from itertools import permutations
 
 from src.metaweave.utils.logger import get_metaweave_logger
 
@@ -23,37 +24,37 @@ class CandidateGenerator:
         """初始化候选生成器
 
         Args:
-            config: relationships配置
+            config: relationships配置（要求完整配置，不设默认值以暴露配置问题）
             fk_signature_set: 外键签名集合（用于去重）
         """
         self.config = config
         self.fk_signature_set = fk_signature_set
 
-        # 单列配置
-        single_config = config.get("single_column", {})
-        self.active_search_enabled = single_config.get("active_search_same_name", True)
-        self.important_constraints = set(single_config.get("important_constraints", [
-            "single_field_primary_key",
-            "single_field_unique_constraint",
-            "single_field_index"
-        ]))
-        self.exclude_semantic_roles = set(single_config.get("exclude_semantic_roles", ["audit", "metric"]))
-        self.logical_key_min_confidence = single_config.get("logical_key_min_confidence", 0.8)
-        self.min_type_compatibility = single_config.get("min_type_compatibility", 0.5)
+        # 单列配置（single_column 节点）
+        single_config = config["single_column"]
+        self.important_constraints = set(single_config["important_constraints"])
+        self.exclude_semantic_roles = set(single_config["exclude_semantic_roles"])
+        self.single_logical_key_min_confidence = single_config["logical_key_min_confidence"]
+        self.single_min_type_compatibility = single_config["min_type_compatibility"]
+        self.single_name_similarity_important_target = single_config["name_similarity_important_target"]
+        self.name_similarity_normal_target = single_config["name_similarity_normal_target"]
 
-        # 复合键配置
-        composite_config = config.get("composite", {})
-        self.max_columns = composite_config.get("max_columns", 3)
-        self.target_sources = composite_config.get("target_sources", [
-            "physical_constraints",
-            "candidate_logical_keys",
-            "dynamic_same_name"
-        ])
-        self.min_name_similarity = composite_config.get("min_name_similarity", 0.7)
-        self.min_type_compatibility = composite_config.get("min_type_compatibility", 0.8)
+        # 复合键配置（composite 节点）
+        composite_config = config["composite"]
+        self.max_columns = composite_config["max_columns"]
+        # 防御性处理：如果 target_sources 为 None 或缺失，默认为空列表
+        self.target_sources = composite_config.get("target_sources") or []
+        self.composite_min_type_compatibility = composite_config["min_type_compatibility"]
+        self.composite_logical_key_min_confidence = composite_config["logical_key_min_confidence"]
+        self.composite_name_similarity_important_target = composite_config["name_similarity_important_target"]
 
-        logger.info(f"候选生成器已初始化: max_columns={self.max_columns}, "
-                    f"active_search={self.active_search_enabled}")
+        logger.info(f"候选生成器已初始化:")
+        logger.info(f"  单列配置: important_target_sim={self.single_name_similarity_important_target}, "
+                    f"normal_target_sim={self.name_similarity_normal_target}, "
+                    f"type_compat>={self.single_min_type_compatibility}")
+        logger.info(f"  复合键配置: max_columns={self.max_columns}, "
+                    f"important_target_sim={self.composite_name_similarity_important_target}, "
+                    f"type_compat>={self.composite_min_type_compatibility}")
 
     def generate_candidates(self, tables: Dict[str, dict]) -> List[Dict[str, Any]]:
         """生成所有候选关系
@@ -97,8 +98,8 @@ class CandidateGenerator:
             source_schema = source_info.get("schema_name")
             source_table_name = source_info.get("table_name")
 
-            # 收集源表的复合键组合
-            source_combinations = self._collect_source_combinations(source_table)
+            # 收集源表的复合键组合（源表永不包含索引）
+            source_combinations = self._collect_source_combinations(source_table, include_indexes=False)
 
             # 对每个组合，在目标表中查找匹配
             for combo in source_combinations:
@@ -149,46 +150,51 @@ class CandidateGenerator:
 
         return candidates
 
-    def _collect_source_combinations(self, table: dict) -> List[Dict[str, Any]]:
-        """收集源表的复合键组合
+    def _collect_source_combinations(
+            self,
+            table: dict,
+            include_indexes: bool = False
+    ) -> List[Dict[str, Any]]:
+        """收集表的复合键组合
+
+        Args:
+            table: 表元数据
+            include_indexes: 是否包含索引（默认False，仅对目标表使用）
 
         Returns:
             [{"columns": [...], "type": "physical|logical"}]
         """
         combinations = []
         table_profile = table.get("table_profile", {})
+        physical = table_profile.get("physical_constraints", {})
 
-        # 1. 物理约束（PK/UK/Index）
-        if "physical_constraints" in self.target_sources:
-            physical = table_profile.get("physical_constraints", {})
+        # 1. 主键（总是收集）
+        pk = physical.get("primary_key")
+        if pk and pk.get("columns"):
+            pk_cols = pk["columns"]
+            if 2 <= len(pk_cols) <= self.max_columns:
+                combinations.append({"columns": pk_cols, "type": "physical"})
 
-            # 主键
-            pk = physical.get("primary_key")
-            if pk and pk.get("columns"):
-                pk_cols = pk["columns"]
-                if 2 <= len(pk_cols) <= self.max_columns:
-                    combinations.append({"columns": pk_cols, "type": "physical"})
+        # 2. 唯一约束（总是收集）
+        for uk in physical.get("unique_constraints", []):
+            uk_cols = uk.get("columns", [])
+            if 2 <= len(uk_cols) <= self.max_columns:
+                combinations.append({"columns": uk_cols, "type": "physical"})
 
-            # 唯一约束
-            for uk in physical.get("unique_constraints", []):
-                uk_cols = uk.get("columns", [])
-                if 2 <= len(uk_cols) <= self.max_columns:
-                    combinations.append({"columns": uk_cols, "type": "physical"})
-
-            # 索引
+        # 3. 索引（仅当 include_indexes=True 时收集）
+        if include_indexes:
             for idx in physical.get("indexes", []):
                 idx_cols = idx.get("columns", [])
                 if 2 <= len(idx_cols) <= self.max_columns:
                     combinations.append({"columns": idx_cols, "type": "physical"})
 
-        # 2. 逻辑主键
-        if "candidate_logical_keys" in self.target_sources:
-            logical_keys = table_profile.get("logical_keys", {})
-            for lk in logical_keys.get("candidate_primary_keys", []):
-                lk_cols = lk.get("columns", [])
-                lk_conf = lk.get("confidence_score", 0)
-                if 2 <= len(lk_cols) <= self.max_columns and lk_conf >= self.logical_key_min_confidence:
-                    combinations.append({"columns": lk_cols, "type": "logical"})
+        # 4. 逻辑主键（总是收集）
+        logical_keys = table_profile.get("logical_keys", {})
+        for lk in logical_keys.get("candidate_primary_keys", []):
+            lk_cols = lk.get("columns", [])
+            lk_conf = lk.get("confidence_score", 0)
+            if 2 <= len(lk_cols) <= self.max_columns and lk_conf >= self.composite_logical_key_min_confidence:
+                combinations.append({"columns": lk_cols, "type": "logical"})
 
         return combinations
 
@@ -198,8 +204,18 @@ class CandidateGenerator:
             source_table: dict,
             target_table: dict,
             combo_type: str
-    ) -> List[str]:
-        """在目标表中查找匹配的列组合
+    ) -> Optional[List[str]]:
+        """在目标表中查找匹配的列组合（两阶段策略）
+
+        Stage 1: 特权模式（Privilege Mode）
+            - 当源表是 PK/UK/逻辑键时，检查目标表是否有相同性质的约束
+            - 使用穷举排列算法 + 较低的名称相似度阈值
+            - 如果匹配成功，立即返回（短路）
+
+        Stage 2: 动态同名匹配（Dynamic Same-Name）
+            - 总是执行，不依赖 Stage 1 的结果
+            - 大小写不敏感的列名匹配 + 类型兼容性检查
+            - 如果匹配成功，返回
 
         Args:
             source_columns: 源列列表
@@ -208,84 +224,185 @@ class CandidateGenerator:
             combo_type: 组合类型（physical|logical）
 
         Returns:
-            目标列列表（保持源列顺序），未找到返回None
+            目标列列表（顺序与源列对应），未找到返回None
         """
-        target_profile = target_table.get("table_profile", {})
+        source_profiles = source_table.get("column_profiles", {})
+        target_profiles = target_table.get("column_profiles", {})
 
-        # 1. 物理/逻辑约束匹配（使用名称相似度和类型兼容性）
+        # ============================================================
+        # Stage 1: 特权模式（Privilege Mode）
+        # ============================================================
         if combo_type in ["physical", "logical"]:
-            target_combinations = self._collect_source_combinations(target_table)
+            # 收集目标表的约束组合（根据配置决定是否包含索引）
+            include_target_indexes = "composite_indexes" in self.target_sources
+            target_combinations = self._collect_source_combinations(
+                target_table,
+                include_indexes=include_target_indexes
+            )
+
+            logger.debug(
+                "[find_target_columns] Stage 1: 特权模式, 目标约束数=%d",
+                len(target_combinations)
+            )
+
+            # 遍历目标表的所有约束组合
             for target_combo in target_combinations:
                 target_cols = target_combo["columns"]
+
+                # 长度必须相等
                 if len(target_cols) != len(source_columns):
                     continue
 
-                # 检查名称相似度和类型兼容性
-                if self._is_compatible_combination(
-                        source_columns, target_cols,
-                        source_table.get("column_profiles", {}),
-                        target_table.get("column_profiles", {})
-                ):
-                    return target_cols
+                # 使用穷举排列算法匹配
+                matched = self._match_columns_as_set(
+                    source_columns=source_columns,
+                    target_columns=target_cols,
+                    source_profiles=source_profiles,
+                    target_profiles=target_profiles,
+                    min_name_similarity=self.composite_name_similarity_important_target,
+                    min_type_compatibility=self.composite_min_type_compatibility
+                )
 
-        # 2. 动态同名匹配（大小写不敏感 + 类型兼容）
-        if "dynamic_same_name" in self.target_sources:
-            matched = self._find_dynamic_same_name(source_columns, source_table, target_table)
-            if matched:
-                return matched
+                if matched:
+                    logger.debug(
+                        "[find_target_columns] Stage 1 成功: %s -> %s",
+                        source_columns, matched
+                    )
+                    return matched
 
+            logger.debug("[find_target_columns] Stage 1 未找到匹配")
+
+        # ============================================================
+        # Stage 2: 动态同名匹配（Dynamic Same-Name）
+        # ============================================================
+        # 注意：Stage 2 总是执行，不依赖 Stage 1 的结果
+        logger.debug("[find_target_columns] Stage 2: 动态同名匹配")
+
+        matched = self._find_dynamic_same_name(
+            source_columns,
+            source_table,
+            target_table
+        )
+
+        if matched:
+            logger.debug(
+                "[find_target_columns] Stage 2 成功: %s -> %s",
+                source_columns, matched
+            )
+            return matched
+
+        logger.debug("[find_target_columns] Stage 2 未找到匹配")
         return None
 
-    def _is_compatible_combination(
+    def _match_columns_as_set(
             self,
-            source_cols: List[str],
-            target_cols: List[str],
+            source_columns: List[str],
+            target_columns: List[str],
             source_profiles: Dict[str, dict],
-            target_profiles: Dict[str, dict]
-    ) -> bool:
-        """检查列组合是否兼容（名称相似度 + 类型兼容性）
+            target_profiles: Dict[str, dict],
+            min_name_similarity: float,
+            min_type_compatibility: float
+    ) -> Optional[List[str]]:
+        """穷举排列算法：在目标列中找到最佳匹配
 
-        用于物理/逻辑约束匹配，需要同时满足：
-        1. 平均名称相似度 >= min_name_similarity
-        2. 平均类型兼容性 >= min_type_compatibility（与评分阶段一致）
+        使用O(n! × n)的穷举排列算法，尝试所有可能的排列组合，找到综合得分最高的匹配。
+        适用于复合键（2-3列），穷举成本可接受（最多6种排列）。
 
         Args:
-            source_cols: 源列列表
-            target_cols: 目标列列表
+            source_columns: 源列列表（有序）
+            target_columns: 目标列候选池（无序）
             source_profiles: 源列画像
             target_profiles: 目标列画像
+            min_name_similarity: 最低名称相似度阈值
+            min_type_compatibility: 最低类型兼容性阈值
 
         Returns:
-            True 如果兼容，False 否则
+            最佳匹配的目标列列表（顺序与源列对应），如果没有满足阈值的匹配则返回None
         """
-        if len(source_cols) != len(target_cols):
-            return False
+        n = len(source_columns)
+        m = len(target_columns)
 
-        total_name_sim = 0
-        total_type_compat = 0
+        # 基本检查：目标列数量必须 >= 源列数量
+        if m < n:
+            return None
 
-        for src_col, tgt_col in zip(source_cols, target_cols):
-            # 1. 名称相似度检查
-            name_sim = self._calculate_name_similarity(src_col, tgt_col)
-            total_name_sim += name_sim
+        # 特殊情况：如果目标列数量正好等于源列数量，穷举所有排列
+        if m == n:
+            candidate_pool = target_columns
+        else:
+            # 如果目标列数量 > 源列数量，需要先从目标列中选出n个列的所有组合
+            # 这里为了简化，只考虑m==n的情况
+            # 如果m>n，需要额外的组合逻辑（从m中选n个的C(m,n)种组合）
+            # 但根据设计文档，这种情况较少见，暂不实现
+            logger.debug(
+                "[match_columns_as_set] 目标列数量(%d) > 源列数量(%d)，跳过匹配",
+                m, n
+            )
+            return None
 
-            # 2. 类型兼容性检查（数值分数）
-            src_profile = source_profiles.get(src_col, {})
-            tgt_profile = target_profiles.get(tgt_col, {})
+        best_match = None
+        best_score = -1.0
 
-            src_type = src_profile.get("data_type", "")
-            tgt_type = tgt_profile.get("data_type", "")
+        # 穷举所有排列
+        for perm in permutations(candidate_pool):
+            # perm 是一个元组，表示目标列的一种排列顺序
+            perm_list = list(perm)
 
-            # 计算类型兼容性分数（与 scorer 一致）
-            type_compat = self._get_type_compatibility_score(src_type, tgt_type)
-            total_type_compat += type_compat
+            # 逐对检查，任一配对低于阈值立即淘汰该排列
+            total_name_sim = 0.0
+            total_type_compat = 0.0
+            is_valid = True  # 标记该排列是否有效
 
-        # 检查平均值是否满足阈值
-        avg_name_sim = total_name_sim / len(source_cols)
-        avg_type_compat = total_type_compat / len(source_cols)
+            for src_col, tgt_col in zip(source_columns, perm_list):
+                # 1. 名称相似度
+                name_sim = self._calculate_name_similarity(src_col, tgt_col)
 
-        return (avg_name_sim >= self.min_name_similarity and
-                avg_type_compat >= self.min_type_compatibility)
+                # 2. 类型兼容性
+                src_profile = source_profiles.get(src_col, {})
+                tgt_profile = target_profiles.get(tgt_col, {})
+
+                src_type = src_profile.get("data_type", "")
+                tgt_type = tgt_profile.get("data_type", "")
+
+                type_compat = self._get_type_compatibility_score(src_type, tgt_type)
+
+                # 🔴 关键修改：任一配对低于阈值，立即淘汰该排列
+                if name_sim < min_name_similarity or type_compat < min_type_compatibility:
+                    is_valid = False
+                    logger.debug(
+                        "[match_columns_as_set] 排列淘汰: %s->%s (name_sim=%.2f < %.2f 或 type_compat=%.2f < %.2f)",
+                        src_col, tgt_col, name_sim, min_name_similarity,
+                        type_compat, min_type_compatibility
+                    )
+                    break  # 立即跳出，不再检查该排列的其他配对
+
+                total_name_sim += name_sim
+                total_type_compat += type_compat
+
+            # 只有所有配对都满足阈值，才计算综合得分
+            if is_valid:
+                avg_name_sim = total_name_sim / n
+                avg_type_compat = total_type_compat / n
+                # 计算综合得分（简单加权：名称50% + 类型50%）
+                composite_score = 0.5 * avg_name_sim + 0.5 * avg_type_compat
+
+                # 更新最佳匹配
+                if composite_score > best_score:
+                    best_score = composite_score
+                    best_match = perm_list
+
+        if best_match:
+            logger.debug(
+                "[match_columns_as_set] 找到最佳匹配: %s -> %s, score=%.3f",
+                source_columns, best_match, best_score
+            )
+        else:
+            logger.debug(
+                "[match_columns_as_set] 未找到满足阈值的匹配: %s",
+                source_columns
+            )
+
+        return best_match
 
     def _find_dynamic_same_name(
             self,
@@ -328,8 +445,13 @@ class CandidateGenerator:
             src_type = src_profile.get("data_type", "")
             tgt_type = tgt_profile.get("data_type", "")
 
-            # 使用类型兼容性检查（复用 scorer 的逻辑）
-            if not self._is_type_compatible(src_type, tgt_type):
+            # 使用类型兼容性评分（与 scorer 一致）
+            type_score = self._get_type_compatibility_score(src_type, tgt_type)
+            if type_score < self.composite_min_type_compatibility:
+                logger.debug(
+                    "[composite_dynamic_same_name] 类型兼容性不足: %s vs %s, score=%.2f < %.2f",
+                    src_col, tgt_col, type_score, self.composite_min_type_compatibility
+                )
                 return None
 
             matched.append(tgt_col)
@@ -557,11 +679,11 @@ class CandidateGenerator:
 
     def _generate_single_column_candidates(self, tables: Dict[str, dict]) -> List[Dict[str, Any]]:
         """生成单列候选
-
-        优先级策略（避免重复候选）：
-        1. active_search_same_name（重要约束列 -> 同名搜索）
-        2. logical_key_matching（逻辑主键 -> 目标表符合约束的列）
-
+        
+        统一逻辑：
+        1. 源列必须是"重要列"（有定义约束 或 是逻辑主键）
+        2. 遍历所有目标列，根据目标列是否"关键字段"动态调整名称相似度阈值
+        3. 根据源列属性标记候选类型
         """
         candidates = []
 
@@ -570,195 +692,146 @@ class CandidateGenerator:
             source_schema = source_info.get("schema_name")
             source_table_name = source_info.get("table_name")
             source_full_name = f"{source_schema}.{source_table_name}"
-            logger.debug("处理源表: %s", source_full_name)
+            logger.debug("[single_column_candidate] 处理源表: %s", source_full_name)
             source_profiles = source_table.get("column_profiles", {})
 
             for col_name, col_profile in source_profiles.items():
-                # 排除audit和metric角色
+                # 1. 排除 audit 和 metric 角色
                 semantic_role = col_profile.get("semantic_analysis", {}).get("semantic_role")
                 if semantic_role in self.exclude_semantic_roles:
                     logger.debug(
-                        "跳过列 %s.%s，语义角色=%s 被排除",
+                        "[single_column_candidate] 跳过列 %s.%s，语义角色=%s 被排除",
                         source_full_name,
                         col_name,
                         semantic_role,
                     )
                     continue
                 
-                # 优先级1：主动搜索（重要约束列 -> 同名搜索）
-                if self.active_search_enabled and self._has_defined_constraint(col_profile):
-                    logger.debug("[active_search] 源列满足约束: %s.%s", source_full_name, col_name)
-                    # 在所有目标表中搜索同名列（大小写不敏感）
-                    for target_name, target_table in tables.items():
-                        if target_name == source_name:
+                # 2. 判断源列是否"重要"（有定义约束 或 是逻辑主键）
+                has_defined_constraint = self._has_defined_constraint(col_profile)
+                is_logical_pk = self._is_logical_primary_key(col_name, source_table)
+                
+                # 源列必须至少满足一个条件
+                if not (has_defined_constraint or is_logical_pk):
+                    continue
+                
+                logger.debug(
+                    "[single_column_candidate] 源列为重要列: %s.%s (defined_constraint=%s, logical_pk=%s)",
+                    source_full_name,
+                    col_name,
+                    has_defined_constraint,
+                    is_logical_pk,
+                )
+                
+                # 3. 遍历所有目标表和目标列
+                for target_name, target_table in tables.items():
+                    if target_name == source_name:
+                        continue
+
+                    target_info = target_table.get("table_info", {})
+                    target_schema = target_info.get("schema_name")
+                    target_table_name = target_info.get("table_name")
+                    target_profiles = target_table.get("column_profiles", {})
+
+                    for target_col_name, target_col_profile in target_profiles.items():
+                        # (a) 语义角色过滤
+                        target_role = target_col_profile.get("semantic_analysis", {}).get("semantic_role")
+                        if target_role in self.exclude_semantic_roles:
                             continue
+                        
+                        # (b) 类型兼容性过滤
+                        src_type = col_profile.get("data_type", "")
+                        tgt_type = target_col_profile.get("data_type", "")
+                        type_compat = self._get_type_compatibility_score(src_type, tgt_type)
 
-                        target_info = target_table.get("table_info", {})
-                        target_schema = target_info.get("schema_name")
-                        target_table_name = target_info.get("table_name")
-                        target_profiles = target_table.get("column_profiles", {})
-
-                        # 构建大小写不敏感的映射（小写列名 -> 原始列名）
-                        target_column_map = {col.lower(): col for col in target_profiles.keys()}
-                        col_name_lower = col_name.lower()
-
-                        if col_name_lower in target_column_map:
-                            # 获取目标列的原始名称
-                            target_col_name = target_column_map[col_name_lower]
-                            
-                            # 获取目标列的 profile
-                            target_col_profile = target_profiles.get(target_col_name, {})
-                            
-                            # 1. 检查目标列的语义角色（排除 metric 和 audit）
-                            target_role = target_col_profile.get("semantic_analysis", {}).get("semantic_role")
-                            if target_role in self.exclude_semantic_roles:
-                                logger.debug(
-                                    "[active_search] 跳过目标列 %s.%s，语义角色=%s 被排除",
-                                    f"{target_schema}.{target_table_name}",
-                                    target_col_name,
-                                    target_role,
-                                )
-                                continue
-                            
-                            # 2. 检查类型兼容性
-                            src_type = col_profile.get("data_type", "")
-                            tgt_type = target_col_profile.get("data_type", "")
-                            type_compat = self._get_type_compatibility_score(src_type, tgt_type)
-                            if type_compat < self.min_type_compatibility:
-                                logger.debug(
-                                    "[active_search] 跳过目标列 %s.%s -> %s.%s，类型兼容性不足: %.2f < %.2f",
-                                    source_full_name,
-                                    col_name,
-                                    f"{target_schema}.{target_table_name}",
-                                    target_col_name,
-                                    type_compat,
-                                    self.min_type_compatibility,
-                                )
-                                continue
-
-                            # 3. 检查FK去重
-                            fk_sig = self._make_signature(
-                                source_schema, source_table_name, [col_name],
-                                target_schema, target_table_name, [target_col_name]
-                            )
-                            if fk_sig in self.fk_signature_set:
-                                logger.debug(
-                                    "[active_search] 跳过已存在的FK: %s.%s -> %s.%s",
-                                    source_full_name,
-                                    col_name,
-                                    f"{target_schema}.{target_table_name}",
-                                    target_col_name,
-                                )
-                                continue
-
-                            candidate = {
-                                "source": source_table,
-                                "target": target_table,
-                                "source_columns": [col_name],
-                                "target_columns": [target_col_name],
-                                "candidate_type": "single_active_search"
-                            }
-                            candidates.append(candidate)
+                        if type_compat < self.single_min_type_compatibility:
                             logger.debug(
-                                "[active_search] 候选生成: %s.%s -> %s.%s",
+                                "[single_column_candidate] 跳过目标列 %s.%s -> %s.%s，类型兼容性不足: %.2f < %.2f",
                                 source_full_name,
                                 col_name,
-                                target_schema,
+                                f"{target_schema}.{target_table_name}",
                                 target_col_name,
-                            )                
-                # 优先级2：逻辑主键匹配（源列是逻辑主键 -> 目标表符合约束的列）
-                if self._is_logical_primary_key(col_name, source_table):
-                    logger.debug("[logical_key] 源列逻辑主键: %s.%s", source_full_name, col_name)
-                    for target_name, target_table in tables.items():
-                        if target_name == source_name:
-                            continue
-
-                        target_info = target_table.get("table_info", {})
-                        target_schema = target_info.get("schema_name")
-                        target_table_name = target_info.get("table_name")
-                        target_profiles = target_table.get("column_profiles", {})
-
-                        # 在目标表中查找满足约束条件的列
-                        for target_col_name, target_col_profile in target_profiles.items():
-                            # 0. 检查目标列的语义角色（排除 metric 和 audit）
-                            target_role = target_col_profile.get("semantic_analysis", {}).get("semantic_role")
-                            if target_role in self.exclude_semantic_roles:
-                                logger.debug(
-                                    "[logical_key] 跳过目标列 %s.%s，语义角色=%s 被排除",
-                                    f"{target_schema}.{target_table_name}",
-                                    target_col_name,
-                                    target_role,
-                                )
-                                continue
-                            
-                            # 1. 检查目标列是否满足约束条件（PK/UK/Index/逻辑主键）
-                            if not self._is_qualified_target_column(target_col_name, target_col_profile, target_table):
-                                logger.debug(
-                                    "[logical_key] 跳过目标列 %s.%s，不满足约束条件",
-                                    f"{target_schema}.{target_table_name}",
-                                    target_col_name,
-                                )
-                                continue
-
-                            # 2. 检查名称相似度
-                            name_sim = self._calculate_name_similarity(col_name, target_col_name)
-                            if name_sim < 0.6:  # 最低相似度阈值
-                                logger.debug(
-                                    "[logical_key] 跳过目标列 %s.%s -> %s.%s，名称相似度不足: %.2f < 0.6",
-                                    source_full_name,
-                                    col_name,
-                                    f"{target_schema}.{target_table_name}",
-                                    target_col_name,
-                                    name_sim,
-                                )
-                                continue
-
-                            # 3. 检查类型兼容性
-                            src_type = col_profile.get("data_type", "")
-                            tgt_type = target_col_profile.get("data_type", "")
-                            type_compat = self._get_type_compatibility_score(src_type, tgt_type)
-                            if type_compat < self.min_type_compatibility:
-                                logger.debug(
-                                    "[logical_key] 跳过目标列 %s.%s -> %s.%s，类型兼容性不足: %.2f < %.2f",
-                                    source_full_name,
-                                    col_name,
-                                    f"{target_schema}.{target_table_name}",
-                                    target_col_name,
-                                    type_compat,
-                                    self.min_type_compatibility,
-                                )
-                                continue
-
-                            # 4. 检查FK去重
-                            fk_sig = self._make_signature(
-                                source_schema, source_table_name, [col_name],
-                                target_schema, target_table_name, [target_col_name]
+                                type_compat,
+                                self.single_min_type_compatibility,
                             )
-                            if fk_sig in self.fk_signature_set:
-                                logger.debug(
-                                    "[logical_key] 跳过已存在的FK: %s.%s -> %s.%s",
-                                    source_full_name,
-                                    col_name,
-                                    f"{target_schema}.{target_table_name}",
-                                    target_col_name,
-                                )
-                                continue
+                            continue
+                        
+                        # (c) 判断目标列是否"关键字段"
+                        is_important_target = self._is_qualified_target_column(
+                            target_col_name, target_col_profile, target_table
+                        )
+                        
+                        # (d) 名称相似度 + 动态阈值
+                        name_sim = self._calculate_name_similarity(col_name, target_col_name)
 
-                            candidate = {
-                                "source": source_table,
-                                "target": target_table,
-                                "source_columns": [col_name],
-                                "target_columns": [target_col_name],
-                                "candidate_type": "single_logical_key"
-                            }
-                            candidates.append(candidate)
+                        if is_important_target:
+                            threshold = self.single_name_similarity_important_target
+                        else:
+                            threshold = self.name_similarity_normal_target
+                        
+                        if name_sim < threshold:
                             logger.debug(
-                                "[logical_key] 候选生成: %s.%s -> %s.%s",
+                                "[single_column_candidate] 跳过目标列 %s.%s -> %s.%s，名称相似度不足: %.2f < %.2f (important_target=%s)",
                                 source_full_name,
                                 col_name,
-                                target_schema,
+                                f"{target_schema}.{target_table_name}",
+                                target_col_name,
+                                name_sim,
+                                threshold,
+                                is_important_target,
+                            )
+                            continue
+                        
+                        # (e) FK 去重
+                        fk_sig = self._make_signature(
+                            source_schema, source_table_name, [col_name],
+                            target_schema, target_table_name, [target_col_name]
+                        )
+                        if fk_sig in self.fk_signature_set:
+                            logger.debug(
+                                "[single_column_candidate] 跳过已存在的FK: %s.%s -> %s.%s",
+                                source_full_name,
+                                col_name,
+                                f"{target_schema}.{target_table_name}",
                                 target_col_name,
                             )
+                            continue
+                        
+                        # (f) 决定 candidate_type
+                        if has_defined_constraint and is_logical_pk:
+                            candidate_type = "single_defined_constraint_and_logical_pk"
+                        elif has_defined_constraint and not is_logical_pk:
+                            candidate_type = "single_defined_constraint"
+                        elif is_logical_pk and not has_defined_constraint:
+                            candidate_type = "single_logical_key"
+                        else:
+                            # 理论上不会到这里（外层已经确保至少满足一个条件）
+                            logger.warning(
+                                "[single_column_candidate] 意外情况: %s.%s 既无定义约束也非逻辑主键，跳过",
+                                source_full_name,
+                                col_name,
+                            )
+                            continue
+                        
+                        # (g) 构造并追加候选
+                        candidate = {
+                            "source": source_table,
+                            "target": target_table,
+                            "source_columns": [col_name],
+                            "target_columns": [target_col_name],
+                            "candidate_type": candidate_type,
+                        }
+                        candidates.append(candidate)
+                        logger.debug(
+                            "[single_column_candidate] 候选生成: %s.%s -> %s.%s (type=%s, name_sim=%.2f, type_compat=%.2f)",
+                            source_full_name,
+                            col_name,
+                            f"{target_schema}.{target_table_name}",
+                            target_col_name,
+                            candidate_type,
+                            name_sim,
+                            type_compat,
+                        )
 
         return candidates
 
@@ -793,7 +866,7 @@ class CandidateGenerator:
             lk_conf = lk.get("confidence_score", 0)
 
             # 单列逻辑主键且置信度足够
-            if len(lk_cols) == 1 and lk_cols[0] == col_name and lk_conf >= self.logical_key_min_confidence:
+            if len(lk_cols) == 1 and lk_cols[0] == col_name and lk_conf >= self.single_logical_key_min_confidence:
                 return True
 
         return False

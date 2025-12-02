@@ -1,6 +1,6 @@
 # 表间关系发现报告
 
-生成时间: 2025-11-30 18:18:34
+生成时间: 2025-12-02 10:25:07
 关系总数: 6
 
 ## 统计摘要
@@ -28,7 +28,7 @@
   - name_similarity: 1.000
   - type_compatibility: 1.000
   - semantic_role_bonus: 1.000
-- **推断方法**: single_active_search
+- **推断方法**: single_defined_constraint_and_logical_pk
 
 ### 2. public.dim_product_type.product_type_id → public.fact_store_sales_day.product_type_id
 
@@ -44,7 +44,7 @@
   - name_similarity: 1.000
   - type_compatibility: 1.000
   - semantic_role_bonus: 1.000
-- **推断方法**: single_active_search
+- **推断方法**: single_defined_constraint_and_logical_pk
 
 ### 3. public.dim_product_type.product_type_id → public.fact_store_sales_month.product_type_id
 
@@ -60,7 +60,7 @@
   - name_similarity: 1.000
   - type_compatibility: 1.000
   - semantic_role_bonus: 1.000
-- **推断方法**: single_active_search
+- **推断方法**: single_defined_constraint_and_logical_pk
 
 ### 4. public.dim_region.region_id → public.dim_store.region_id
 
@@ -76,7 +76,7 @@
   - name_similarity: 1.000
   - type_compatibility: 1.000
   - semantic_role_bonus: 1.000
-- **推断方法**: single_active_search
+- **推断方法**: single_defined_constraint_and_logical_pk
 
 ### 5. public.dim_store.store_id → public.fact_store_sales_day.store_id
 
@@ -92,7 +92,7 @@
   - name_similarity: 1.000
   - type_compatibility: 1.000
   - semantic_role_bonus: 1.000
-- **推断方法**: single_active_search
+- **推断方法**: single_defined_constraint_and_logical_pk
 
 ### 6. public.dim_store.store_id → public.fact_store_sales_month.store_id
 
@@ -108,4 +108,4 @@
   - name_similarity: 1.000
   - type_compatibility: 1.000
   - semantic_role_bonus: 1.000
-- **推断方法**: single_active_search
+- **推断方法**: single_defined_constraint_and_logical_pk
