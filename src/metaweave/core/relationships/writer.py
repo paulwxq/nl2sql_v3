@@ -280,15 +280,23 @@ class RelationshipWriter:
         """解析 inference_method 为 discovery_method, target_source_type, source_constraint
 
         映射规则（基于v3.2文档）：
-        - single_active_search -> discovery_method: "active_search", source_constraint: 实际检查源列约束
-        - single_logical_key -> discovery_method: "logical_key_matching", target_source_type: "candidate_logical_key"
-        - composite_physical -> discovery_method: "physical_constraint_matching", target_source_type: "physical_constraints"
-        - composite_logical -> discovery_method: "logical_key_matching", target_source_type: "candidate_logical_key"
-        - composite_dynamic_same_name -> discovery_method: "dynamic_same_name", target_source_type: "candidate_logical_key"
-        - 其他 -> discovery_method: "standard_matching"
+        
+        单列关系：
+        - single_defined_constraint_and_logical_pk -> active_search (源有约束+逻辑键，目标动态检测)
+        - single_defined_constraint -> active_search (源有约束，目标动态检测)
+        - single_logical_key -> logical_key_matching (源是逻辑键，目标是逻辑键)
+        - single_active_search -> active_search (向后兼容，已废弃)
+        
+        复合键关系：
+        - composite_physical -> physical_constraint_matching
+        - composite_logical -> logical_key_matching
+        - composite_dynamic_same_name -> dynamic_same_name
+        
+        其他：
+        - 未知类型 -> standard_matching
 
         Args:
-            inference_method: 推断方法字符串（如 single_active_search）
+            inference_method: 推断方法字符串（如 single_defined_constraint）
             rel: 关系对象
 
         Returns:
@@ -301,7 +309,27 @@ class RelationshipWriter:
                 "source_constraint": None
             }
 
-        # 单列主动搜索
+        # 单列定义约束（既有约束又是逻辑键）
+        if inference_method == "single_defined_constraint_and_logical_pk":
+            source_constraint = self._get_source_constraint(rel)
+            target_type = self._get_target_source_type(rel)
+            return {
+                "discovery_method": "active_search",
+                "target_source_type": target_type,
+                "source_constraint": source_constraint
+            }
+
+        # 单列定义约束（只有约束，非逻辑键）
+        if inference_method == "single_defined_constraint":
+            source_constraint = self._get_source_constraint(rel)
+            target_type = self._get_target_source_type(rel)
+            return {
+                "discovery_method": "active_search",
+                "target_source_type": target_type,
+                "source_constraint": source_constraint
+            }
+
+        # 单列主动搜索（保留用于向后兼容）
         if inference_method == "single_active_search":
             # 检查源列的实际约束类型
             constraint = self._get_source_constraint(rel)
@@ -397,6 +425,68 @@ class RelationshipWriter:
         else:
             # 没有物理约束（可能只是数据唯一或逻辑主键）
             return None
+
+    def _get_target_source_type(self, rel: Relation) -> Optional[str]:
+        """获取目标列的实际来源类型
+        
+        Args:
+            rel: 关系对象
+            
+        Returns:
+            目标列类型字符串，可能的值：
+            - "primary_key": 物理主键
+            - "unique_constraint": 唯一约束
+            - "index": 索引
+            - "candidate_logical_key": 逻辑主键
+            - None: 无法确定
+        """
+        if not hasattr(self, 'tables') or not self.tables or not rel.is_single_column:
+            return None
+        
+        # 构建目标表的完整名称
+        target_table_key = f"{rel.target_schema}.{rel.target_table}"
+        target_table = self.tables.get(target_table_key)
+        
+        if not target_table:
+            logger.debug(f"未找到目标表元数据: {target_table_key}")
+            return None
+        
+        # 获取目标列的 profile
+        column_profiles = target_table.get("column_profiles", {})
+        target_column = rel.target_columns[0]
+        col_profile = column_profiles.get(target_column)
+        
+        if not col_profile:
+            logger.debug(f"未找到目标列元数据: {target_table_key}.{target_column}")
+            return None
+        
+        # 检查 structure_flags（按优先级：PK > UK > Index）
+        structure_flags = col_profile.get("structure_flags", {})
+        
+        if structure_flags.get("is_primary_key"):
+            return "primary_key"
+        
+        if structure_flags.get("is_unique") or structure_flags.get("is_unique_constraint"):
+            return "unique_constraint"
+        
+        if structure_flags.get("is_indexed"):
+            return "index"
+        
+        # 检查是否为逻辑主键
+        table_profile = target_table.get("table_profile", {})
+        logical_keys = table_profile.get("logical_keys", {})
+        
+        for lk in logical_keys.get("candidate_primary_keys", []):
+            lk_cols = lk.get("columns", [])
+            lk_conf = lk.get("confidence_score", 0)
+            
+            # 单列逻辑主键且置信度 >= 0.8
+            if (len(lk_cols) == 1 and 
+                lk_cols[0] == target_column and 
+                lk_conf >= 0.8):
+                return "candidate_logical_key"
+        
+        return None
 
     def _calculate_statistics_v32(
             self,
