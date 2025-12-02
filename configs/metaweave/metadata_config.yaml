@@ -214,12 +214,13 @@ decision:
   medium_confidence_threshold: 0.80
   suppress_single_if_composite: true  # 复合关系存在时抑制单列关系
 
-# 评分权重
+# 评分权重（优化后：4维度评分体系）
 weights:
-  inclusion_rate: 0.30
-  jaccard_index: 0.15
-  uniqueness: 0.10
-  name_similarity: 0.20
-  type_compatibility: 0.20
-  semantic_role_bonus: 0.05
+  inclusion_rate: 0.55        # 数据包含率（核心指标，提升权重）
+  name_similarity: 0.20       # 列名相似度（防止假阳性）
+  type_compatibility: 0.15    # 类型兼容性（体现JOIN性能）
+  jaccard_index: 0.10         # Jaccard相似度（辅助判断，降低权重）
+  # 已删除的维度：
+  # - uniqueness: 0.10 （逻辑错误：外键关系中应评估源列而非目标列）
+  # - semantic_role_bonus: 0.05 （推断不严谨，权重过小，意义不大）
 

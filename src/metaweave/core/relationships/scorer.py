@@ -1,6 +1,6 @@
 """关系评分器
 
-为候选关系计算6维度评分（必须使用数据库采样）。
+为候选关系计算4维度评分（必须使用数据库采样）。
 """
 
 from typing import Dict, List, Tuple, Any, Set
@@ -11,27 +11,27 @@ from src.metaweave.utils.logger import get_metaweave_logger
 
 logger = get_metaweave_logger("relationships.scorer")
 
-# 默认评分权重
+# 默认评分权重（4维度评分体系）
 DEFAULT_WEIGHTS = {
-    "inclusion_rate": 0.30,
-    "jaccard_index": 0.15,
-    "uniqueness": 0.10,
-    "name_similarity": 0.20,
-    "type_compatibility": 0.20,
-    "semantic_role_bonus": 0.05,
+    "inclusion_rate": 0.55,       # 数据包含率（核心指标）
+    "name_similarity": 0.20,      # 列名相似度（防止假阳性）
+    "type_compatibility": 0.15,   # 类型兼容性（体现JOIN性能）
+    "jaccard_index": 0.10,        # Jaccard相似度（辅助判断）
 }
 
 
 class RelationshipScorer:
     """关系评分器
 
-    6个评分维度：
-    1. inclusion_rate：源列值在目标列中的包含率（数据库采样）
-    2. jaccard_index：Jaccard相似度（数据库采样）
-    3. uniqueness：目标列唯一性（JSON statistics）
-    4. name_similarity：列名相似度（Levenshtein）
-    5. type_compatibility：类型兼容性
-    6. semantic_role_bonus：语义角色加分
+    4个评分维度：
+    1. inclusion_rate (55%)：源列值在目标列中的包含率（数据库采样）
+    2. name_similarity (20%)：列名相似度（Levenshtein算法）
+    3. type_compatibility (15%)：类型兼容性（体现JOIN性能）
+    4. jaccard_index (10%)：Jaccard相似度（数据库采样，辅助判断）
+    
+    已删除的维度：
+    - uniqueness：逻辑错误（外键关系中应评估源列而非目标列）
+    - semantic_role_bonus：推断不严谨，权重过小，意义不大
     """
 
     def __init__(self, config: dict, connector: DatabaseConnector):
@@ -49,7 +49,10 @@ class RelationshipScorer:
         sampling_config = config.get("sampling", {})
         self.sample_size = sampling_config.get("sample_size", 1000)
 
-        logger.info(f"关系评分器已初始化: sample_size={self.sample_size}")
+        logger.info(f"关系评分器已初始化（4维度评分体系）:")
+        logger.info(f"  - sample_size={self.sample_size}")
+        logger.info(f"  - weights={self.weights}")
+        logger.debug(f"  - weights总和={sum(self.weights.values()):.4f}")
 
     def score_candidates(
             self,
@@ -74,17 +77,52 @@ class RelationshipScorer:
                 source_columns = candidate["source_columns"]
                 target_columns = candidate["target_columns"]
 
-                # 计算6个维度评分
+                # 计算4个维度评分
                 score_details = self._calculate_scores(
                     source_table, source_columns,
                     target_table, target_columns
                 )
 
-                # 加权求和
+                # 防御性检查：验证 score_details 的键与 weights 的键是否一致
+                score_keys = set(score_details.keys())
+                weight_keys = set(self.weights.keys())
+
+                if score_keys != weight_keys:
+                    missing_in_weights = score_keys - weight_keys
+                    missing_in_scores = weight_keys - score_keys
+                    error_msg = (
+                        f"评分维度与权重配置不匹配！\n"
+                        f"  score_details 的维度: {sorted(score_keys)}\n"
+                        f"  weights 的维度: {sorted(weight_keys)}\n"
+                    )
+                    if missing_in_weights:
+                        error_msg += f"  score_details 中有但 weights 中缺失: {sorted(missing_in_weights)}\n"
+                    if missing_in_scores:
+                        error_msg += f"  weights 中有但 score_details 中缺失: {sorted(missing_in_scores)}\n"
+                    error_msg += (
+                        "\n请确保配置文件中的 weights 只包含以下4个维度：\n"
+                        "  - inclusion_rate: 0.55\n"
+                        "  - name_similarity: 0.20\n"
+                        "  - type_compatibility: 0.15\n"
+                        "  - jaccard_index: 0.10\n"
+                        "\n如果您使用的是旧配置文件，请更新为新的4维度配置。"
+                    )
+                    logger.error(error_msg)
+                    raise ValueError(error_msg)
+
+                # 计算加权求和
                 composite_score = sum(
                     score_details[dim] * self.weights[dim]
                     for dim in score_details
                 )
+
+                # 验证权重总和为1.0（允许浮点误差）
+                weight_sum = sum(self.weights.values())
+                if abs(weight_sum - 1.0) > 0.001:
+                    logger.warning(
+                        f"权重总和不为1.0: {weight_sum:.4f}，可能导致评分不准确。"
+                        f"当前权重: {self.weights}"
+                    )
 
                 # 添加评分信息到候选
                 candidate["composite_score"] = composite_score
@@ -123,7 +161,17 @@ class RelationshipScorer:
             target_table: dict,
             target_columns: List[str]
     ) -> Dict[str, float]:
-        """计算6个维度评分
+        """计算4个维度评分
+        
+        维度说明：
+        1. inclusion_rate (55%): 源列值在目标列中的包含率
+        2. name_similarity (20%): 列名相似度
+        3. type_compatibility (15%): 类型兼容性
+        4. jaccard_index (10%): Jaccard相似度
+        
+        已删除的维度：
+        - uniqueness: 逻辑错误（外键允许重复）
+        - semantic_role_bonus: 推断不严谨，意义不大
 
         Args:
             source_table: 源表元数据
@@ -132,7 +180,7 @@ class RelationshipScorer:
             target_columns: 目标列列表
 
         Returns:
-            评分明细字典
+            评分明细字典（4个维度）
         """
         source_info = source_table.get("table_info", {})
         target_info = target_table.get("table_info", {})
@@ -145,36 +193,36 @@ class RelationshipScorer:
         source_profiles = source_table.get("column_profiles", {})
         target_profiles = target_table.get("column_profiles", {})
 
+        logger.debug(
+            f"开始计算评分: {source_schema}.{source_table_name}{source_columns} -> "
+            f"{target_schema}.{target_table_name}{target_columns}"
+        )
+
         # 1 & 2: inclusion_rate 和 jaccard_index（数据库采样）
         inclusion_rate, jaccard_index = self._sample_and_calculate_inclusion(
             source_schema, source_table_name, source_columns,
             target_schema, target_table_name, target_columns
         )
 
-        # 3: uniqueness（从JSON获取，平均值）
-        uniqueness = self._calculate_avg_uniqueness(target_columns, target_profiles)
-
-        # 4: name_similarity（列名相似度）
+        # 3: name_similarity（列名相似度）
         name_similarity = self._calculate_name_similarity(source_columns, target_columns)
 
-        # 5: type_compatibility（类型兼容性）
+        # 4: type_compatibility（类型兼容性）
         type_compatibility = self._calculate_type_compatibility(
             source_columns, source_profiles,
             target_columns, target_profiles
         )
 
-        # 6: semantic_role_bonus（语义角色加分）
-        semantic_role_bonus = self._calculate_semantic_role_bonus(
-            target_columns, target_profiles
+        logger.debug(
+            f"评分明细: inclusion_rate={inclusion_rate:.4f}, jaccard_index={jaccard_index:.4f}, "
+            f"name_similarity={name_similarity:.4f}, type_compatibility={type_compatibility:.4f}"
         )
 
         return {
             "inclusion_rate": inclusion_rate,
             "jaccard_index": jaccard_index,
-            "uniqueness": uniqueness,
             "name_similarity": name_similarity,
             "type_compatibility": type_compatibility,
-            "semantic_role_bonus": semantic_role_bonus,
         }
 
     def _sample_and_calculate_inclusion(
@@ -269,32 +317,6 @@ class RelationshipScorer:
                 value_set.add(values)
 
         return value_set
-
-    def _calculate_avg_uniqueness(
-            self,
-            columns: List[str],
-            profiles: Dict[str, dict]
-    ) -> float:
-        """计算平均唯一性
-
-        Args:
-            columns: 列名列表
-            profiles: 列画像字典
-
-        Returns:
-            平均唯一性（0-1）
-        """
-        total_uniqueness = 0
-        count = 0
-
-        for col in columns:
-            profile = profiles.get(col, {})
-            stats = profile.get("statistics", {})
-            uniqueness = stats.get("uniqueness", 0.5)  # 默认0.5
-            total_uniqueness += uniqueness
-            count += 1
-
-        return total_uniqueness / count if count > 0 else 0.5
 
     def _calculate_name_similarity(
             self,
@@ -405,32 +427,3 @@ class RelationshipScorer:
             normalized = normalized.split("(")[0].strip()
 
         return normalized
-
-    def _calculate_semantic_role_bonus(
-            self,
-            columns: List[str],
-            profiles: Dict[str, dict]
-    ) -> float:
-        """计算语义角色加分
-
-        识别为identifier的列给予加分
-
-        Args:
-            columns: 列名列表
-            profiles: 列画像字典
-
-        Returns:
-            语义角色加分（0-1）
-        """
-        identifier_count = 0
-
-        for col in columns:
-            profile = profiles.get(col, {})
-            semantic_analysis = profile.get("semantic_analysis", {})
-            semantic_role = semantic_analysis.get("semantic_role")
-
-            if semantic_role == "identifier":
-                identifier_count += 1
-
-        # 全部是identifier -> 1.0，部分是identifier -> 按比例，都不是 -> 0.0
-        return identifier_count / len(columns) if columns else 0.0

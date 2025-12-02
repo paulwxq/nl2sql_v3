@@ -22,15 +22,13 @@ class TestRelationshipScorer:
 
     @pytest.fixture
     def scorer(self, mock_connector):
-        """创建Scorer实例"""
+        """创建Scorer实例（4维度评分体系）"""
         config = {
             "weights": {
-                "inclusion_rate": 0.30,
-                "jaccard_index": 0.15,
-                "uniqueness": 0.10,
+                "inclusion_rate": 0.55,
                 "name_similarity": 0.20,
-                "type_compatibility": 0.20,
-                "semantic_role_bonus": 0.05
+                "type_compatibility": 0.15,
+                "jaccard_index": 0.10
             }
         }
         return RelationshipScorer(config, mock_connector)
@@ -70,41 +68,6 @@ class TestRelationshipScorer:
             target_columns, target_profiles
         )
         assert score == 1.0  # 完全相同类型
-
-    def test_calculate_avg_uniqueness(self, scorer):
-        """测试平均唯一性计算"""
-        columns = ["store_id"]
-        profiles = {
-            "store_id": {
-                "statistics": {
-                    "uniqueness": 0.1
-                }
-            }
-        }
-
-        score = scorer._calculate_avg_uniqueness(columns, profiles)
-        assert abs(score - 0.1) < 0.01
-
-    def test_semantic_role_bonus(self, scorer):
-        """测试语义角色加分"""
-        columns = ["store_id"]
-
-        # identifier角色应该有加分
-        profiles = {
-            "store_id": {
-                "semantic_analysis": {
-                    "semantic_role": "identifier"
-                }
-            }
-        }
-
-        bonus = scorer._calculate_semantic_role_bonus(columns, profiles)
-        assert bonus == 1.0  # 全部是identifier
-
-        # 非identifier角色
-        profiles["store_id"]["semantic_analysis"]["semantic_role"] = "metric"
-        bonus = scorer._calculate_semantic_role_bonus(columns, profiles)
-        assert bonus == 0.0
 
     def test_extract_value_set_single_column(self, scorer):
         """测试单列值集合提取"""

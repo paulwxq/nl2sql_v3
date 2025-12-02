@@ -29,12 +29,10 @@ class TestRelationshipWriter:
                 "medium_confidence_threshold": 0.80
             },
             "weights": {
-                "inclusion_rate": 0.30,
-                "jaccard_index": 0.15,
-                "uniqueness": 0.10,
+                "inclusion_rate": 0.55,
                 "name_similarity": 0.20,
-                "type_compatibility": 0.20,
-                "semantic_role_bonus": 0.05
+                "type_compatibility": 0.15,
+                "jaccard_index": 0.10
             },
             "composite": {
                 "max_columns": 3
@@ -76,9 +74,7 @@ class TestRelationshipWriter:
                     "inclusion_rate": 0.8,
                     "jaccard_index": 0.6,
                     "name_similarity": 1.0,
-                    "type_compatibility": 1.0,
-                    "uniqueness": 0.9,
-                    "semantic_role_bonus": 1.0
+                    "type_compatibility": 1.0
                 },
                 inference_method="single_active_search"
             )

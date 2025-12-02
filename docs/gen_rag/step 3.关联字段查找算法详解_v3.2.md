@@ -692,14 +692,7 @@ def find_dynamic_composite(source_columns, target_table_json, source_table_json)
 │   └── 复合键: intersection(from_tuples, to_tuples) / len(from_tuples)
 ├── Jaccard系数:
 │   └── len(intersection) / len(union)
-├── 唯一度评分:
-│   ├── 优先使用JSON中的statistics.uniqueness
-│   └── 如需更新: 计算实际采样的unique_count / sample_count
-├── 语义角色奖励:
-│   ├── 两者都是identifier且高置信度: +1.0
-│   ├── 角色相同且中等置信度: +0.8
-│   └── 角色兼容: +0.5
-└── 综合评分计算: 基于权重配置的加权平均
+└── 综合评分计算: 基于权重配置的加权平均（4个维度）
 ```
 
 **性能特点**:
@@ -806,9 +799,8 @@ CREATE TABLE fact_sales (
 步骤8: 结果生成和报告
 ├── 关系对象创建:
 │   ├── 为每个关系生成唯一ID（relationship_id，确定性哈希）
-│   ├── 包含完整的度量信息（metrics，涵盖6个评分维度）
+│   ├── 包含完整的度量信息（metrics，涵盖4个评分维度）
 │   ├── 附加JSON来源标记和发现方法（discovery_method/source_type等）
-│   ├── 记录semantic_role信息
 │   └── 保存抑制信息（嵌套在复合键对象的suppressed_single_relations中）
 │
 │   关系ID生成规范：
@@ -852,13 +844,16 @@ CREATE TABLE fact_sales (
 
 ```yaml
 weights:
-  inclusion_rate: 0.30          # 包含率（最重要）
-  jaccard_index: 0.15           # Jaccard系数
-  uniqueness: 0.10              # 唯一度（从JSON获取）
-  name_similarity: 0.20         # 名称相似度
-  type_compatibility: 0.20      # 类型兼容性（从JSON获取）
-  semantic_role_bonus: 0.05     # 语义角色匹配奖励
+  inclusion_rate: 0.55          # 数据包含率（核心指标）
+  name_similarity: 0.20         # 列名相似度（防止假阳性）
+  type_compatibility: 0.15      # 类型兼容性（体现JOIN性能）
+  jaccard_index: 0.10           # Jaccard相似度（辅助判断）
 ```
+
+**优化说明**：
+- 已删除 `uniqueness` 维度（逻辑错误：外键关系中应评估源列而非目标列）
+- 已删除 `semantic_role_bonus` 维度（推断不严谨，权重过小，意义不大）
+- `inclusion_rate` 成为核心指标，权重提升至 55%
 
 ### 4.2 包含率计算（数据库访问）
 
@@ -906,24 +901,7 @@ def calculate_composite_inclusion_rate(from_table, from_cols, to_table, to_cols)
 - 单列包含率应使用 `sample_column` 接口获取非空集合；复合键包含率应使用 `sample_columns` 获取非空元组集合。
 - 推荐对相同的 `(schema, table, columns)` 请求做结果缓存，减少重复查询。
 
-### 4.3 唯一度评分（优先从JSON）
-
-```python
-def get_uniqueness_score(col_profile):
-    """
-    从JSON直接获取唯一度，无需数据库访问
-    """
-    uniqueness = col_profile['statistics'].get('uniqueness', 0)
-    
-    # 校验有效性
-    if uniqueness is None or uniqueness < 0 or uniqueness > 1:
-        # 异常值，需要数据库重新计算
-        return None
-    
-    return uniqueness
-```
-
-### 4.4 名称相似度计算（仅使用字段名）
+### 4.3 名称相似度计算（仅使用字段名）
 
 **确定性算法**:
 ```python
@@ -992,12 +970,7 @@ def calculate_type_compatibility(from_type, to_type):
     return 0.0
 ```
 
-### 4.6 语义角色奖励（从JSON）
-
-**说明**: 源列筛选时，除audit和metric外的所有semantic_role都可以通过筛选。但在**评分阶段**，不同的semantic_role匹配会获得不同的奖励分。
-
-```python
-def calculate_semantic_role_bonus(from_col_profile, to_col_profile):
+### 4.6 综合评分计算
     """
     基于semantic_role的匹配度计算奖励分
     
@@ -1040,22 +1013,13 @@ def calculate_composite_score(metrics, weights, col_profiles):
     base_score = (
         weights['inclusion_rate'] * metrics.inclusion_rate +
         weights['jaccard_index'] * metrics.jaccard_index +
-        weights['uniqueness'] * metrics.uniqueness_score +
+        weights['jaccard_index'] * metrics.jaccard_index +
         weights['name_similarity'] * metrics.name_similarity +
         weights['type_compatibility'] * metrics.type_compatibility
     )
     
-    # 语义角色奖励
-    semantic_bonus = (
-        weights['semantic_role_bonus'] * 
-        calculate_semantic_role_bonus(
-            col_profiles['from'], 
-            col_profiles['to']
-        )
-    )
-    
-    # 综合评分
-    score = base_score + semantic_bonus
+    # 综合评分（4个维度）
+    score = inclusion_rate_score + jaccard_score + name_sim_score + type_compat_score
     metrics.composite_score = min(1.0, max(0.0, score))
     
     return metrics.composite_score
@@ -1118,12 +1082,10 @@ composite:
 
 # 评分权重
 weights:
-  inclusion_rate: 0.30
-  jaccard_index: 0.15
-  uniqueness: 0.10
-  name_similarity: 0.20
-  type_compatibility: 0.20
-  semantic_role_bonus: 0.05
+  inclusion_rate: 0.55          # 数据包含率（核心指标）
+  name_similarity: 0.20         # 列名相似度（防止假阳性）
+  type_compatibility: 0.15      # 类型兼容性（体现JOIN性能）
+  jaccard_index: 0.10           # Jaccard相似度（辅助判断）
 
 # 决策配置
 decision:
@@ -1293,9 +1255,7 @@ decision:
         "inclusion_rate": 0.75,
         "jaccard_index": 0.68,
         "name_similarity": 0.9,
-        "type_compatibility": 1.0,
-        "uniqueness": 1.0,
-        "semantic_role_bonus": 0.8
+        "type_compatibility": 1.0
       },
       "suppressed_single_relations": [
         {
@@ -1341,10 +1301,8 @@ decision:
       "metrics": {
         "inclusion_rate": 1.0,
         "jaccard_index": 0.98,
-        "uniqueness": 1.0,
         "name_similarity": 1.0,
-        "type_compatibility": 1.0,
-        "semantic_role_bonus": 1.0
+        "type_compatibility": 1.0
       },
       "semantic_roles": {
         "from_column": "identifier",
@@ -1373,10 +1331,8 @@ decision:
       "metrics": {
         "inclusion_rate": 0.98,
         "jaccard_index": 0.95,
-        "uniqueness": 1.0,
         "name_similarity": 0.85,
-        "type_compatibility": 1.0,
-        "semantic_role_bonus": 0.8
+        "type_compatibility": 1.0
       }
     }
   ]
@@ -1471,12 +1427,12 @@ decision:
 └─────────────────────────────────────────────────────┘
               ↓
 ┌─────────────────────────────────────────────────────┐
-│  阶段3: 候选关系评估                                 │
+│  阶段3: 候选关系评估（4维度评分）                    │
 │  • 数据库采样（优化策略）                            │
 │  • 计算包含率（单列/复合键）                         │
 │  • 计算Jaccard系数                                  │
-│  • 唯一度（优先用JSON）                             │
-│  • 语义角色奖励                                      │
+│  • 名称相似度                                        │
+│  • 类型兼容性                                        │
 │  ⏱️  时间: 分钟级                                    │
 │  🔌 数据库访问: 候选数×2                             │
 └─────────────────────────────────────────────────────┘

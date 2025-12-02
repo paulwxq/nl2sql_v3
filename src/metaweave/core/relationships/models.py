@@ -22,7 +22,7 @@ class Relation:
         relationship_type: 关系类型（foreign_key | inferred）
         cardinality: 基数（1:1 | 1:N | N:1 | M:N）
         composite_score: 综合评分（仅推断关系有值，0-1）
-        score_details: 评分明细（6个维度）
+        score_details: 评分明细（4个维度：inclusion_rate, name_similarity, type_compatibility, jaccard_index）
         inference_method: 推断方法（如single_active_search, composite_physical等）
     """
     relationship_id: str
