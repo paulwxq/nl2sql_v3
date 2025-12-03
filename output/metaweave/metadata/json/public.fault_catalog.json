@@ -1,6 +1,6 @@
 {
   "metadata_version": "2.0",
-  "generated_at": "2025-12-03T03:05:17.938321Z",
+  "generated_at": "2025-12-03T05:45:46.664315Z",
   "table_info": {
     "schema_name": "public",
     "table_name": "fault_catalog",
@@ -28,6 +28,11 @@
         "null_count": 0,
         "null_rate": 0.0,
         "uniqueness": 0.125,
+        "avg_length": 6.0,
+        "min_length": 6,
+        "max_length": 6,
+        "median_length": 6.0,
+        "length_std": 0.0,
         "value_distribution": {
           "LINE_A": 8,
           "LINE_B": 8,
@@ -79,6 +84,11 @@
         "null_count": 0,
         "null_rate": 0.0,
         "uniqueness": 0.1667,
+        "avg_length": 3.88,
+        "min_length": 3,
+        "max_length": 4,
+        "median_length": 4.0,
+        "length_std": 0.34,
         "value_distribution": {
           "ELEC": 9,
           "CTRL": 6,
@@ -131,6 +141,11 @@
         "null_count": 0,
         "null_rate": 0.0,
         "uniqueness": 0.1667,
+        "avg_length": 4.0,
+        "min_length": 4,
+        "max_length": 4,
+        "median_length": 4.0,
+        "length_std": 0.0,
         "value_distribution": {
           "E101": 6,
           "E102": 6,
@@ -183,6 +198,11 @@
         "null_count": 0,
         "null_rate": 0.0,
         "uniqueness": 0.3333,
+        "avg_length": 9.62,
+        "min_length": 9,
+        "max_length": 12,
+        "median_length": 9.0,
+        "length_std": 1.01,
         "value_distribution": {
           "欠压告警（电源侧）": 3,
           "欠压告警（控制侧）": 3,
@@ -232,13 +252,18 @@
         "unique_count": 24,
         "null_count": 0,
         "null_rate": 0.0,
-        "uniqueness": 1.0
+        "uniqueness": 1.0,
+        "avg_length": 23.79,
+        "min_length": 18,
+        "max_length": 32,
+        "median_length": 23.0,
+        "length_std": 3.68
       },
       "semantic_analysis": {
-        "semantic_role": "attribute",
-        "semantic_confidence": 0.7,
+        "semantic_role": "description",
+        "semantic_confidence": 0.85,
         "inference_basis": [
-          "fallback_attribute"
+          "description_keyword_match"
         ]
       },
       "structure_flags": {
@@ -254,7 +279,14 @@
         "is_composite_indexed_member": false,
         "is_nullable": true
       },
-      "role_specific_info": {}
+      "role_specific_info": {
+        "description_info": {
+          "avg_length": 23.79,
+          "max_length": 32,
+          "length_variance": 3.68,
+          "is_rich_text": false
+        }
+      }
     }
   },
   "table_profile": {
@@ -279,7 +311,7 @@
       "datetime_count": 0,
       "enum_count": 0,
       "audit_count": 0,
-      "attribute_count": 2,
+      "attribute_count": 1,
       "primary_key_count": 0,
       "foreign_key_count": 0
     },
@@ -327,8 +359,7 @@
       "natural_key": "product_line_code",
       "surrogate_key": null,
       "attributes": [
-        "fault_name",
-        "recommended_action"
+        "fault_name"
       ]
     }
   },
@@ -336,7 +367,7 @@
     "sample_method": "random",
     "sample_size": 5,
     "total_rows": 24,
-    "sampled_at": "2025-12-03T03:05:05.119996Z",
+    "sampled_at": "2025-12-03T05:42:07.373326Z",
     "records": [
       {
         "product_line_code": "LINE_A",

@@ -19,6 +19,7 @@ from src.metaweave.core.metadata.models import (
     ColumnProfile,
     ColumnStatisticsSummary,
     DateTimeInfo,
+    DescriptionInfo,
     DimTableInfo,
     EnumInfo,
     FactTableInfo,
@@ -136,6 +137,25 @@ def _default_audit_patterns() -> List[str]:
     ]
 
 
+def _default_description_keywords() -> List[str]:
+    """description 字段的强匹配关键词"""
+    return [
+        "description", "desc",
+        "note", "notes",
+        "remark", "remarks",
+        "comment", "comments",
+        "memo",
+        "explain", "explanation",
+        "detail", "details",
+        "content", "text", "message",
+    ]
+
+
+def _default_description_exclude_keywords() -> List[str]:
+    """description 字段的排除关键词（倾向于 identifier）"""
+    return ["code", "_id", "_key", "_no", "number", "uuid", "token"]
+
+
 @dataclass
 class FactTableRules:
     min_metric_columns: int = 1
@@ -169,6 +189,16 @@ class ProfilingConfig:
     audit_patterns: List[str] = field(default_factory=_default_audit_patterns)
     datetime_types: List[str] = field(default_factory=_default_datetime_types)
     allowed_identifier_types: List[str] = field(default_factory=_default_allowed_identifier_types)
+    # description 检测配置
+    description_enabled: bool = True
+    description_min_varchar_length: int = 256
+    description_min_avg_length: float = 50.0
+    description_max_stable_std: float = 5.0
+    description_min_variance_std: float = 20.0
+    description_min_uniqueness: float = 0.7
+    description_keywords: List[str] = field(default_factory=_default_description_keywords)
+    description_exclude_keywords: List[str] = field(default_factory=_default_description_exclude_keywords)
+    # 表类型规则
     fact_rules: FactTableRules = field(default_factory=FactTableRules)
     dim_rules: DimTableRules = field(default_factory=DimTableRules)
     bridge_rules: BridgeTableRules = field(default_factory=BridgeTableRules)
@@ -196,6 +226,17 @@ class ProfilingConfig:
             "allowed_data_types",
             _default_allowed_identifier_types(),
         )
+        
+        # 读取 description 检测配置
+        desc_cfg = config.get("sampling", {}).get("description_detection", {})
+        description_enabled = desc_cfg.get("enabled", True)
+        description_min_varchar_length = desc_cfg.get("min_varchar_length", 256)
+        description_min_avg_length = desc_cfg.get("min_avg_length", 50.0)
+        description_max_stable_std = desc_cfg.get("max_stable_std", 5.0)
+        description_min_variance_std = desc_cfg.get("min_variance_std", 20.0)
+        description_min_uniqueness = desc_cfg.get("min_uniqueness", 0.7)
+        description_keywords = desc_cfg.get("include_keywords", _default_description_keywords())
+        description_exclude_keywords = desc_cfg.get("exclude_keywords", _default_description_exclude_keywords())
 
         fact_cfg = config.get("table_profiling", {}).get("fact_table", {})
         dim_cfg = config.get("table_profiling", {}).get("dim_table", {})
@@ -208,6 +249,14 @@ class ProfilingConfig:
             audit_patterns=audit_patterns,
             datetime_types=[dt.lower() for dt in datetime_types],
             allowed_identifier_types=[dt.lower() for dt in allowed_identifier_types],
+            description_enabled=description_enabled,
+            description_min_varchar_length=description_min_varchar_length,
+            description_min_avg_length=description_min_avg_length,
+            description_max_stable_std=description_max_stable_std,
+            description_min_variance_std=description_min_variance_std,
+            description_min_uniqueness=description_min_uniqueness,
+            description_keywords=description_keywords,
+            description_exclude_keywords=description_exclude_keywords,
             fact_rules=FactTableRules(
                 min_metric_columns=fact_cfg.get("min_metric_columns", FactTableRules.min_metric_columns),
                 min_dimension_columns=fact_cfg.get(
@@ -328,6 +377,7 @@ class MetadataProfiler:
                 datetime_info,
                 enum_info,
                 audit_info,
+                description_info,
                 inference_basis,
             ) = self._classify_semantics(column, stats, struct_flags)
 
@@ -383,6 +433,7 @@ class MetadataProfiler:
                 datetime_info=datetime_info,
                 enum_info=enum_info,
                 audit_info=audit_info,
+                description_info=description_info,
                 primary_key_info=pk_profile,
                 foreign_key_info=fk_profile,
                 index_info=idx_profile,
@@ -580,6 +631,7 @@ class MetadataProfiler:
         Optional[DateTimeInfo],
         Optional[EnumInfo],
         Optional[AuditInfo],
+        Optional[DescriptionInfo],
         List[str],
     ]:
         column_name = column.column_name
@@ -599,6 +651,7 @@ class MetadataProfiler:
                 None,
                 None,
                 AuditInfo(audit_type=audit_type, description=description),
+                None,
                 inference_basis,
             )
 
@@ -613,6 +666,7 @@ class MetadataProfiler:
                 None,
                 None,
                 DateTimeInfo(datetime_type=column.data_type.lower(), datetime_grain=grain),
+                None,
                 None,
                 None,
                 inference_basis,
@@ -632,8 +686,34 @@ class MetadataProfiler:
                 None,
                 None,
                 None,
+                None,
                 inference_basis,
             )
+
+        # description detection（在 identifier 之后，enum 之前）
+        if self.config.description_enabled:
+            is_desc, desc_basis = self._is_description(column, stats, struct_flags)
+            if is_desc:
+                inference_basis.append(desc_basis)
+                avg_len = stats.get("avg_length", 0) if stats else 0
+                max_len = stats.get("max_length", 0) if stats else 0
+                length_std = stats.get("length_std", 0) if stats else 0
+                return (
+                    "description",
+                    0.85,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    DescriptionInfo(
+                        avg_length=avg_len,
+                        max_length=max_len,
+                        length_variance=length_std,
+                        is_rich_text=False,
+                    ),
+                    inference_basis,
+                )
 
         # enum detection (简单两值情况)
         if self._is_simple_two_value_enum(column, stats, struct_flags):
@@ -647,6 +727,7 @@ class MetadataProfiler:
                 None,
                 None,
                 EnumInfo(cardinality=cardinality, cardinality_level="low", values=values),
+                None,
                 None,
                 inference_basis,
             )
@@ -681,12 +762,13 @@ class MetadataProfiler:
                 None,
                 None,
                 None,
+                None,
                 inference_basis,
             )
 
         # default attribute
         inference_basis.append("fallback_attribute")
-        return ("attribute", 0.7, None, None, None, None, None, inference_basis)
+        return ("attribute", 0.7, None, None, None, None, None, None, inference_basis)
 
     def _is_simple_two_value_enum(
         self,
@@ -953,6 +1035,90 @@ class MetadataProfiler:
         
         # 都不满足
         return (False, 0.0, None, [])
+
+    def _is_description(
+        self,
+        column: ColumnInfo,
+        stats: Optional[Dict],
+        struct_flags: StructureFlags,
+    ) -> Tuple[bool, str]:
+        """判断是否为 description 角色
+        
+        判断顺序：
+        1. 排除有物理约束的字段
+        2. 数据类型检查（text 或 长 varchar）
+        3. 命名模式强匹配（优先于平均长度检查）
+        4. 统计特征检查（平均长度、唯一性、长度离散度）
+        
+        Args:
+            column: 列信息
+            stats: 统计信息
+            struct_flags: 结构标志
+            
+        Returns:
+            (是否为 description, 推断依据)
+        """
+        # 1. 排除：有物理约束或被索引的字段
+        if (struct_flags.is_primary_key or
+            struct_flags.is_composite_primary_key_member or
+            struct_flags.is_foreign_key or
+            struct_flags.is_composite_foreign_key_member or
+            struct_flags.is_indexed or
+            struct_flags.is_composite_indexed_member):
+            return (False, "")
+        
+        data_type = column.data_type.lower()
+        lower_name = column.column_name.lower()
+        
+        # 2. 数据类型检查
+        is_text_type = data_type == "text"
+        is_long_varchar = (
+            data_type in ("varchar", "character varying", "char", "character")
+            and column.character_maximum_length
+            and column.character_maximum_length >= self.config.description_min_varchar_length
+        )
+        
+        if not (is_text_type or is_long_varchar):
+            return (False, "")
+        
+        # 3. 命名模式强匹配（优先于平均长度检查）
+        # 如果字段名包含 description 关键词，直接判定为 description
+        if any(kw in lower_name for kw in self.config.description_keywords):
+            return (True, "description_keyword_match")
+        
+        # 4. 排除：包含 identifier 关键词的字段
+        if any(kw in lower_name for kw in self.config.description_exclude_keywords):
+            return (False, "")
+        
+        # 以下是统计特征检查，需要 stats
+        if not stats:
+            return (False, "")
+        
+        # 5. 平均长度检查
+        avg_length = stats.get("avg_length", 0)
+        if avg_length < self.config.description_min_avg_length:
+            return (False, "")
+        
+        # 6. 唯一性检查
+        uniqueness = stats.get("uniqueness", 0)
+        if uniqueness < self.config.description_min_uniqueness:
+            return (False, "")
+        
+        # 7. 长度稳定性检查
+        length_std = stats.get("length_std", 0)
+        max_length = stats.get("max_length", 0)
+        min_length = stats.get("min_length", 0)
+        
+        # 如果长度非常稳定，可能是固定格式的编码，排除
+        if length_std < self.config.description_max_stable_std:
+            return (False, "")
+        
+        # 8. 如果长度离散度高，判定为 description
+        length_range = max_length - min_length
+        if length_std > self.config.description_min_variance_std or length_range > 100:
+            return (True, "description_high_variance")
+        
+        return (False, "")
 
     def _matches_datetime_name(self, column_name: str) -> bool:
         datetime_keywords = [

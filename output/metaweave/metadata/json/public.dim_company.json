@@ -1,6 +1,6 @@
 {
   "metadata_version": "2.0",
-  "generated_at": "2025-12-03T03:05:17.744347Z",
+  "generated_at": "2025-12-03T05:45:46.347447Z",
   "table_info": {
     "schema_name": "public",
     "table_name": "dim_company",
@@ -82,6 +82,11 @@
         "null_count": 0,
         "null_rate": 0.0,
         "uniqueness": 1.0,
+        "avg_length": 3.0,
+        "min_length": 2,
+        "max_length": 4,
+        "median_length": 3.0,
+        "length_std": 1.0,
         "value_distribution": {
           "京东便利": 1,
           "喜士多": 1,
@@ -161,7 +166,7 @@
     "sample_method": "random",
     "sample_size": 3,
     "total_rows": 3,
-    "sampled_at": "2025-12-03T03:05:04.946103Z",
+    "sampled_at": "2025-12-03T05:42:07.134279Z",
     "records": [
       {
         "company_id": 1,

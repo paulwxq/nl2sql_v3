@@ -1,6 +1,6 @@
 {
   "metadata_version": "2.0",
-  "generated_at": "2025-12-03T03:05:17.736341Z",
+  "generated_at": "2025-12-03T05:45:46.348453Z",
   "table_info": {
     "schema_name": "public",
     "table_name": "dim_product_type",
@@ -83,6 +83,11 @@
         "null_count": 0,
         "null_rate": 0.0,
         "uniqueness": 1.0,
+        "avg_length": 2.0,
+        "min_length": 2,
+        "max_length": 2,
+        "median_length": 2.0,
+        "length_std": 0.0,
         "value_distribution": {
           "饮料": 1,
           "零食": 1,
@@ -163,7 +168,7 @@
     "sample_method": "random",
     "sample_size": 4,
     "total_rows": 4,
-    "sampled_at": "2025-12-03T03:05:04.937104Z",
+    "sampled_at": "2025-12-03T05:42:07.136277Z",
     "records": [
       {
         "product_type_id": 1,

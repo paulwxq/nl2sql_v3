@@ -48,8 +48,8 @@ class CandidateGenerator:
         self.composite_logical_key_min_confidence = composite_config["logical_key_min_confidence"]
         self.composite_name_similarity_important_target = composite_config["name_similarity_important_target"]
         
-        # 复合键排除的语义角色（硬编码只排除 metric）
-        self.composite_exclude_semantic_roles = {"metric"}
+        # 复合键排除的语义角色（硬编码排除 metric 和 description）
+        self.composite_exclude_semantic_roles = {"metric", "description"}
 
         logger.info(f"候选生成器已初始化:")
         logger.info(f"  单列配置: important_target_sim={self.single_name_similarity_important_target}, "

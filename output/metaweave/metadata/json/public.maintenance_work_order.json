@@ -1,6 +1,6 @@
 {
   "metadata_version": "2.0",
-  "generated_at": "2025-12-03T03:05:18.098109Z",
+  "generated_at": "2025-12-03T05:45:47.025898Z",
   "table_info": {
     "schema_name": "public",
     "table_name": "maintenance_work_order",
@@ -236,6 +236,11 @@
         "null_count": 0,
         "null_rate": 0.0,
         "uniqueness": 0.01,
+        "avg_length": 7.0,
+        "min_length": 7,
+        "max_length": 7,
+        "median_length": 7.0,
+        "length_std": 0.0,
         "value_distribution": {
           "cfg-1.0": 100,
           "cfg-2.0": 100
@@ -285,6 +290,11 @@
         "null_count": 0,
         "null_rate": 0.0,
         "uniqueness": 0.015,
+        "avg_length": 6.0,
+        "min_length": 6,
+        "max_length": 6,
+        "median_length": 6.0,
+        "length_std": 0.0,
         "value_distribution": {
           "LINE_A": 67,
           "LINE_B": 67,
@@ -336,6 +346,11 @@
         "null_count": 0,
         "null_rate": 0.0,
         "uniqueness": 0.015,
+        "avg_length": 3.75,
+        "min_length": 3,
+        "max_length": 4,
+        "median_length": 4.0,
+        "length_std": 0.43,
         "value_distribution": {
           "ELEC": 100,
           "CTRL": 50,
@@ -387,6 +402,11 @@
         "null_count": 0,
         "null_rate": 0.0,
         "uniqueness": 0.02,
+        "avg_length": 4.0,
+        "min_length": 4,
+        "max_length": 4,
+        "median_length": 4.0,
+        "length_std": 0.0,
         "value_distribution": {
           "E101": 50,
           "E102": 50,
@@ -741,7 +761,7 @@
     "sample_method": "random",
     "sample_size": 5,
     "total_rows": 200,
-    "sampled_at": "2025-12-03T03:05:05.332677Z",
+    "sampled_at": "2025-12-03T05:42:07.564506Z",
     "records": [
       {
         "wo_id": 20000,

@@ -1,6 +1,6 @@
 {
   "metadata_version": "2.0",
-  "generated_at": "2025-12-03T03:05:17.832648Z",
+  "generated_at": "2025-12-03T05:45:46.547171Z",
   "table_info": {
     "schema_name": "public",
     "table_name": "equipment_config",
@@ -89,6 +89,11 @@
         "null_count": 0,
         "null_rate": 0.0,
         "uniqueness": 0.1,
+        "avg_length": 7.0,
+        "min_length": 7,
+        "max_length": 7,
+        "median_length": 7.0,
+        "length_std": 0.0,
         "value_distribution": {
           "cfg-1.0": 10,
           "cfg-2.0": 10
@@ -138,6 +143,11 @@
         "null_count": 0,
         "null_rate": 0.0,
         "uniqueness": 0.5,
+        "avg_length": 6.0,
+        "min_length": 6,
+        "max_length": 6,
+        "median_length": 6.0,
+        "length_std": 0.0,
         "value_distribution": {
           "PLC-X1": 2,
           "PLC-X2": 2,
@@ -189,7 +199,12 @@
         "unique_count": 19,
         "null_count": 0,
         "null_rate": 0.0,
-        "uniqueness": 0.95
+        "uniqueness": 0.95,
+        "avg_length": 8.0,
+        "min_length": 8,
+        "max_length": 8,
+        "median_length": 8.0,
+        "length_std": 0.0
       },
       "semantic_analysis": {
         "semantic_role": "audit",
@@ -287,7 +302,7 @@
     "sample_method": "random",
     "sample_size": 5,
     "total_rows": 20,
-    "sampled_at": "2025-12-03T03:05:05.065911Z",
+    "sampled_at": "2025-12-03T05:42:07.273803Z",
     "records": [
       {
         "equipment_id": 1001,

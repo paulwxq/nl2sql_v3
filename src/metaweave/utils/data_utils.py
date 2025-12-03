@@ -231,6 +231,19 @@ def get_column_statistics(
                 "mean": safe_str(col_data.mean()),
             })
         
+        # 如果是字符串类型，添加长度统计（用于 description 检测）
+        if pd.api.types.is_string_dtype(col_data) or col_data.dtype == object:
+            non_null_data = col_data.dropna()
+            if len(non_null_data) > 0:
+                lengths = non_null_data.astype(str).str.len()
+                stats.update({
+                    "avg_length": round(float(lengths.mean()), 2),
+                    "min_length": int(lengths.min()),
+                    "max_length": int(lengths.max()),
+                    "median_length": round(float(lengths.median()), 2),
+                    "length_std": round(float(lengths.std()), 2) if len(lengths) > 1 else 0.0,
+                })
+        
         # 如果唯一值较少，添加值分布
         if stats["unique_count"] <= value_distribution_threshold:
             value_counts = col_data.value_counts().head(10)

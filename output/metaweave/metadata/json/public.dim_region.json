@@ -1,6 +1,6 @@
 {
   "metadata_version": "2.0",
-  "generated_at": "2025-12-03T03:05:17.857187Z",
+  "generated_at": "2025-12-03T05:45:46.497162Z",
   "table_info": {
     "schema_name": "public",
     "table_name": "dim_region",
@@ -87,6 +87,11 @@
         "null_count": 0,
         "null_rate": 0.0,
         "uniqueness": 1.0,
+        "avg_length": 3.0,
+        "min_length": 3,
+        "max_length": 3,
+        "median_length": 3.0,
+        "length_std": 0.0,
         "value_distribution": {
           "天河区": 1,
           "越秀区": 1,
@@ -192,6 +197,11 @@
         "null_count": 0,
         "null_rate": 0.0,
         "uniqueness": 0.5,
+        "avg_length": 3.0,
+        "min_length": 3,
+        "max_length": 3,
+        "median_length": 3.0,
+        "length_std": 0.0,
         "value_distribution": {
           "广州市": 2,
           "深圳市": 2,
@@ -291,6 +301,11 @@
         "null_count": 0,
         "null_rate": 0.0,
         "uniqueness": 0.25,
+        "avg_length": 3.0,
+        "min_length": 3,
+        "max_length": 3,
+        "median_length": 3.0,
+        "length_std": 0.0,
         "value_distribution": {
           "广东省": 4,
           "江苏省": 4
@@ -372,7 +387,7 @@
     "sample_method": "random",
     "sample_size": 5,
     "total_rows": 8,
-    "sampled_at": "2025-12-03T03:05:05.014663Z",
+    "sampled_at": "2025-12-03T05:42:07.218803Z",
     "records": [
       {
         "region_id": 440106,

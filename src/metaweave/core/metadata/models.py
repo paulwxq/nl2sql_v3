@@ -315,6 +315,18 @@ class AuditInfo:
 
 
 @dataclass
+class DescriptionInfo:
+    """描述字段信息"""
+    avg_length: float  # 平均长度
+    max_length: int  # 最大长度
+    length_variance: float  # 长度标准差
+    is_rich_text: bool = False  # 是否包含富文本（HTML/Markdown）
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
 class PrimaryKeyProfileInfo:
     source: str  # constraint | logical
     confidence: Optional[float] = None
@@ -359,6 +371,7 @@ class ColumnProfile:
     datetime_info: Optional[DateTimeInfo] = None
     enum_info: Optional[EnumInfo] = None
     audit_info: Optional["AuditInfo"] = None
+    description_info: Optional["DescriptionInfo"] = None
     primary_key_info: Optional[PrimaryKeyProfileInfo] = None
     foreign_key_info: Optional[ForeignKeyProfileInfo] = None
     index_info: Optional[IndexProfileInfo] = None
@@ -391,6 +404,8 @@ class ColumnProfile:
             role_specific_info["enum_info"] = self.enum_info.to_dict()
         if self.audit_info:
             role_specific_info["audit_info"] = self.audit_info.to_dict()
+        if self.description_info:
+            role_specific_info["description_info"] = self.description_info.to_dict()
         if self.primary_key_info:
             role_specific_info["primary_key_info"] = self.primary_key_info.to_dict()
         if self.foreign_key_info:

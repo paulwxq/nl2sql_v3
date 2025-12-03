@@ -115,7 +115,7 @@ class MetadataGenerator:
         self.active_step = "all"
         self.active_formats = self.formatter.formats
         self.ddl_loader: Optional[DDLLoader] = None
-        self.profiler = MetadataProfiler(self.config.get("profiling"))
+        self.profiler = MetadataProfiler(self.config)
         
         # 采样配置
         self.sampling_config = self.config.get("sampling", {})

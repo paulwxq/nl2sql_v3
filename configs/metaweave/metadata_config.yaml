@@ -85,6 +85,51 @@ sampling:
       - details     # 详情字段（如 product_details）
       - memo        # 备忘字段（如 transaction_memo）
       - summary     # 摘要字段（如 report_summary）
+  
+  # Description 检测配置（长文本说明字段）
+  description_detection:
+    enabled: true
+    
+    # 类型阈值
+    min_varchar_length: 256       # varchar 最小长度（小于此值不考虑）
+    
+    # 长度统计阈值
+    min_avg_length: 50            # 平均长度阈值（核心指标）
+    max_stable_std: 5             # 稳定编码的最大标准差（用于排除固定格式编码）
+    min_variance_std: 20          # 离散文本的最小标准差（高离散度强判定）
+    
+    # 其他阈值
+    min_uniqueness: 0.7           # 最小唯一性
+    
+    # 命名模式（包含这些关键词倾向于识别为 description）
+    include_keywords:
+      - description
+      - desc
+      - note
+      - notes
+      - remark
+      - remarks
+      - comment
+      - comments
+      - memo
+      - explain
+      - explanation
+      - detail
+      - details
+      - content
+      - text
+      - message
+      - action
+    
+    # 排除关键词（包含这些关键词排除 description，倾向于 identifier）
+    exclude_keywords:
+      - code
+      - _id
+      - _key
+      - _no
+      - number
+      - uuid
+      - token
 
 # LLM 配置
 llm:
@@ -192,6 +237,7 @@ single_column:
   exclude_semantic_roles:
     - audit
     - metric
+    - description  # 新增：description 字段不适合作为关联键
   logical_key_min_confidence: 0.8
   min_type_compatibility: 0.8  # 最低类型兼容性阈值
   name_similarity_important_target: 0.6  # 目标列是关键字段时的名称相似度阈值
