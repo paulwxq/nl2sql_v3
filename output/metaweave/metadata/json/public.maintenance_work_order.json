@@ -1,6 +1,6 @@
 {
   "metadata_version": "2.0",
-  "generated_at": "2025-12-02T10:33:24.861297Z",
+  "generated_at": "2025-12-03T03:05:18.098109Z",
   "table_info": {
     "schema_name": "public",
     "table_name": "maintenance_work_order",
@@ -28,9 +28,9 @@
         "null_count": 0,
         "null_rate": 0.0,
         "uniqueness": 0.5,
-        "min": "10000",
-        "max": "10099",
-        "mean": "10049.5"
+        "min": "20000",
+        "max": "20099",
+        "mean": "20049.5"
       },
       "semantic_analysis": {
         "semantic_role": "identifier",
@@ -171,20 +171,24 @@
       "comment_source": "ddl",
       "statistics": {
         "sample_count": 200,
-        "unique_count": 6,
+        "unique_count": 10,
         "null_count": 0,
         "null_rate": 0.0,
-        "uniqueness": 0.03,
+        "uniqueness": 0.05,
         "min": "1001",
-        "max": "1006",
-        "mean": "1003.46",
+        "max": "1010",
+        "mean": "1005.5",
         "value_distribution": {
-          "1001": 34,
-          "1002": 34,
-          "1003": 34,
-          "1004": 34,
-          "1005": 32,
-          "1006": 32
+          "1001": 20,
+          "1002": 20,
+          "1003": 20,
+          "1004": 20,
+          "1005": 20,
+          "1006": 20,
+          "1007": 20,
+          "1008": 20,
+          "1009": 20,
+          "1010": 20
         }
       },
       "semantic_analysis": {
@@ -282,8 +286,8 @@
         "null_rate": 0.0,
         "uniqueness": 0.015,
         "value_distribution": {
-          "LINE_A": 68,
-          "LINE_B": 66,
+          "LINE_A": 67,
+          "LINE_B": 67,
           "LINE_C": 66
         }
       },
@@ -328,15 +332,14 @@
       "comment_source": "ddl",
       "statistics": {
         "sample_count": 200,
-        "unique_count": 4,
+        "unique_count": 3,
         "null_count": 0,
         "null_rate": 0.0,
-        "uniqueness": 0.02,
+        "uniqueness": 0.015,
         "value_distribution": {
-          "ELEC": 56,
-          "HYD": 55,
-          "CTRL": 45,
-          "SENS": 44
+          "ELEC": 100,
+          "CTRL": 50,
+          "HYD": 50
         }
       },
       "semantic_analysis": {
@@ -380,17 +383,23 @@
       "comment_source": "ddl",
       "statistics": {
         "sample_count": 200,
-        "unique_count": 13,
+        "unique_count": 4,
         "null_count": 0,
         "null_rate": 0.0,
-        "uniqueness": 0.065
+        "uniqueness": 0.02,
+        "value_distribution": {
+          "E101": 50,
+          "E102": 50,
+          "C401": 50,
+          "H201": 50
+        }
       },
       "semantic_analysis": {
         "semantic_role": "identifier",
-        "semantic_confidence": 0.85,
+        "semantic_confidence": 0.75,
         "inference_basis": [
           "type_whitelist_passed",
-          "naming_with_uniqueness"
+          "naming_only"
         ]
       },
       "structure_flags": {
@@ -430,9 +439,9 @@
         "null_count": 0,
         "null_rate": 0.0,
         "uniqueness": 1.0,
-        "min": "6",
-        "max": "244",
-        "mean": "122.9"
+        "min": "11",
+        "max": "248",
+        "mean": "128.5"
       },
       "semantic_analysis": {
         "semantic_role": "identifier",
@@ -479,9 +488,9 @@
         "null_count": 0,
         "null_rate": 0.0,
         "uniqueness": 1.0,
-        "min": "0.97",
-        "max": "194.0",
-        "mean": "97.485"
+        "min": "1.37",
+        "max": "274.0",
+        "mean": "137.685"
       },
       "semantic_analysis": {
         "semantic_role": "metric",
@@ -546,9 +555,163 @@
       "candidate_primary_keys": [
         {
           "columns": [
+            "wo_id",
+            "wo_line_no"
+          ],
+          "confidence_score": 0.88,
+          "uniqueness": 1.0,
+          "null_rate": 0.0
+        },
+        {
+          "columns": [
+            "wo_id",
+            "equipment_id"
+          ],
+          "confidence_score": 0.88,
+          "uniqueness": 1.0,
+          "null_rate": 0.0
+        },
+        {
+          "columns": [
+            "wo_id",
+            "config_version"
+          ],
+          "confidence_score": 0.88,
+          "uniqueness": 1.0,
+          "null_rate": 0.0
+        },
+        {
+          "columns": [
+            "wo_id",
+            "product_line_code"
+          ],
+          "confidence_score": 0.88,
+          "uniqueness": 1.0,
+          "null_rate": 0.0
+        },
+        {
+          "columns": [
+            "wo_id",
+            "subsystem_code"
+          ],
+          "confidence_score": 0.88,
+          "uniqueness": 1.0,
+          "null_rate": 0.0
+        },
+        {
+          "columns": [
+            "wo_id",
+            "fault_code"
+          ],
+          "confidence_score": 0.88,
+          "uniqueness": 1.0,
+          "null_rate": 0.0
+        },
+        {
+          "columns": [
+            "wo_id",
             "downtime_minutes"
           ],
-          "confidence_score": 0.79,
+          "confidence_score": 0.88,
+          "uniqueness": 1.0,
+          "null_rate": 0.0
+        },
+        {
+          "columns": [
+            "wo_line_no",
+            "downtime_minutes"
+          ],
+          "confidence_score": 0.88,
+          "uniqueness": 1.0,
+          "null_rate": 0.0
+        },
+        {
+          "columns": [
+            "equipment_id",
+            "downtime_minutes"
+          ],
+          "confidence_score": 0.88,
+          "uniqueness": 1.0,
+          "null_rate": 0.0
+        },
+        {
+          "columns": [
+            "product_line_code",
+            "downtime_minutes"
+          ],
+          "confidence_score": 0.88,
+          "uniqueness": 1.0,
+          "null_rate": 0.0
+        },
+        {
+          "columns": [
+            "subsystem_code",
+            "downtime_minutes"
+          ],
+          "confidence_score": 0.88,
+          "uniqueness": 1.0,
+          "null_rate": 0.0
+        },
+        {
+          "columns": [
+            "fault_code",
+            "downtime_minutes"
+          ],
+          "confidence_score": 0.88,
+          "uniqueness": 1.0,
+          "null_rate": 0.0
+        },
+        {
+          "columns": [
+            "wo_id",
+            "fault_ts"
+          ],
+          "confidence_score": 0.83,
+          "uniqueness": 1.0,
+          "null_rate": 0.0
+        },
+        {
+          "columns": [
+            "wo_line_no",
+            "fault_ts"
+          ],
+          "confidence_score": 0.83,
+          "uniqueness": 1.0,
+          "null_rate": 0.0
+        },
+        {
+          "columns": [
+            "fault_ts",
+            "equipment_id"
+          ],
+          "confidence_score": 0.83,
+          "uniqueness": 1.0,
+          "null_rate": 0.0
+        },
+        {
+          "columns": [
+            "fault_ts",
+            "product_line_code"
+          ],
+          "confidence_score": 0.83,
+          "uniqueness": 1.0,
+          "null_rate": 0.0
+        },
+        {
+          "columns": [
+            "fault_ts",
+            "subsystem_code"
+          ],
+          "confidence_score": 0.83,
+          "uniqueness": 1.0,
+          "null_rate": 0.0
+        },
+        {
+          "columns": [
+            "fault_ts",
+            "fault_code"
+          ],
+          "confidence_score": 0.83,
           "uniqueness": 1.0,
           "null_rate": 0.0
         }
@@ -556,7 +719,8 @@
     },
     "fact_table_info": {
       "grain": [
-        "downtime_minutes"
+        "wo_id",
+        "wo_line_no"
       ],
       "metrics": [
         "spare_part_cost"
@@ -577,67 +741,67 @@
     "sample_method": "random",
     "sample_size": 5,
     "total_rows": 200,
-    "sampled_at": "2025-12-02T10:30:11.618901Z",
+    "sampled_at": "2025-12-03T03:05:05.332677Z",
     "records": [
       {
-        "wo_id": 10000,
+        "wo_id": 20000,
         "wo_line_no": 1,
         "fault_ts": "2025-11-01 08:00:00",
         "equipment_id": 1001,
         "config_version": "cfg-1.0",
         "product_line_code": "LINE_A",
         "subsystem_code": "CTRL",
-        "fault_code": "C401",
-        "downtime_minutes": 12,
-        "spare_part_cost": 0.97
-      },
-      {
-        "wo_id": 10000,
-        "wo_line_no": 2,
-        "fault_ts": "2025-11-01 08:45:00",
-        "equipment_id": 1001,
-        "config_version": "cfg-2.0",
-        "product_line_code": "LINE_A",
-        "subsystem_code": "ELEC",
         "fault_code": "E101",
-        "downtime_minutes": 19,
-        "spare_part_cost": 1.94
+        "downtime_minutes": 23,
+        "spare_part_cost": 1.37
       },
       {
-        "wo_id": 10001,
-        "wo_line_no": 1,
-        "fault_ts": "2025-11-01 09:30:00",
+        "wo_id": 20000,
+        "wo_line_no": 2,
+        "fault_ts": "2025-11-01 08:30:00",
         "equipment_id": 1002,
-        "config_version": "cfg-1.0",
-        "product_line_code": "LINE_A",
+        "config_version": "cfg-2.0",
+        "product_line_code": "LINE_B",
         "subsystem_code": "ELEC",
         "fault_code": "E102",
-        "downtime_minutes": 26,
-        "spare_part_cost": 2.91
+        "downtime_minutes": 36,
+        "spare_part_cost": 2.74
       },
       {
-        "wo_id": 10001,
+        "wo_id": 20001,
+        "wo_line_no": 1,
+        "fault_ts": "2025-11-01 09:00:00",
+        "equipment_id": 1003,
+        "config_version": "cfg-1.0",
+        "product_line_code": "LINE_C",
+        "subsystem_code": "ELEC",
+        "fault_code": "C401",
+        "downtime_minutes": 49,
+        "spare_part_cost": 4.11
+      },
+      {
+        "wo_id": 20001,
         "wo_line_no": 2,
-        "fault_ts": "2025-11-01 10:15:00",
-        "equipment_id": 1002,
+        "fault_ts": "2025-11-01 09:30:00",
+        "equipment_id": 1004,
         "config_version": "cfg-2.0",
         "product_line_code": "LINE_A",
         "subsystem_code": "HYD",
         "fault_code": "H201",
-        "downtime_minutes": 33,
-        "spare_part_cost": 3.88
+        "downtime_minutes": 62,
+        "spare_part_cost": 5.48
       },
       {
-        "wo_id": 10002,
+        "wo_id": 20002,
         "wo_line_no": 1,
-        "fault_ts": "2025-11-01 11:00:00",
-        "equipment_id": 1003,
+        "fault_ts": "2025-11-01 10:00:00",
+        "equipment_id": 1005,
         "config_version": "cfg-1.0",
-        "product_line_code": "LINE_A",
-        "subsystem_code": "HYD",
-        "fault_code": "H202",
-        "downtime_minutes": 40,
-        "spare_part_cost": 4.85
+        "product_line_code": "LINE_B",
+        "subsystem_code": "CTRL",
+        "fault_code": "E101",
+        "downtime_minutes": 75,
+        "spare_part_cost": 6.85
       }
     ]
   }

@@ -56,22 +56,99 @@ handlers:
     encoding: utf8
 
 loggers:
-  metaweave.metadata:
+  # ============================================================
+  # Step 1 & 2: 元数据生成 (--step ddl / --step json)
+  # 日志文件: metadata.log
+  # ============================================================
+  metaweave.generator:
+    level: DEBUG
+    handlers: [metadata_file]
+    propagate: true
+  
+  metaweave.logical_key_detector:
+    level: DEBUG
+    handlers: [metadata_file]
+    propagate: true
+  
+  metaweave.connector:
+    level: DEBUG
+    handlers: [metadata_file]
+    propagate: true
+  
+  metaweave.extractor:
+    level: DEBUG
+    handlers: [metadata_file]
+    propagate: true
+  
+  metaweave.formatter:
+    level: DEBUG
+    handlers: [metadata_file]
+    propagate: true
+  
+  metaweave.ddl_loader:
+    level: DEBUG
+    handlers: [metadata_file]
+    propagate: true
+  
+  metaweave.comment_generator:
+    level: DEBUG
+    handlers: [metadata_file]
+    propagate: true
+  
+  metaweave.llm:
+    level: DEBUG
+    handlers: [metadata_file]
+    propagate: true
+  
+  metaweave.cache:
+    level: DEBUG
+    handlers: [metadata_file]
+    propagate: true
+  
+  metaweave.data_utils:
+    level: DEBUG
+    handlers: [metadata_file]
+    propagate: true
+  
+  metaweave.file_utils:
+    level: DEBUG
+    handlers: [metadata_file]
+    propagate: true
+  
+  metaweave.cli:
     level: DEBUG
     handlers: [metadata_file]
     propagate: true
 
+  # ============================================================
+  # Step 3: 关系发现 (--step rel)
+  # 日志文件: relationships.log
+  # ============================================================
   metaweave.relationships:
     level: DEBUG
     handlers: [relationships_file]
     propagate: true
 
+  # ============================================================
+  # Step 4: CQL 生成 (--step cql)
+  # 日志文件: cql_generator.log
+  # ============================================================
   metaweave.cql_generator:
     level: DEBUG
     handlers: [cql_generator_file]
     propagate: true
 
+  # ============================================================
+  # Step 7: 数据加载 (load --type cql)
+  # 日志文件: loader.log
+  # ============================================================
   metaweave.loader:
+    level: DEBUG
+    handlers: [loader_file]
+    propagate: true
+  
+  # loader 模块使用 __name__，需要完整路径
+  src.metaweave.core.loaders:
     level: DEBUG
     handlers: [loader_file]
     propagate: true

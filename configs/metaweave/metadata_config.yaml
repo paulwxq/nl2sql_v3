@@ -127,7 +127,7 @@ comment_generation:
 # 逻辑主键识别配置
 logical_key_detection:
   enabled: true
-  min_confidence: 0.7
+  min_confidence: 0.8
   max_combinations: 3  # 最多考虑 3 字段组合
   
   # 主键字段名模式

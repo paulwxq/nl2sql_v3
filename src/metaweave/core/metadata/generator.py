@@ -103,6 +103,10 @@ class MetadataGenerator:
         logical_key_config = self.config.get("logical_key_detection", {})
         self.logical_key_enabled = logical_key_config.get("enabled", True)
         if self.logical_key_enabled:
+            # 从 single_column.exclude_semantic_roles 读取单列排除配置
+            single_column_config = self.config.get("single_column", {})
+            single_column_exclude_roles = single_column_config.get("exclude_semantic_roles", ["audit", "metric"])
+            logical_key_config["single_column_exclude_roles"] = single_column_exclude_roles
             self.logical_key_detector = LogicalKeyDetector(logical_key_config)
         
         # 输出格式化器

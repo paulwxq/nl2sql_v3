@@ -32,6 +32,7 @@ class LogicalKeyDetector:
                 - min_confidence: 最小置信度阈值
                 - max_combinations: 最多考虑的字段组合数
                 - name_patterns: 主键字段名模式列表
+                - single_column_exclude_roles: 单列检测时排除的语义角色列表
         """
         self.min_confidence = config.get("min_confidence", 0.7)
         self.max_combinations = config.get("max_combinations", 3)
@@ -40,7 +41,16 @@ class LogicalKeyDetector:
         patterns = config.get("name_patterns", ["id", "code", "key", "no", "number"])
         self.name_patterns = [str(p) for p in patterns] if patterns else ["id", "code", "key", "no", "number"]
         
+        # 单列逻辑主键检测时排除的语义角色（从配置读取，默认排除 audit 和 metric）
+        single_exclude = config.get("single_column_exclude_roles", ["audit", "metric"])
+        self.single_column_exclude_roles = set(single_exclude) if single_exclude else {"audit", "metric"}
+        
+        # 多列逻辑主键检测时排除的语义角色（硬编码，只排除 metric）
+        self.composite_exclude_roles = {"metric"}
+        
         logger.info(f"逻辑主键检测器已初始化 (最小置信度: {self.min_confidence})")
+        logger.info(f"  单列排除角色: {self.single_column_exclude_roles}")
+        logger.info(f"  多列排除角色: {self.composite_exclude_roles}")
     
     def detect(
         self,
@@ -80,14 +90,15 @@ class LogicalKeyDetector:
                 candidate, metadata, sample_data
             )
         
-        # 过滤掉 superkeys，只保留最小候选键
-        minimal_candidates = self._filter_minimal_candidate_keys(candidates)
-        
-        # 筛选满足最小置信度的候选
-        valid_candidates = [
-            c for c in minimal_candidates
+        # 先筛选满足最小置信度的候选（置信度不够的候选不应该阻止复合键的识别）
+        confidence_filtered = [
+            c for c in candidates
             if c.confidence_score >= self.min_confidence
         ]
+        logger.debug(f"置信度过滤: {len(candidates)} -> {len(confidence_filtered)} (阈值={self.min_confidence})")
+        
+        # 然后过滤掉 superkeys，只保留最小候选键
+        valid_candidates = self._filter_minimal_candidate_keys(confidence_filtered)
         
         # 按置信度降序排序
         valid_candidates.sort(key=lambda x: x.confidence_score, reverse=True)
@@ -101,22 +112,22 @@ class LogicalKeyDetector:
         
         return valid_candidates
     
-    def _get_suitable_columns_for_key(
+    def _get_suitable_columns_for_single_key(
         self,
         metadata: TableMetadata
     ) -> List[str]:
-        """获取适合作为逻辑主键的字段列表
+        """获取适合作为单列逻辑主键的字段列表
         
-        规则：只保留 semantic_role 为 "identifier" 或 "datetime" 的字段
+        规则：排除 single_column_exclude_roles 中指定的语义角色（默认排除 audit, metric）
         
         Args:
             metadata: 表元数据（必须已包含 column_profiles）
             
         Returns:
-            适合作为主键的字段名列表
+            适合作为单列主键的字段名列表
         """
         if not metadata.column_profiles:
-            logger.warning("column_profiles 不存在，无法进行逻辑主键检测")
+            logger.warning("column_profiles 不存在，无法进行单列逻辑主键检测")
             return []
         
         suitable_columns = []
@@ -124,14 +135,47 @@ class LogicalKeyDetector:
         for col_name, profile in metadata.column_profiles.items():
             semantic_role = profile.semantic_role
             
-            # 只保留 identifier 和 datetime 类型
-            if semantic_role in ["identifier", "datetime"]:
-                suitable_columns.append(col_name)
-                logger.debug(f"✓ {col_name} (semantic_role={semantic_role})")
+            # 排除指定的语义角色
+            if semantic_role in self.single_column_exclude_roles:
+                logger.debug(f"✗ [单列] {col_name} (semantic_role={semantic_role} 被排除)")
             else:
-                logger.debug(f"✗ {col_name} (semantic_role={semantic_role})")
+                suitable_columns.append(col_name)
+                logger.debug(f"✓ [单列] {col_name} (semantic_role={semantic_role})")
         
-        logger.info(f"适合作为主键的字段 ({len(suitable_columns)}): {suitable_columns}")
+        logger.info(f"适合作为单列主键的字段 ({len(suitable_columns)}): {suitable_columns}")
+        return suitable_columns
+    
+    def _get_suitable_columns_for_composite_key(
+        self,
+        metadata: TableMetadata
+    ) -> List[str]:
+        """获取适合作为复合键组成部分的字段列表
+        
+        规则：排除 composite_exclude_roles 中指定的语义角色（只排除 metric）
+        
+        Args:
+            metadata: 表元数据（必须已包含 column_profiles）
+            
+        Returns:
+            适合作为复合键组成的字段名列表
+        """
+        if not metadata.column_profiles:
+            logger.warning("column_profiles 不存在，无法进行复合键逻辑主键检测")
+            return []
+        
+        suitable_columns = []
+        
+        for col_name, profile in metadata.column_profiles.items():
+            semantic_role = profile.semantic_role
+            
+            # 排除指定的语义角色（只排除 metric）
+            if semantic_role in self.composite_exclude_roles:
+                logger.debug(f"✗ [复合] {col_name} (semantic_role={semantic_role} 被排除)")
+            else:
+                suitable_columns.append(col_name)
+                logger.debug(f"✓ [复合] {col_name} (semantic_role={semantic_role})")
+        
+        logger.info(f"适合作为复合键组成的字段 ({len(suitable_columns)}): {suitable_columns}")
         return suitable_columns
     
     def _get_column_statistics_from_profile(
@@ -139,7 +183,7 @@ class LogicalKeyDetector:
         metadata: TableMetadata,
         col_name: str
     ) -> tuple:
-        """从 column 的 statistics 中获取统计信息
+        """从 column_profiles 的 statistics 中获取统计信息
         
         Args:
             metadata: 表元数据
@@ -148,16 +192,33 @@ class LogicalKeyDetector:
         Returns:
             (uniqueness, null_rate) 元组
         """
-        # 从 metadata.columns 中找到对应的 column
+        # 优先从 column_profiles 获取统计信息（Step 2 生成的完整画像）
+        if metadata.column_profiles and col_name in metadata.column_profiles:
+            profile = metadata.column_profiles[col_name]
+            # column_profiles 中的 statistics 可能是字典或对象
+            if hasattr(profile, 'statistics') and profile.statistics:
+                stats = profile.statistics
+                if isinstance(stats, dict):
+                    uniqueness = stats.get("uniqueness", 0.0)
+                    null_rate = stats.get("null_rate", 1.0)
+                else:
+                    # 如果 statistics 是对象
+                    uniqueness = getattr(stats, 'uniqueness', 0.0)
+                    null_rate = getattr(stats, 'null_rate', 1.0)
+                logger.debug(f"从 column_profiles 获取 {col_name}: uniqueness={uniqueness}, null_rate={null_rate}")
+                return (float(uniqueness), float(null_rate))
+        
+        # 回退：从 metadata.columns 获取
         for col in metadata.columns:
             if col.column_name == col_name and col.statistics:
                 stats = col.statistics
                 uniqueness = stats.get("uniqueness", 0.0)
                 null_rate = stats.get("null_rate", 1.0)
+                logger.debug(f"从 metadata.columns 获取 {col_name}: uniqueness={uniqueness}, null_rate={null_rate}")
                 return (float(uniqueness), float(null_rate))
         
         # 如果没有找到统计信息，返回默认值
-        logger.warning(f"字段 {col_name} 没有统计信息")
+        logger.warning(f"字段 {col_name} 没有统计信息（column_profiles 和 columns 都没有）")
         return (0.0, 1.0)
     
     def _analyze_single_columns(
@@ -176,11 +237,11 @@ class LogicalKeyDetector:
         """
         candidates = []
         
-        # 获取适合作为主键的字段（只有 identifier 和 datetime）
-        suitable_columns = self._get_suitable_columns_for_key(metadata)
+        # 获取适合作为单列主键的字段（排除 audit, metric）
+        suitable_columns = self._get_suitable_columns_for_single_key(metadata)
         
         if not suitable_columns:
-            logger.info("没有适合作为主键的字段")
+            logger.info("没有适合作为单列主键的字段")
             return candidates
         
         for col_name in suitable_columns:
@@ -216,11 +277,11 @@ class LogicalKeyDetector:
         """
         candidates = []
         
-        # 获取适合作为主键的字段（只有 identifier 和 datetime）
-        suitable_columns = self._get_suitable_columns_for_key(metadata)
+        # 获取适合作为复合键组成的字段（只排除 metric）
+        suitable_columns = self._get_suitable_columns_for_composite_key(metadata)
         
         if len(suitable_columns) < 2:
-            logger.info("适合作为主键的字段少于2个，跳过复合键分析")
+            logger.info("适合作为复合键组成的字段少于2个，跳过复合键分析")
             return candidates
         
         # 只对适合的字段生成组合

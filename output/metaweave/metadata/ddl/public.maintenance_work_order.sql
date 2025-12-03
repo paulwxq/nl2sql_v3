@@ -1,7 +1,7 @@
 -- ====================================
 -- Table: public.maintenance_work_order
 -- Comment: 维修工单事实表：粒度为“工单-行/条目”，记录设备故障发生时间、故障码上下文、以及停机与成本等关键指标。
--- Generated: 2025-12-02 18:30:11
+-- Generated: 2025-12-03 11:05:05
 -- ====================================
 
 CREATE TABLE IF NOT EXISTS public.maintenance_work_order (
@@ -36,81 +36,81 @@ COMMENT ON TABLE public.maintenance_work_order IS '维修工单事实表：粒�
 {
   "version": 1,
   "table": "public.maintenance_work_order",
-  "generated_at": "2025-12-02T10:30:11.618901Z",
+  "generated_at": "2025-12-03T03:05:05.332677Z",
   "records": [
     {
       "label": "Record 1",
       "data": {
-        "wo_id": "10000",
+        "wo_id": "20000",
         "wo_line_no": "1",
         "fault_ts": "2025-11-01 08:00:00",
         "equipment_id": "1001",
         "config_version": "cfg-1.0",
         "product_line_code": "LINE_A",
         "subsystem_code": "CTRL",
-        "fault_code": "C401",
-        "downtime_minutes": "12",
-        "spare_part_cost": "0.97"
+        "fault_code": "E101",
+        "downtime_minutes": "23",
+        "spare_part_cost": "1.37"
       }
     },
     {
       "label": "Record 2",
       "data": {
-        "wo_id": "10000",
+        "wo_id": "20000",
         "wo_line_no": "2",
-        "fault_ts": "2025-11-01 08:45:00",
-        "equipment_id": "1001",
+        "fault_ts": "2025-11-01 08:30:00",
+        "equipment_id": "1002",
         "config_version": "cfg-2.0",
-        "product_line_code": "LINE_A",
+        "product_line_code": "LINE_B",
         "subsystem_code": "ELEC",
-        "fault_code": "E101",
-        "downtime_minutes": "19",
-        "spare_part_cost": "1.94"
+        "fault_code": "E102",
+        "downtime_minutes": "36",
+        "spare_part_cost": "2.74"
       }
     },
     {
       "label": "Record 3",
       "data": {
-        "wo_id": "10001",
+        "wo_id": "20001",
         "wo_line_no": "1",
-        "fault_ts": "2025-11-01 09:30:00",
-        "equipment_id": "1002",
+        "fault_ts": "2025-11-01 09:00:00",
+        "equipment_id": "1003",
         "config_version": "cfg-1.0",
-        "product_line_code": "LINE_A",
+        "product_line_code": "LINE_C",
         "subsystem_code": "ELEC",
-        "fault_code": "E102",
-        "downtime_minutes": "26",
-        "spare_part_cost": "2.91"
+        "fault_code": "C401",
+        "downtime_minutes": "49",
+        "spare_part_cost": "4.11"
       }
     },
     {
       "label": "Record 4",
       "data": {
-        "wo_id": "10001",
+        "wo_id": "20001",
         "wo_line_no": "2",
-        "fault_ts": "2025-11-01 10:15:00",
-        "equipment_id": "1002",
+        "fault_ts": "2025-11-01 09:30:00",
+        "equipment_id": "1004",
         "config_version": "cfg-2.0",
         "product_line_code": "LINE_A",
         "subsystem_code": "HYD",
         "fault_code": "H201",
-        "downtime_minutes": "33",
-        "spare_part_cost": "3.88"
+        "downtime_minutes": "62",
+        "spare_part_cost": "5.48"
       }
     },
     {
       "label": "Record 5",
       "data": {
-        "wo_id": "10002",
+        "wo_id": "20002",
         "wo_line_no": "1",
-        "fault_ts": "2025-11-01 11:00:00",
-        "equipment_id": "1003",
+        "fault_ts": "2025-11-01 10:00:00",
+        "equipment_id": "1005",
         "config_version": "cfg-1.0",
-        "product_line_code": "LINE_A",
-        "subsystem_code": "HYD",
-        "fault_code": "H202",
-        "downtime_minutes": "40",
-        "spare_part_cost": "4.85"
+        "product_line_code": "LINE_B",
+        "subsystem_code": "CTRL",
+        "fault_code": "E101",
+        "downtime_minutes": "75",
+        "spare_part_cost": "6.85"
       }
     }
   ]

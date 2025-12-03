@@ -1,13 +1,13 @@
 {
   "metadata_version": "2.0",
-  "generated_at": "2025-12-02T10:33:24.624619Z",
+  "generated_at": "2025-12-03T03:05:17.938321Z",
   "table_info": {
     "schema_name": "public",
     "table_name": "fault_catalog",
     "table_type": "table",
     "comment": "故障码字典维度表：按“产线/产品线 + 子系统 + 故障码”定义故障含义与处理建议，避免同码异义。",
     "comment_source": "ddl",
-    "total_rows": 18,
+    "total_rows": 24,
     "total_columns": 5
   },
   "column_profiles": {
@@ -23,15 +23,15 @@
       "comment": "产线/产品线编码",
       "comment_source": "ddl",
       "statistics": {
-        "sample_count": 18,
+        "sample_count": 24,
         "unique_count": 3,
         "null_count": 0,
         "null_rate": 0.0,
-        "uniqueness": 0.1667,
+        "uniqueness": 0.125,
         "value_distribution": {
-          "LINE_A": 6,
-          "LINE_B": 6,
-          "LINE_C": 6
+          "LINE_A": 8,
+          "LINE_B": 8,
+          "LINE_C": 8
         }
       },
       "semantic_analysis": {
@@ -74,16 +74,16 @@
       "comment": "子系统编码",
       "comment_source": "ddl",
       "statistics": {
-        "sample_count": 18,
+        "sample_count": 24,
         "unique_count": 4,
         "null_count": 0,
         "null_rate": 0.0,
-        "uniqueness": 0.2222,
+        "uniqueness": 0.1667,
         "value_distribution": {
-          "ELEC": 5,
-          "HYD": 5,
-          "CTRL": 4,
-          "SENS": 4
+          "ELEC": 9,
+          "CTRL": 6,
+          "SENS": 6,
+          "HYD": 3
         }
       },
       "semantic_analysis": {
@@ -126,11 +126,17 @@
       "comment": "故障码",
       "comment_source": "ddl",
       "statistics": {
-        "sample_count": 18,
-        "unique_count": 13,
+        "sample_count": 24,
+        "unique_count": 4,
         "null_count": 0,
         "null_rate": 0.0,
-        "uniqueness": 0.7222
+        "uniqueness": 0.1667,
+        "value_distribution": {
+          "E101": 6,
+          "E102": 6,
+          "C401": 6,
+          "H201": 6
+        }
       },
       "semantic_analysis": {
         "semantic_role": "identifier",
@@ -172,11 +178,21 @@
       "comment": "故障名称（标准名）",
       "comment_source": "ddl",
       "statistics": {
-        "sample_count": 18,
-        "unique_count": 18,
+        "sample_count": 24,
+        "unique_count": 8,
         "null_count": 0,
         "null_rate": 0.0,
-        "uniqueness": 1.0
+        "uniqueness": 0.3333,
+        "value_distribution": {
+          "欠压告警（电源侧）": 3,
+          "欠压告警（控制侧）": 3,
+          "过压告警（电源侧）": 3,
+          "过压告警（传感器侧）": 3,
+          "通讯超时（控制网络）": 3,
+          "通讯干扰（电磁侧）": 3,
+          "压力不足（液压侧）": 3,
+          "压力采样异常（传感器侧）": 3
+        }
       },
       "semantic_analysis": {
         "semantic_role": "attribute",
@@ -190,7 +206,7 @@
         "is_composite_primary_key_member": false,
         "is_foreign_key": false,
         "is_composite_foreign_key_member": false,
-        "is_unique": true,
+        "is_unique": false,
         "is_composite_unique_member": false,
         "is_unique_constraint": false,
         "is_composite_unique_constraint_member": false,
@@ -212,8 +228,8 @@
       "comment": "建议处理措施/排查步骤（长文本）",
       "comment_source": "ddl",
       "statistics": {
-        "sample_count": 18,
-        "unique_count": 18,
+        "sample_count": 24,
+        "unique_count": 24,
         "null_count": 0,
         "null_rate": 0.0,
         "uniqueness": 1.0
@@ -272,9 +288,36 @@
         {
           "columns": [
             "product_line_code",
-            "fault_code"
+            "fault_name"
           ],
           "confidence_score": 0.88,
+          "uniqueness": 1.0,
+          "null_rate": 0.0
+        },
+        {
+          "columns": [
+            "product_line_code",
+            "recommended_action"
+          ],
+          "confidence_score": 0.83,
+          "uniqueness": 1.0,
+          "null_rate": 0.0
+        },
+        {
+          "columns": [
+            "subsystem_code",
+            "recommended_action"
+          ],
+          "confidence_score": 0.83,
+          "uniqueness": 1.0,
+          "null_rate": 0.0
+        },
+        {
+          "columns": [
+            "fault_code",
+            "recommended_action"
+          ],
+          "confidence_score": 0.83,
           "uniqueness": 1.0,
           "null_rate": 0.0
         }
@@ -292,43 +335,43 @@
   "sample_records": {
     "sample_method": "random",
     "sample_size": 5,
-    "total_rows": 18,
-    "sampled_at": "2025-12-02T10:30:11.425193Z",
+    "total_rows": 24,
+    "sampled_at": "2025-12-03T03:05:05.119996Z",
     "records": [
       {
         "product_line_code": "LINE_A",
         "subsystem_code": "ELEC",
         "fault_code": "E101",
-        "fault_name": "电源欠压",
-        "recommended_action": "检查电源输入与UPS；测量24V/48V输出；确认接地与端子紧固。"
+        "fault_name": "欠压告警（电源侧）",
+        "recommended_action": "检查输入电源/UPS；测量直流输出；紧固端子，排除接触不良。"
+      },
+      {
+        "product_line_code": "LINE_A",
+        "subsystem_code": "CTRL",
+        "fault_code": "E101",
+        "fault_name": "欠压告警（控制侧）",
+        "recommended_action": "检查控制器供电模块与背板供电；查看控制器日志与重启记录。"
       },
       {
         "product_line_code": "LINE_A",
         "subsystem_code": "ELEC",
         "fault_code": "E102",
-        "fault_name": "电源过压",
+        "fault_name": "过压告警（电源侧）",
         "recommended_action": "检查稳压模块；排查浪涌；必要时更换电源模块。"
+      },
+      {
+        "product_line_code": "LINE_A",
+        "subsystem_code": "SENS",
+        "fault_code": "E102",
+        "fault_name": "过压告警（传感器侧）",
+        "recommended_action": "检查传感器供电分配；隔离支路逐一排查；必要时更换保护器件。"
       },
       {
         "product_line_code": "LINE_A",
         "subsystem_code": "CTRL",
         "fault_code": "C401",
-        "fault_name": "PLC 通讯超时",
-        "recommended_action": "检查以太网/现场总线；核对IP/站号；观察交换机端口与丢包。"
-      },
-      {
-        "product_line_code": "LINE_A",
-        "subsystem_code": "SENS",
-        "fault_code": "S301",
-        "fault_name": "温度传感器开路",
-        "recommended_action": "检查传感器线缆与接头；更换传感器；确认量程与标定。"
-      },
-      {
-        "product_line_code": "LINE_A",
-        "subsystem_code": "HYD",
-        "fault_code": "H201",
-        "fault_name": "液压压力不足",
-        "recommended_action": "检查油位与油温；排查泄漏；检查泵与溢流阀设定。"
+        "fault_name": "通讯超时（控制网络）",
+        "recommended_action": "检查以太网/现场总线；核对IP/站号；观察交换机端口错误与丢包。"
       }
     ]
   }

@@ -47,6 +47,9 @@ class CandidateGenerator:
         self.composite_min_type_compatibility = composite_config["min_type_compatibility"]
         self.composite_logical_key_min_confidence = composite_config["logical_key_min_confidence"]
         self.composite_name_similarity_important_target = composite_config["name_similarity_important_target"]
+        
+        # 复合键排除的语义角色（硬编码只排除 metric）
+        self.composite_exclude_semantic_roles = {"metric"}
 
         logger.info(f"候选生成器已初始化:")
         logger.info(f"  单列配置: important_target_sim={self.single_name_similarity_important_target}, "
@@ -55,6 +58,7 @@ class CandidateGenerator:
         logger.info(f"  复合键配置: max_columns={self.max_columns}, "
                     f"important_target_sim={self.composite_name_similarity_important_target}, "
                     f"type_compat>={self.composite_min_type_compatibility}")
+        logger.info(f"  复合键排除角色: {self.composite_exclude_semantic_roles}")
 
     def generate_candidates(self, tables: Dict[str, dict]) -> List[Dict[str, Any]]:
         """生成所有候选关系
@@ -319,8 +323,33 @@ class CandidateGenerator:
         Returns:
             最佳匹配的目标列列表（顺序与源列对应），如果没有满足阈值的匹配则返回None
         """
-        n = len(source_columns)
-        m = len(target_columns)
+        # 先过滤掉 metric 角色的列
+        filtered_source_columns = []
+        for src_col in source_columns:
+            src_profile = source_profiles.get(src_col, {})
+            src_semantic_role = src_profile.get("semantic_analysis", {}).get("semantic_role")
+            if src_semantic_role in self.composite_exclude_semantic_roles:
+                logger.debug(
+                    "[match_columns_as_set] 源列 %s 语义角色=%s 被排除",
+                    src_col, src_semantic_role
+                )
+                return None  # 源列组合中有 metric，直接返回 None
+            filtered_source_columns.append(src_col)
+        
+        filtered_target_columns = []
+        for tgt_col in target_columns:
+            tgt_profile = target_profiles.get(tgt_col, {})
+            tgt_semantic_role = tgt_profile.get("semantic_analysis", {}).get("semantic_role")
+            if tgt_semantic_role in self.composite_exclude_semantic_roles:
+                logger.debug(
+                    "[match_columns_as_set] 目标列 %s 语义角色=%s 被排除",
+                    tgt_col, tgt_semantic_role
+                )
+                continue  # 跳过 metric 目标列
+            filtered_target_columns.append(tgt_col)
+        
+        n = len(filtered_source_columns)
+        m = len(filtered_target_columns)
 
         # 基本检查：目标列数量必须 >= 源列数量
         if m < n:
@@ -328,7 +357,7 @@ class CandidateGenerator:
 
         # 特殊情况：如果目标列数量正好等于源列数量，穷举所有排列
         if m == n:
-            candidate_pool = target_columns
+            candidate_pool = filtered_target_columns
         else:
             # 如果目标列数量 > 源列数量，需要先从目标列中选出n个列的所有组合
             # 这里为了简化，只考虑m==n的情况
@@ -353,7 +382,7 @@ class CandidateGenerator:
             total_type_compat = 0.0
             is_valid = True  # 标记该排列是否有效
 
-            for src_col, tgt_col in zip(source_columns, perm_list):
+            for src_col, tgt_col in zip(filtered_source_columns, perm_list):
                 # 1. 名称相似度
                 name_sim = self._calculate_name_similarity(src_col, tgt_col)
 
@@ -394,12 +423,12 @@ class CandidateGenerator:
         if best_match:
             logger.debug(
                 "[match_columns_as_set] 找到最佳匹配: %s -> %s, score=%.3f",
-                source_columns, best_match, best_score
+                filtered_source_columns, best_match, best_score
             )
         else:
             logger.debug(
                 "[match_columns_as_set] 未找到满足阈值的匹配: %s",
-                source_columns
+                filtered_source_columns
             )
 
         return best_match
@@ -423,13 +452,33 @@ class CandidateGenerator:
         source_profiles = source_table.get("column_profiles", {})
         target_profiles = target_table.get("column_profiles", {})
 
-        # 1. 构建大小写不敏感的映射（小写列名 -> 原始列名）
-        target_column_map = {col_name.lower(): col_name for col_name in target_profiles.keys()}
+        # 1. 构建大小写不敏感的映射（小写列名 -> 原始列名），排除 metric 角色
+        target_column_map = {}
+        for col_name, col_profile in target_profiles.items():
+            # 检查语义角色，排除 metric
+            semantic_role = col_profile.get("semantic_analysis", {}).get("semantic_role")
+            if semantic_role in self.composite_exclude_semantic_roles:
+                logger.debug(
+                    "[composite_dynamic_same_name] 跳过目标列 %s，语义角色=%s 被排除",
+                    col_name, semantic_role
+                )
+                continue
+            target_column_map[col_name.lower()] = col_name
 
         matched = []
 
         for src_col in source_columns:
             src_col_lower = src_col.lower()
+            
+            # 检查源列语义角色，排除 metric
+            src_profile = source_profiles.get(src_col, {})
+            src_semantic_role = src_profile.get("semantic_analysis", {}).get("semantic_role")
+            if src_semantic_role in self.composite_exclude_semantic_roles:
+                logger.debug(
+                    "[composite_dynamic_same_name] 源列 %s 语义角色=%s 被排除",
+                    src_col, src_semantic_role
+                )
+                return None
 
             # 2. 大小写不敏感的同名检查
             if src_col_lower not in target_column_map:
@@ -437,11 +486,9 @@ class CandidateGenerator:
 
             # 获取目标列的原始名称
             tgt_col = target_column_map[src_col_lower]
-
-            # 3. 类型兼容性检查
-            src_profile = source_profiles.get(src_col, {})
             tgt_profile = target_profiles.get(tgt_col, {})
 
+            # 3. 类型兼容性检查
             src_type = src_profile.get("data_type", "")
             tgt_type = tgt_profile.get("data_type", "")
 
