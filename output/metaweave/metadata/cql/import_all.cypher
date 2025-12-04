@@ -1,7 +1,7 @@
 // import_all.cypher
 // Neo4j 元数据导入脚本（global 模式，包含所有表和关系）
-// 生成时间: 2025-12-02T18:42:56.368128
-// 统计: 9 张表, 41 个列, 7 个关系
+// 生成时间: 2025-12-04T14:47:39.176575
+// 统计: 9 张表, 41 个列, 8 个关系
 
 // =====================================================================
 // 1. 创建唯一约束
@@ -92,7 +92,16 @@ UNWIND [
     "pk": [],
     "uk": [],
     "fk": [],
-    "logic_pk": [],
+    "logic_pk": [
+      [
+        "equipment_id",
+        "config_version"
+      ],
+      [
+        "equipment_id",
+        "firmware_version"
+      ]
+    ],
     "logic_fk": [],
     "logic_uk": [],
     "indexes": []
@@ -146,6 +155,7 @@ UNWIND [
     "logic_pk": [
       [
         "product_line_code",
+        "subsystem_code",
         "fault_code"
       ]
     ],
@@ -161,7 +171,80 @@ UNWIND [
     "pk": [],
     "uk": [],
     "fk": [],
-    "logic_pk": [],
+    "logic_pk": [
+      [
+        "wo_id",
+        "wo_line_no"
+      ],
+      [
+        "wo_id",
+        "equipment_id"
+      ],
+      [
+        "wo_id",
+        "config_version"
+      ],
+      [
+        "wo_id",
+        "product_line_code"
+      ],
+      [
+        "wo_id",
+        "subsystem_code"
+      ],
+      [
+        "wo_id",
+        "fault_code"
+      ],
+      [
+        "wo_id",
+        "downtime_minutes"
+      ],
+      [
+        "wo_line_no",
+        "downtime_minutes"
+      ],
+      [
+        "equipment_id",
+        "downtime_minutes"
+      ],
+      [
+        "product_line_code",
+        "downtime_minutes"
+      ],
+      [
+        "subsystem_code",
+        "downtime_minutes"
+      ],
+      [
+        "fault_code",
+        "downtime_minutes"
+      ],
+      [
+        "wo_id",
+        "fault_ts"
+      ],
+      [
+        "wo_line_no",
+        "fault_ts"
+      ],
+      [
+        "fault_ts",
+        "equipment_id"
+      ],
+      [
+        "fault_ts",
+        "product_line_code"
+      ],
+      [
+        "fault_ts",
+        "subsystem_code"
+      ],
+      [
+        "fault_ts",
+        "fault_code"
+      ]
+    ],
     "logic_fk": [],
     "logic_uk": [],
     "indexes": []
@@ -454,7 +537,7 @@ UNWIND [
     "is_time": false,
     "is_measure": false,
     "pk_position": 0,
-    "uniqueness": 0.1667,
+    "uniqueness": 0.1,
     "null_rate": 0.0
   },
   {
@@ -488,7 +571,7 @@ UNWIND [
     "is_time": false,
     "is_measure": false,
     "pk_position": 0,
-    "uniqueness": 0.75,
+    "uniqueness": 0.95,
     "null_rate": 0.0
   },
   {
@@ -641,7 +724,7 @@ UNWIND [
     "is_time": false,
     "is_measure": false,
     "pk_position": 0,
-    "uniqueness": 0.1667,
+    "uniqueness": 0.125,
     "null_rate": 0.0
   },
   {
@@ -658,7 +741,7 @@ UNWIND [
     "is_time": false,
     "is_measure": false,
     "pk_position": 0,
-    "uniqueness": 0.2222,
+    "uniqueness": 0.1667,
     "null_rate": 0.0
   },
   {
@@ -675,7 +758,7 @@ UNWIND [
     "is_time": false,
     "is_measure": false,
     "pk_position": 0,
-    "uniqueness": 0.7222,
+    "uniqueness": 0.1667,
     "null_rate": 0.0
   },
   {
@@ -692,7 +775,7 @@ UNWIND [
     "is_time": false,
     "is_measure": false,
     "pk_position": 0,
-    "uniqueness": 1.0,
+    "uniqueness": 0.3333,
     "null_rate": 0.0
   },
   {
@@ -702,7 +785,7 @@ UNWIND [
     "name": "recommended_action",
     "comment": "建议处理措施/排查步骤（长文本）",
     "data_type": "text",
-    "semantic_role": "attribute",
+    "semantic_role": "description",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -777,7 +860,7 @@ UNWIND [
     "is_time": false,
     "is_measure": false,
     "pk_position": 0,
-    "uniqueness": 0.03,
+    "uniqueness": 0.05,
     "null_rate": 0.0
   },
   {
@@ -828,7 +911,7 @@ UNWIND [
     "is_time": false,
     "is_measure": false,
     "pk_position": 0,
-    "uniqueness": 0.02,
+    "uniqueness": 0.015,
     "null_rate": 0.0
   },
   {
@@ -845,7 +928,7 @@ UNWIND [
     "is_time": false,
     "is_measure": false,
     "pk_position": 0,
-    "uniqueness": 0.065,
+    "uniqueness": 0.02,
     "null_rate": 0.0
   },
   {
@@ -1080,17 +1163,35 @@ MERGE (t)-[:HAS_COLUMN]->(c);
 UNWIND [
   {
     "src_full_name": "public.maintenance_work_order",
+    "dst_full_name": "public.equipment_config",
+    "cardinality": "N:1",
+    "constraint_name": null,
+    "join_type": "INNER JOIN",
+    "on": "SRC.equipment_id = DST.equipment_id AND SRC.config_version = DST.config_version",
+    "source_columns": [
+      "equipment_id",
+      "config_version"
+    ],
+    "target_columns": [
+      "equipment_id",
+      "config_version"
+    ]
+  },
+  {
+    "src_full_name": "public.maintenance_work_order",
     "dst_full_name": "public.fault_catalog",
     "cardinality": "N:1",
     "constraint_name": null,
     "join_type": "INNER JOIN",
-    "on": "SRC.product_line_code = DST.product_line_code AND SRC.fault_code = DST.fault_code",
+    "on": "SRC.product_line_code = DST.product_line_code AND SRC.subsystem_code = DST.subsystem_code AND SRC.fault_code = DST.fault_code",
     "source_columns": [
       "product_line_code",
+      "subsystem_code",
       "fault_code"
     ],
     "target_columns": [
       "product_line_code",
+      "subsystem_code",
       "fault_code"
     ]
   },
