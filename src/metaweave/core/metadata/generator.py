@@ -107,6 +107,15 @@ class MetadataGenerator:
             single_column_config = self.config.get("single_column", {})
             single_column_exclude_roles = single_column_config.get("exclude_semantic_roles", ["audit", "metric"])
             logical_key_config["single_column_exclude_roles"] = single_column_exclude_roles
+
+            # === 新增：传递 composite 配置（与 CandidateGenerator 使用相同配置） ===
+            composite_config = self.config.get("composite", {})
+            # 默认值保守策略：只排除明确不适合的 metric
+            composite_exclude_roles = composite_config.get("exclude_semantic_roles", ["metric"])
+            logical_key_config["composite_exclude_roles"] = composite_exclude_roles
+
+            logger.info(f"传递复合键排除角色配置给逻辑主键检测器: {composite_exclude_roles}")
+
             self.logical_key_detector = LogicalKeyDetector(logical_key_config)
         
         # 输出格式化器

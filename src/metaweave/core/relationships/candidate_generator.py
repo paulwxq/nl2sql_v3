@@ -47,9 +47,13 @@ class CandidateGenerator:
         self.composite_min_type_compatibility = composite_config["min_type_compatibility"]
         self.composite_logical_key_min_confidence = composite_config["logical_key_min_confidence"]
         self.composite_name_similarity_important_target = composite_config["name_similarity_important_target"]
-        
-        # 复合键排除的语义角色（硬编码排除 metric 和 description）
-        self.composite_exclude_semantic_roles = {"metric", "description"}
+
+        # 复合键排除的语义角色（从配置读取，默认只排除 metric）
+        # ⚠️ 关键：这个配置必须与 LogicalKeyDetector 中的 composite_exclude_roles 来自相同的 YAML 配置
+        # 默认值保守策略：只排除明确不适合的 metric，description 等其他角色由用户根据实际情况选择
+        self.composite_exclude_semantic_roles = set(
+            composite_config.get("exclude_semantic_roles", ["metric"])
+        )
 
         logger.info(f"候选生成器已初始化:")
         logger.info(f"  单列配置: important_target_sim={self.single_name_similarity_important_target}, "
@@ -58,7 +62,7 @@ class CandidateGenerator:
         logger.info(f"  复合键配置: max_columns={self.max_columns}, "
                     f"important_target_sim={self.composite_name_similarity_important_target}, "
                     f"type_compat>={self.composite_min_type_compatibility}")
-        logger.info(f"  复合键排除角色: {self.composite_exclude_semantic_roles}")
+        logger.info(f"  复合键排除角色（从配置）: {self.composite_exclude_semantic_roles}")
 
     def generate_candidates(self, tables: Dict[str, dict]) -> List[Dict[str, Any]]:
         """生成所有候选关系
@@ -194,11 +198,19 @@ class CandidateGenerator:
 
         # 4. 逻辑主键（总是收集）
         logical_keys = table_profile.get("logical_keys", {})
+        table_name = table.get("table_info", {}).get("table_name", "unknown")
+        logger.debug(f"[_collect_source_combinations] 表 {table_name} 的逻辑主键候选数: {len(logical_keys.get('candidate_primary_keys', []))}")
+        
         for lk in logical_keys.get("candidate_primary_keys", []):
             lk_cols = lk.get("columns", [])
             lk_conf = lk.get("confidence_score", 0)
+            logger.debug(f"[_collect_source_combinations] 检查逻辑主键: {table_name}{lk_cols}, conf={lk_conf}, len={len(lk_cols)}")
+            
             if 2 <= len(lk_cols) <= self.max_columns and lk_conf >= self.composite_logical_key_min_confidence:
                 combinations.append({"columns": lk_cols, "type": "logical"})
+                logger.debug(f"[_collect_source_combinations] ✓ 收集逻辑主键: {table_name}{lk_cols}")
+            else:
+                logger.debug(f"[_collect_source_combinations] ✗ 跳过逻辑主键: {table_name}{lk_cols} (len={len(lk_cols)}, conf={lk_conf}, max={self.max_columns}, min_conf={self.composite_logical_key_min_confidence})")
 
         return combinations
 
@@ -236,6 +248,9 @@ class CandidateGenerator:
         # ============================================================
         # Stage 1: 特权模式（Privilege Mode）
         # ============================================================
+        source_table_name = source_table.get("table_info", {}).get("table_name", "unknown")
+        target_table_name = target_table.get("table_info", {}).get("table_name", "unknown")
+        
         if combo_type in ["physical", "logical"]:
             # 收集目标表的约束组合（根据配置决定是否包含索引）
             include_target_indexes = "composite_indexes" in self.target_sources
@@ -245,16 +260,26 @@ class CandidateGenerator:
             )
 
             logger.debug(
-                "[find_target_columns] Stage 1: 特权模式, 目标约束数=%d",
-                len(target_combinations)
+                "[find_target_columns] %s%s → %s: Stage 1 开始（combo_type=%s, 目标约束数=%d）",
+                source_table_name, source_columns, target_table_name, combo_type, len(target_combinations)
             )
 
             # 遍历目标表的所有约束组合
             for target_combo in target_combinations:
                 target_cols = target_combo["columns"]
+                target_combo_type = target_combo["type"]
+
+                logger.debug(
+                    "[find_target_columns] Stage 1: 尝试匹配目标约束 %s%s (type=%s)",
+                    target_table_name, target_cols, target_combo_type
+                )
 
                 # 长度必须相等
                 if len(target_cols) != len(source_columns):
+                    logger.debug(
+                        "[find_target_columns] Stage 1: 跳过（长度不等: %d != %d）",
+                        len(target_cols), len(source_columns)
+                    )
                     continue
 
                 # 使用穷举排列算法匹配
@@ -264,7 +289,9 @@ class CandidateGenerator:
                     source_profiles=source_profiles,
                     target_profiles=target_profiles,
                     min_name_similarity=self.composite_name_similarity_important_target,
-                    min_type_compatibility=self.composite_min_type_compatibility
+                    min_type_compatibility=self.composite_min_type_compatibility,
+                    source_is_physical=(combo_type == "physical"),  # 源表物理约束（PK/UK）
+                    target_is_physical=(target_combo["type"] == "physical")  # 目标表物理约束（PK/UK/索引）
                 )
 
                 if matched:
@@ -274,28 +301,46 @@ class CandidateGenerator:
                     )
                     return matched
 
-            logger.debug("[find_target_columns] Stage 1 未找到匹配")
+            logger.debug(
+                "[find_target_columns] %s%s → %s: Stage 1 未找到匹配",
+                source_table_name, source_columns, target_table_name
+            )
 
         # ============================================================
         # Stage 2: 动态同名匹配（Dynamic Same-Name）
         # ============================================================
-        # 注意：Stage 2 总是执行，不依赖 Stage 1 的结果
-        logger.debug("[find_target_columns] Stage 2: 动态同名匹配")
-
-        matched = self._find_dynamic_same_name(
-            source_columns,
-            source_table,
-            target_table
-        )
-
-        if matched:
+        # ⚠️ 修改：扩展到物理约束（PK/UK）+ 逻辑主键
+        # 原因：逻辑主键也需要动态同名匹配来发现维度表→事实表的外键关系
+        if combo_type in ["physical", "logical"]:
             logger.debug(
-                "[find_target_columns] Stage 2 成功: %s -> %s",
-                source_columns, matched
+                "[find_target_columns] %s%s → %s: Stage 2 开始（combo_type=%s）",
+                source_table_name, source_columns, target_table_name, combo_type
             )
-            return matched
 
-        logger.debug("[find_target_columns] Stage 2 未找到匹配")
+            matched = self._find_dynamic_same_name(
+                source_columns,
+                source_table,
+                target_table,
+                is_physical=True  # 统一不过滤目标列，支持匹配外键
+            )
+
+            if matched:
+                logger.debug(
+                    "[find_target_columns] %s%s → %s: Stage 2 成功 %s",
+                    source_table_name, source_columns, target_table_name, matched
+                )
+                return matched
+
+            logger.debug(
+                "[find_target_columns] %s%s → %s: Stage 2 未找到匹配",
+                source_table_name, source_columns, target_table_name
+            )
+        else:
+            logger.debug(
+                "[find_target_columns] %s%s → %s: 跳过 Stage 2（combo_type=%s）",
+                source_table_name, source_columns, target_table_name, combo_type
+            )
+
         return None
 
     def _match_columns_as_set(
@@ -305,7 +350,9 @@ class CandidateGenerator:
             source_profiles: Dict[str, dict],
             target_profiles: Dict[str, dict],
             min_name_similarity: float,
-            min_type_compatibility: float
+            min_type_compatibility: float,
+            source_is_physical: bool = False,  # 新增：源表是否为物理约束（仅 PK/UK）
+            target_is_physical: bool = False   # 新增：目标表是否为物理约束（PK/UK/索引）
     ) -> Optional[List[str]]:
         """穷举排列算法：在目标列中找到最佳匹配
 
@@ -319,34 +366,53 @@ class CandidateGenerator:
             target_profiles: 目标列画像
             min_name_similarity: 最低名称相似度阈值
             min_type_compatibility: 最低类型兼容性阈值
+            source_is_physical: 源表是否为物理约束（仅 PK/UK，不含索引）
+            target_is_physical: 目标表是否为物理约束（PK/UK/索引，广义物理约束）
 
         Returns:
             最佳匹配的目标列列表（顺序与源列对应），如果没有满足阈值的匹配则返回None
         """
-        # 先过滤掉 metric 角色的列
-        filtered_source_columns = []
-        for src_col in source_columns:
-            src_profile = source_profiles.get(src_col, {})
-            src_semantic_role = src_profile.get("semantic_analysis", {}).get("semantic_role")
-            if src_semantic_role in self.composite_exclude_semantic_roles:
-                logger.debug(
-                    "[match_columns_as_set] 源列 %s 语义角色=%s 被排除",
-                    src_col, src_semantic_role
-                )
-                return None  # 源列组合中有 metric，直接返回 None
-            filtered_source_columns.append(src_col)
-        
+        # === 源表过滤：完全不过滤（尊重所有约束） ===
+        # 核心原则：源列（物理约束 + 逻辑主键）在候选生成阶段完全不过滤
+        # - 物理约束（PK/UK）：DBA 明确定义，完全尊重
+        # - 逻辑主键：在元数据生成阶段已按 composite_exclude_roles 过滤，此处不再二次过滤
+        filtered_source_columns = source_columns  # ✅ 不过滤，完全尊重约束定义
+
+        logger.debug(
+            "[match_columns_as_set] 源表列不过滤（source_is_physical=%s），直接使用: %s",
+            source_is_physical, source_columns
+        )
+
+        # === 目标表过滤：区分物理约束和逻辑约束 ===
         filtered_target_columns = []
         for tgt_col in target_columns:
             tgt_profile = target_profiles.get(tgt_col, {})
             tgt_semantic_role = tgt_profile.get("semantic_analysis", {}).get("semantic_role")
-            if tgt_semantic_role in self.composite_exclude_semantic_roles:
+
+            # 物理约束：完全不过滤（完全尊重 DBA 定义，包括 metric）
+            # ⚠️ 注意：目标表物理约束包括 PK/UK/索引（广义物理约束）
+            if target_is_physical:
                 logger.debug(
-                    "[match_columns_as_set] 目标列 %s 语义角色=%s 被排除",
+                    "[match_columns_as_set] 目标列 %s (物理约束: PK/UK/索引) 不过滤，语义角色=%s",
                     tgt_col, tgt_semantic_role
                 )
-                continue  # 跳过 metric 目标列
+                # ✅ 物理约束不进行语义角色过滤，直接通过
+                pass
+            # 逻辑约束：按配置排除
+            else:
+                if tgt_semantic_role in self.composite_exclude_semantic_roles:
+                    logger.debug(
+                        "[match_columns_as_set] 目标列 %s (逻辑约束) 语义角色=%s 被排除",
+                        tgt_col, tgt_semantic_role
+                    )
+                    continue  # 跳过该列
+
             filtered_target_columns.append(tgt_col)
+
+        # 验证：确保没有把所有列都过滤掉
+        if not filtered_target_columns:
+            logger.debug("[match_columns_as_set] 目标列全部被过滤，匹配失败")
+            return None
         
         n = len(filtered_source_columns)
         m = len(filtered_target_columns)
@@ -437,50 +503,63 @@ class CandidateGenerator:
             self,
             source_columns: List[str],
             source_table: dict,
-            target_table: dict
-    ) -> List[str]:
+            target_table: dict,
+            is_physical: bool = False  # 新增参数：是否为源表物理约束（PK/UK）
+    ) -> Optional[List[str]]:
         """动态同名匹配（大小写不敏感 + 类型兼容）
 
         Args:
             source_columns: 源列列表
             source_table: 源表元数据
             target_table: 目标表元数据
+            is_physical: 是否为源表物理约束（PK/UK）
+                        - True：完全不过滤源表和目标表的列
+                        - False：按配置过滤（但实际上不会调用，因为只对物理约束执行）
 
         Returns:
             目标列列表（保持源列顺序），未找到返回None
+
+        ⚠️ 注意：此函数只在源表为物理约束（PK/UK）时调用
         """
         source_profiles = source_table.get("column_profiles", {})
         target_profiles = target_table.get("column_profiles", {})
 
-        # 1. 构建大小写不敏感的映射（小写列名 -> 原始列名），排除 metric 角色
+        # === 源表：完全不过滤（移除原有的过滤代码） ===
+        logger.debug(
+            "[_find_dynamic_same_name] 源表物理约束（PK/UK）列不过滤: %s",
+            source_columns
+        )
+
+        # === 目标表：源表为物理约束时，目标表完全不过滤 ===
+        # ⚠️ 前提：此时源表必为物理约束（PK/UK），is_physical=True
         target_column_map = {}
         for col_name, col_profile in target_profiles.items():
-            # 检查语义角色，排除 metric
             semantic_role = col_profile.get("semantic_analysis", {}).get("semantic_role")
-            if semantic_role in self.composite_exclude_semantic_roles:
+
+            # 源表为物理约束：目标表任何列都可以作为候选，完全不过滤语义角色
+            if is_physical:
+                target_column_map[col_name.lower()] = col_name
                 logger.debug(
-                    "[composite_dynamic_same_name] 跳过目标列 %s，语义角色=%s 被排除",
+                    "[_find_dynamic_same_name] 目标列 %s 不过滤（源为物理约束），语义角色=%s",
                     col_name, semantic_role
                 )
-                continue
-            target_column_map[col_name.lower()] = col_name
+            # 非物理约束：按配置过滤（实际上不会执行到这里）
+            else:
+                if semantic_role in self.composite_exclude_semantic_roles:
+                    logger.debug(
+                        "[_find_dynamic_same_name] 跳过目标列 %s（语义角色=%s）",
+                        col_name, semantic_role
+                    )
+                    continue
+                target_column_map[col_name.lower()] = col_name
 
         matched = []
 
         for src_col in source_columns:
             src_col_lower = src_col.lower()
-            
-            # 检查源列语义角色，排除 metric
             src_profile = source_profiles.get(src_col, {})
-            src_semantic_role = src_profile.get("semantic_analysis", {}).get("semantic_role")
-            if src_semantic_role in self.composite_exclude_semantic_roles:
-                logger.debug(
-                    "[composite_dynamic_same_name] 源列 %s 语义角色=%s 被排除",
-                    src_col, src_semantic_role
-                )
-                return None
 
-            # 2. 大小写不敏感的同名检查
+            # 大小写不敏感的同名检查
             if src_col_lower not in target_column_map:
                 return None
 
@@ -743,31 +822,25 @@ class CandidateGenerator:
             source_profiles = source_table.get("column_profiles", {})
 
             for col_name, col_profile in source_profiles.items():
-                # 1. 排除 audit 和 metric 角色
-                semantic_role = col_profile.get("semantic_analysis", {}).get("semantic_role")
-                if semantic_role in self.exclude_semantic_roles:
-                    logger.debug(
-                        "[single_column_candidate] 跳过列 %s.%s，语义角色=%s 被排除",
-                        source_full_name,
-                        col_name,
-                        semantic_role,
-                    )
-                    continue
-                
-                # 2. 判断源列是否"重要"（有定义约束 或 是逻辑主键）
+                # === 核心修改：先检查约束类型，不再提前过滤语义角色 ===
+                # 1. 先检查源列是否"重要"（有定义约束 或 是逻辑主键）
                 has_defined_constraint = self._has_defined_constraint(col_profile)
                 is_logical_pk = self._is_logical_primary_key(col_name, source_table)
-                
+
                 # 源列必须至少满足一个条件
                 if not (has_defined_constraint or is_logical_pk):
                     continue
-                
+
+                # 2. 源列完全不过滤（移除语义角色过滤逻辑）
+                semantic_role = col_profile.get("semantic_analysis", {}).get("semantic_role")
+
+                # ⚠️ 核心原则：源列完全不过滤
+                # - 物理约束（PK/UK）：DBA 明确定义，完全尊重
+                # - 逻辑主键：在元数据生成阶段已按 single_column_exclude_roles 过滤，此处不再二次过滤
+
                 logger.debug(
-                    "[single_column_candidate] 源列为重要列: %s.%s (defined_constraint=%s, logical_pk=%s)",
-                    source_full_name,
-                    col_name,
-                    has_defined_constraint,
-                    is_logical_pk,
+                    "[single_column_candidate] 源列不过滤: %s.%s (physical=%s, logical=%s, role=%s)",
+                    source_full_name, col_name, has_defined_constraint, is_logical_pk, semantic_role
                 )
                 
                 # 3. 遍历所有目标表和目标列
@@ -781,11 +854,41 @@ class CandidateGenerator:
                     target_profiles = target_table.get("column_profiles", {})
 
                     for target_col_name, target_col_profile in target_profiles.items():
-                        # (a) 语义角色过滤
+                        # (a) 语义角色过滤：区分物理约束和逻辑约束
                         target_role = target_col_profile.get("semantic_analysis", {}).get("semantic_role")
-                        if target_role in self.exclude_semantic_roles:
-                            continue
-                        
+                        target_structure_flags = target_col_profile.get("structure_flags", {})
+
+                        # 检查目标列是否有物理约束（广义：PK/UK/索引）
+                        # ⚠️ 注意：目标列物理约束包括索引（与源列不同）
+                        target_has_physical = (
+                            target_structure_flags.get("is_primary_key") or          # ✅ PK
+                            target_structure_flags.get("is_unique") or               # ✅ UK
+                            target_structure_flags.get("is_unique_constraint") or    # ✅ UK（另一种标记）
+                            target_structure_flags.get("is_indexed")                 # ✅ 索引（目标表特有）
+                        )
+
+                        # 物理约束：完全不过滤（完全尊重 DBA 定义）
+                        if target_has_physical:
+                            logger.debug(
+                                "[single_column_candidate] 目标列为物理约束（PK/UK/索引），不过滤: %s.%s (role=%s, flags=%s)",
+                                f"{target_schema}.{target_table_name}", target_col_name, target_role,
+                                {k: v for k, v in target_structure_flags.items() if v}  # 只显示 True 的标志
+                            )
+                            # ✅ 物理约束不过滤，直接通过
+                            pass
+                        # 非物理约束：按配置过滤
+                        else:
+                            if target_role in self.exclude_semantic_roles:
+                                logger.debug(
+                                    "[single_column_candidate] 跳过目标列 %s.%s，语义角色=%s 被排除",
+                                    f"{target_schema}.{target_table_name}", target_col_name, target_role
+                                )
+                                continue
+                            logger.debug(
+                                "[single_column_candidate] 目标列通过过滤: %s.%s (role=%s)",
+                                f"{target_schema}.{target_table_name}", target_col_name, target_role
+                            )
+
                         # (b) 类型兼容性过滤
                         src_type = col_profile.get("data_type", "")
                         tgt_type = target_col_profile.get("data_type", "")

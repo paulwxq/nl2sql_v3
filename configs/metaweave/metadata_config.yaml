@@ -253,9 +253,20 @@ composite:
   logical_key_min_confidence: 0.8  # 逻辑主键最低置信度
   name_similarity_important_target: 0.6  # 特权模式目标列的名称相似度阈值
 
+  # === 复合键排除的语义角色（可配置） ===
+  # 说明：
+  # - 用于逻辑主键生成阶段（LogicalKeyDetector）：在生成复合逻辑主键时排除这些角色的字段
+  # - 用于候选生成阶段（CandidateGenerator）：在匹配关系时过滤目标表逻辑约束中的这些角色
+  # - 不影响物理约束（PK/UK/索引）：物理约束始终完全不过滤
+  exclude_semantic_roles:
+    - metric        # 度量字段（如 amount, sales）明确不适合作为关联键
+    # 可选：如果发现 description 字段影响关系质量，可以取消下面的注释
+    - description   # 长文本说明字段（如 remark, note）
+    - attribute     # 属性字段（如 address, phone）
+
 # 决策配置
 decision:
-  accept_threshold: 0.80  # 最低接受阈值
+  accept_threshold: 0.65  # 最低接受阈值
   high_confidence_threshold: 0.90
   medium_confidence_threshold: 0.80
   suppress_single_if_composite: true  # 复合关系存在时抑制单列关系

@@ -1,6 +1,6 @@
 {
   "metadata_version": "2.0",
-  "generated_at": "2025-12-03T05:45:46.547171Z",
+  "generated_at": "2025-12-04T03:41:54.781336Z",
   "table_info": {
     "schema_name": "public",
     "table_name": "equipment_config",
@@ -273,15 +273,6 @@
         {
           "columns": [
             "equipment_id",
-            "controller_model"
-          ],
-          "confidence_score": 0.88,
-          "uniqueness": 1.0,
-          "null_rate": 0.0
-        },
-        {
-          "columns": [
-            "equipment_id",
             "firmware_version"
           ],
           "confidence_score": 0.88,
@@ -302,7 +293,7 @@
     "sample_method": "random",
     "sample_size": 5,
     "total_rows": 20,
-    "sampled_at": "2025-12-03T05:42:07.273803Z",
+    "sampled_at": "2025-12-04T03:20:26.932490Z",
     "records": [
       {
         "equipment_id": 1001,

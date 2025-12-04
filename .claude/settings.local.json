@@ -22,7 +22,8 @@
       "Bash(python -m src.metaweave.cli.main metadata:*)",
       "Bash(mkdir:*)",
       "Bash(git checkout:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(ls:*)"
     ],
     "deny": [],
     "ask": []

@@ -3,17 +3,83 @@
   "json_metadata_version": "2.0",
   "json_files_loaded": 0,
   "database_queries_executed": 0,
-  "analysis_timestamp": "2025-12-02T15:47:14.185004Z",
+  "analysis_timestamp": "2025-12-04T03:56:35.201335Z",
   "statistics": {
-    "total_relationships_found": 6,
+    "total_relationships_found": 8,
     "foreign_key_relationships": 0,
-    "composite_key_relationships": 0,
+    "composite_key_relationships": 2,
     "single_column_relationships": 6,
     "total_suppressed_single_relations": 4,
     "active_search_discoveries": 0,
     "dynamic_composite_discoveries": 0
   },
   "relationships": [
+    {
+      "relationship_id": "rel_412782f89e81",
+      "type": "composite",
+      "from_table": {
+        "schema": "public",
+        "table": "equipment_config"
+      },
+      "to_table": {
+        "schema": "public",
+        "table": "maintenance_work_order"
+      },
+      "from_columns": [
+        "equipment_id",
+        "config_version"
+      ],
+      "to_columns": [
+        "equipment_id",
+        "config_version"
+      ],
+      "discovery_method": "logical_key_matching",
+      "target_source_type": "candidate_logical_key",
+      "source_constraint": null,
+      "composite_score": 0.675,
+      "confidence_level": "low",
+      "metrics": {
+        "inclusion_rate": 0.5,
+        "jaccard_index": 0.5,
+        "name_similarity": 1.0,
+        "type_compatibility": 1.0
+      },
+      "cardinality": "1:N"
+    },
+    {
+      "relationship_id": "rel_4ec0a8823b80",
+      "type": "composite",
+      "from_table": {
+        "schema": "public",
+        "table": "fault_catalog"
+      },
+      "to_table": {
+        "schema": "public",
+        "table": "maintenance_work_order"
+      },
+      "from_columns": [
+        "product_line_code",
+        "subsystem_code",
+        "fault_code"
+      ],
+      "to_columns": [
+        "product_line_code",
+        "subsystem_code",
+        "fault_code"
+      ],
+      "discovery_method": "logical_key_matching",
+      "target_source_type": "candidate_logical_key",
+      "source_constraint": null,
+      "composite_score": 0.675,
+      "confidence_level": "low",
+      "metrics": {
+        "inclusion_rate": 0.5,
+        "jaccard_index": 0.5,
+        "name_similarity": 1.0,
+        "type_compatibility": 1.0
+      },
+      "cardinality": "1:N"
+    },
     {
       "relationship_id": "rel_2eb5cb1dc7e5",
       "type": "single_column",

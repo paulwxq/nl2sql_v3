@@ -44,13 +44,16 @@ class LogicalKeyDetector:
         # 单列逻辑主键检测时排除的语义角色（从配置读取，默认排除 audit 和 metric）
         single_exclude = config.get("single_column_exclude_roles", ["audit", "metric"])
         self.single_column_exclude_roles = set(single_exclude) if single_exclude else {"audit", "metric"}
-        
-        # 多列逻辑主键检测时排除的语义角色（硬编码，只排除 metric）
-        self.composite_exclude_roles = {"metric"}
-        
+
+        # 多列逻辑主键检测时排除的语义角色（从配置读取，默认只排除 metric）
+        # ⚠️ 关键：这个配置必须与 CandidateGenerator 中的 composite_exclude_semantic_roles 使用相同的配置源
+        # 默认值保守策略：只排除明确不适合的 metric，description 等其他角色由用户根据实际情况选择
+        composite_exclude = config.get("composite_exclude_roles", ["metric"])
+        self.composite_exclude_roles = set(composite_exclude) if composite_exclude else {"metric"}
+
         logger.info(f"逻辑主键检测器已初始化 (最小置信度: {self.min_confidence})")
-        logger.info(f"  单列排除角色: {self.single_column_exclude_roles}")
-        logger.info(f"  多列排除角色: {self.composite_exclude_roles}")
+        logger.info(f"  单列排除角色（从配置）: {self.single_column_exclude_roles}")
+        logger.info(f"  多列排除角色（从配置）: {self.composite_exclude_roles}")
     
     def detect(
         self,
