@@ -1,6 +1,7 @@
 """元数据生成 CLI 命令"""
 
 import click
+import json
 import logging
 from pathlib import Path
 
@@ -45,10 +46,10 @@ logger = logging.getLogger("metaweave.cli")
 )
 @click.option(
     "--step",
-    type=click.Choice(["ddl", "json", "cql", "md", "rel", "all"], case_sensitive=False),
+    type=click.Choice(["ddl", "json", "json_llm", "cql", "cql_llm", "md", "rel", "rel_llm", "all"], case_sensitive=False),
     default="all",
     show_default=True,
-    help="指定要执行的步骤：ddl/json/cql/md/rel 或 all"
+    help="指定要执行的步骤：ddl/json/json_llm/cql/cql_llm/md/rel/rel_llm 或 all"
 )
 def metadata_command(
     config: str,
@@ -78,6 +79,156 @@ def metadata_command(
             config_path = get_project_root() / config_path
 
         click.echo(f"📋 加载配置: {config_path}")
+
+        # Step: json_llm - 简化版 JSON 生成
+        if step == "json_llm":
+            from src.metaweave.core.metadata.llm_json_generator import LLMJsonGenerator
+            from src.metaweave.core.metadata.connector import DatabaseConnector
+            from src.services.config_loader import load_config
+
+            click.echo("📦 开始生成简化版 JSON（json_llm）...")
+            click.echo("")
+
+            # 加载配置
+            config = load_config(config_path)
+            
+            # 初始化连接器和生成器
+            connector = DatabaseConnector(config.get("database", {}))
+            generator = LLMJsonGenerator(config, connector)
+            
+            # DDL 目录
+            output_config = config.get("output", {})
+            output_dir = output_config.get("output_dir", "output/metaweave/metadata")
+            ddl_dir = get_project_root() / output_dir / "ddl"
+            
+            if not ddl_dir.exists():
+                raise FileNotFoundError(
+                    f"DDL 目录不存在: {ddl_dir}\n"
+                    f"请先执行 --step ddl 生成 DDL 文件"
+                )
+            
+            # 生成简化版 JSON
+            count = generator.generate_all_from_ddl(ddl_dir)
+            
+            # 显示结果
+            click.echo("")
+            click.echo("=" * 60)
+            click.echo("📊 简化版 JSON 生成结果")
+            click.echo("=" * 60)
+            click.echo(f"✅ 生成文件: {count} 个")
+            click.echo(f"📁 输出目录: {generator.output_dir}")
+            click.echo("=" * 60)
+            click.echo("✨ 简化版 JSON 生成完成！")
+            
+            return
+
+        # Step: rel_llm - LLM 辅助关系发现
+        if step == "rel_llm":
+            from src.metaweave.core.relationships.llm_relationship_discovery import LLMRelationshipDiscovery
+            from src.metaweave.core.metadata.connector import DatabaseConnector
+            from src.services.config_loader import load_config
+
+            click.echo("🤖 开始 LLM 辅助关系发现（rel_llm）...")
+            click.echo("")
+
+            # 加载配置
+            config = load_config(config_path)
+            
+            # 初始化连接器
+            connector = DatabaseConnector(config.get("database", {}))
+            
+            # 初始化发现器
+            discovery = LLMRelationshipDiscovery(config, connector)
+            
+            # 检查 json_llm 目录
+            if not discovery.json_llm_dir.exists():
+                raise FileNotFoundError(
+                    f"json_llm 目录不存在: {discovery.json_llm_dir}\n"
+                    f"请先执行 --step json_llm 生成简化版 JSON"
+                )
+            
+            # 发现关系
+            result = discovery.discover()
+            
+            # 输出结果文件
+            output_config = config.get("output", {})
+            rel_dir = get_project_root() / output_config.get("rel_directory", "output/metaweave/metadata/rel")
+            rel_dir.mkdir(parents=True, exist_ok=True)
+            
+            output_file = rel_dir / "relationships_global.json"
+            with open(output_file, "w", encoding="utf-8") as f:
+                json.dump(result, f, ensure_ascii=False, indent=2)
+            
+            # 显示结果
+            click.echo("")
+            click.echo("=" * 60)
+            click.echo("📊 LLM 辅助关系发现结果")
+            click.echo("=" * 60)
+            stats = result.get("statistics", {})
+            click.echo(f"✅ 总关系数: {stats.get('total_relationships_found', 0)} 个")
+            click.echo(f"  - 物理外键: {stats.get('foreign_key_relationships', 0)}")
+            click.echo(f"  - LLM 推断: {stats.get('llm_assisted_relationships', 0)}")
+            click.echo(f"📁 输出文件: {output_file}")
+            click.echo("=" * 60)
+            click.echo("✨ LLM 辅助关系发现完成！")
+            
+            return
+
+        # Step: cql_llm - CQL 生成（LLM 流程）
+        if step == "cql_llm":
+            from src.metaweave.core.cql_generator.generator import CQLGenerator
+
+            click.echo("🔧 开始生成 Neo4j CQL（LLM 流程）...")
+            click.echo("")
+
+            generator = CQLGenerator(config_path)
+            
+            # 覆盖 json_dir 为 json_llm 目录
+            json_llm_dir = generator._resolve_path(
+                generator.config.get("output", {}).get("json_llm_directory", "output/metaweave/metadata/json_llm")
+            )
+            
+            # 检查 json_llm 目录是否存在
+            if not json_llm_dir.exists():
+                raise FileNotFoundError(
+                    f"json_llm 目录不存在: {json_llm_dir}\n"
+                    f"请先执行 --step json_llm 生成简化版 JSON"
+                )
+            
+            generator.json_dir = json_llm_dir
+            logger.info(f"cql_llm: 使用 json_llm 目录: {json_llm_dir}")
+            
+            result = generator.generate()
+
+            # 显示结果统计
+            click.echo("")
+            click.echo("=" * 60)
+            click.echo("📊 CQL 生成结果统计（LLM 流程）")
+            click.echo("=" * 60)
+            click.echo(f"✅ 表节点: {result.tables_count} 个")
+            click.echo(f"✅ 列节点: {result.columns_count} 个")
+            click.echo(f"✅ 关系: {result.relationships_count} 个")
+            click.echo(f"📁 输出文件: {len(result.output_files)} 个")
+
+            for file_path in result.output_files:
+                click.echo(f"  - {Path(file_path).name}")
+
+            if result.errors:
+                click.echo(f"\n⚠️  错误列表:")
+                for error in result.errors[:5]:
+                    click.echo(f"  - {error}", err=True)
+                if len(result.errors) > 5:
+                    click.echo(f"  ... 还有 {len(result.errors) - 5} 个错误", err=True)
+
+            click.echo("=" * 60)
+
+            if result.success:
+                click.echo("✨ CQL 生成完成（LLM 流程）！")
+            else:
+                click.echo("⚠️  CQL 生成完成，但存在错误", err=True)
+                raise click.Abort()
+
+            return
 
         # Step 4: CQL 生成
         if step == "cql":

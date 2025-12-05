@@ -1,7 +1,7 @@
 // import_all.cypher
 // Neo4j 元数据导入脚本（global 模式，包含所有表和关系）
-// 生成时间: 2025-12-04T14:47:39.176575
-// 统计: 9 张表, 41 个列, 8 个关系
+// 生成时间: 2025-12-04T22:36:09.354150
+// 统计: 9 张表, 41 个列, 9 个关系
 
 // =====================================================================
 // 1. 创建唯一约束
@@ -1162,40 +1162,6 @@ MERGE (t)-[:HAS_COLUMN]->(c);
 
 UNWIND [
   {
-    "src_full_name": "public.maintenance_work_order",
-    "dst_full_name": "public.equipment_config",
-    "cardinality": "N:1",
-    "constraint_name": null,
-    "join_type": "INNER JOIN",
-    "on": "SRC.equipment_id = DST.equipment_id AND SRC.config_version = DST.config_version",
-    "source_columns": [
-      "equipment_id",
-      "config_version"
-    ],
-    "target_columns": [
-      "equipment_id",
-      "config_version"
-    ]
-  },
-  {
-    "src_full_name": "public.maintenance_work_order",
-    "dst_full_name": "public.fault_catalog",
-    "cardinality": "N:1",
-    "constraint_name": null,
-    "join_type": "INNER JOIN",
-    "on": "SRC.product_line_code = DST.product_line_code AND SRC.subsystem_code = DST.subsystem_code AND SRC.fault_code = DST.fault_code",
-    "source_columns": [
-      "product_line_code",
-      "subsystem_code",
-      "fault_code"
-    ],
-    "target_columns": [
-      "product_line_code",
-      "subsystem_code",
-      "fault_code"
-    ]
-  },
-  {
     "src_full_name": "public.dim_store",
     "dst_full_name": "public.dim_company",
     "cardinality": "N:1",
@@ -1238,8 +1204,8 @@ UNWIND [
     ]
   },
   {
-    "src_full_name": "public.dim_store",
-    "dst_full_name": "public.dim_region",
+    "src_full_name": "public.dim_region",
+    "dst_full_name": "public.dim_store",
     "cardinality": "M:N",
     "constraint_name": null,
     "join_type": "INNER JOIN",
@@ -1277,6 +1243,56 @@ UNWIND [
     ],
     "target_columns": [
       "store_id"
+    ]
+  },
+  {
+    "src_full_name": "public.maintenance_work_order",
+    "dst_full_name": "public.equipment_config",
+    "cardinality": "N:1",
+    "constraint_name": null,
+    "join_type": "INNER JOIN",
+    "on": "SRC.equipment_id = DST.equipment_id AND SRC.config_version = DST.config_version",
+    "source_columns": [
+      "equipment_id",
+      "config_version"
+    ],
+    "target_columns": [
+      "equipment_id",
+      "config_version"
+    ]
+  },
+  {
+    "src_full_name": "public.fact_store_sales_day",
+    "dst_full_name": "public.fact_store_sales_month",
+    "cardinality": "M:N",
+    "constraint_name": null,
+    "join_type": "INNER JOIN",
+    "on": "SRC.store_id = DST.store_id AND SRC.product_type_id = DST.product_type_id",
+    "source_columns": [
+      "store_id",
+      "product_type_id"
+    ],
+    "target_columns": [
+      "store_id",
+      "product_type_id"
+    ]
+  },
+  {
+    "src_full_name": "public.maintenance_work_order",
+    "dst_full_name": "public.fault_catalog",
+    "cardinality": "N:1",
+    "constraint_name": null,
+    "join_type": "INNER JOIN",
+    "on": "SRC.product_line_code = DST.product_line_code AND SRC.subsystem_code = DST.subsystem_code AND SRC.fault_code = DST.fault_code",
+    "source_columns": [
+      "product_line_code",
+      "subsystem_code",
+      "fault_code"
+    ],
+    "target_columns": [
+      "product_line_code",
+      "subsystem_code",
+      "fault_code"
     ]
   }
 ] AS j

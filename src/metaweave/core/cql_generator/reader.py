@@ -342,82 +342,75 @@ class JSONReader:
 
     def _extract_join_relation(self, rel: Dict[str, Any]) -> JOINOnRelation:
         """从关系 JSON 中提取 JOIN_ON 关系
-
-        **重要说明**：
-        - 输入语义（relationships_global.json）：from=主键表（发现驱动表），to=外键表（被查找的表）
-        - 输出语义（CQL）：src=外键表（引用端），dst=主键表（被引用端）
-        - 此方法在读取时翻转语义，确保 CQL 符合标准 ER 关系语义
+        
+        方向处理：根据 cardinality 决定是否翻转，确保箭头指向 1 侧
+        - 1:N → 翻转（箭头从 N 指向 1）
+        - N:1 → 不翻转（箭头已从 N 指向 1）
+        - 1:1 / M:N → 不翻转（对称关系）
         """
-        # 读取原始的 from/to（发现语义）
-        from_table = rel.get("from_table", {})  # 主键表（发现语义）
-        to_table = rel.get("to_table", {})      # 外键表（发现语义）
-
-        # 翻转为 ER 语义：src=外键表，dst=主键表
-        src_schema = to_table.get("schema", "")   # 外键表（翻转）
-        src_table = to_table.get("table", "")
-        dst_schema = from_table.get("schema", "") # 主键表（翻转）
-        dst_table = from_table.get("table", "")
-
-        src_full_name = f"{src_schema}.{src_table}"  # 外键表
-        dst_full_name = f"{dst_schema}.{dst_table}"  # 主键表
-
-        # 列信息（同样翻转）
-        rel_type = rel.get("type", "")
-        if rel_type == "single_column":
-            source_columns = [rel.get("to_column", "")]    # 外键列（翻转）
-            target_columns = [rel.get("from_column", "")]  # 主键列（翻转）
-        else:  # composite
-            source_columns = rel.get("to_columns", [])     # 外键列（翻转）
-            target_columns = rel.get("from_columns", [])   # 主键列（翻转）
-
-        # 基数翻转（方向翻转时需同步翻转基数）
+        from_table = rel.get("from_table", {})
+        to_table = rel.get("to_table", {})
         raw_cardinality = rel.get("cardinality", "N:1")
-        cardinality = self._flip_cardinality(raw_cardinality)
-        logger.debug(f"基数翻转: {raw_cardinality} -> {cardinality} ({src_full_name} -> {dst_full_name})")
-
-        # 约束名（仅外键直通才有）
-        constraint_name = rel.get("constraint_name")
-
+        
+        logger.debug(f"处理关系: {from_table.get('table')} -> {to_table.get('table')}, cardinality={raw_cardinality}")
+        
+        # 根据 cardinality 决定是否翻转
+        if raw_cardinality == "1:N":
+            # 翻转方向：to → from，基数变为 N:1
+            src_schema = to_table.get("schema", "")
+            src_table = to_table.get("table", "")
+            dst_schema = from_table.get("schema", "")
+            dst_table = from_table.get("table", "")
+            cardinality = "N:1"
+            
+            # 列也要翻转
+            rel_type = rel.get("type", "")
+            if rel_type == "single_column":
+                source_columns = [rel.get("to_column", "")]
+                target_columns = [rel.get("from_column", "")]
+            else:
+                source_columns = rel.get("to_columns", [])
+                target_columns = rel.get("from_columns", [])
+            
+            logger.debug(f"1:N 关系翻转: {src_table} -> {dst_table}, cardinality={cardinality}")
+        else:
+            # N:1 / 1:1 / M:N 不翻转
+            src_schema = from_table.get("schema", "")
+            src_table = from_table.get("table", "")
+            dst_schema = to_table.get("schema", "")
+            dst_table = to_table.get("table", "")
+            cardinality = raw_cardinality
+            
+            rel_type = rel.get("type", "")
+            if rel_type == "single_column":
+                source_columns = [rel.get("from_column", "")]
+                target_columns = [rel.get("to_column", "")]
+            else:
+                source_columns = rel.get("from_columns", [])
+                target_columns = rel.get("to_columns", [])
+            
+            logger.debug(f"{raw_cardinality} 关系保持原向: {src_table} -> {dst_table}")
+        
+        src_full_name = f"{src_schema}.{src_table}"
+        dst_full_name = f"{dst_schema}.{dst_table}"
+        
         # 构造 ON 表达式
         on_parts = []
         for src_col, tgt_col in zip(source_columns, target_columns):
             on_parts.append(f"SRC.{src_col} = DST.{tgt_col}")
         on_expr = " AND ".join(on_parts)
-
+        
+        logger.info(f"CQL 关系: ({src_full_name})-[:JOIN_ON]->({dst_full_name}), cardinality={cardinality}")
+        
         return JOINOnRelation(
-            src_full_name=src_full_name,    # 外键表（ER 语义）
-            dst_full_name=dst_full_name,    # 主键表（ER 语义）
+            src_full_name=src_full_name,
+            dst_full_name=dst_full_name,
             cardinality=cardinality,
             join_type="INNER JOIN",
             on=on_expr,
-            source_columns=source_columns,  # 外键列
-            target_columns=target_columns,  # 主键列
-            constraint_name=constraint_name
+            source_columns=source_columns,
+            target_columns=target_columns,
+            constraint_name=rel.get("constraint_name")
         )
 
-    def _flip_cardinality(self, cardinality: str) -> str:
-        """翻转基数方向
-
-        当关系方向从 from→to 翻转为 to→from 时，
-        基数也需要相应翻转。
-
-        翻转规则：
-        - "1:N" → "N:1"（1对多 → 多对1）
-        - "N:1" → "1:N"（多对1 → 1对多）
-        - "1:1" → "1:1"（对称，不变）
-        - "M:N" → "M:N"（对称，不变）
-
-        Args:
-            cardinality: 原始基数字符串
-
-        Returns:
-            翻转后的基数字符串
-        """
-        flip_map = {
-            "1:N": "N:1",
-            "N:1": "1:N",
-            "1:1": "1:1",  # 对称，不变
-            "M:N": "M:N",  # 对称，不变
-        }
-        return flip_map.get(cardinality, cardinality)
 

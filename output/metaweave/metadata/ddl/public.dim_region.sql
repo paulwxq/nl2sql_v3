@@ -1,7 +1,7 @@
 -- ====================================
 -- Table: public.dim_region
 -- Comment: 地区维表：省/市/区（含各级名称与ID）
--- Generated: 2025-12-04 11:20:26
+-- Generated: 2025-12-04 22:17:44
 -- ====================================
 
 CREATE TABLE IF NOT EXISTS public.dim_region (
@@ -28,7 +28,7 @@ COMMENT ON TABLE public.dim_region IS '地区维表：省/市/区（含各级名
 {
   "version": 1,
   "table": "public.dim_region",
-  "generated_at": "2025-12-04T03:20:26.838802Z",
+  "generated_at": "2025-12-04T14:17:44.342076Z",
   "records": [
     {
       "label": "Record 1",
