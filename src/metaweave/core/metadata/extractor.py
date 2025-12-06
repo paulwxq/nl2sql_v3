@@ -131,9 +131,12 @@ class MetadataExtractor:
             
             primary_keys = []
             for row in results:
+                # 解析 PostgreSQL 数组类型
+                columns = self._parse_pg_array(row.get("columns"))
+                
                 pk = PrimaryKey(
                     constraint_name=row["constraint_name"],
-                    columns=row["columns"] if isinstance(row["columns"], list) else [],
+                    columns=columns,
                 )
                 primary_keys.append(pk)
             
@@ -142,6 +145,48 @@ class MetadataExtractor:
             return primary_keys
         except Exception as e:
             logger.error(f"提取主键失败 ({schema}.{table}): {e}")
+            return []
+    
+    def _parse_pg_array(self, value) -> List[str]:
+        """解析 PostgreSQL 数组类型
+        
+        PostgreSQL 数组可能以不同形式返回：
+        - Python list: ['col1', 'col2']
+        - 字符串格式: '{col1,col2}'
+        - None
+        
+        Args:
+            value: PostgreSQL 数组值
+            
+        Returns:
+            Python 列表
+        """
+        if value is None:
+            return []
+        
+        # 已经是 Python list
+        if isinstance(value, list):
+            return value
+        
+        # 字符串格式（PostgreSQL 数组表示）
+        if isinstance(value, str):
+            # 移除大括号并分割
+            value = value.strip()
+            if value.startswith('{') and value.endswith('}'):
+                value = value[1:-1]
+            
+            # 空数组
+            if not value:
+                return []
+            
+            # 分割并清理
+            return [col.strip() for col in value.split(',') if col.strip()]
+        
+        # 其他类型，尝试转换为列表
+        try:
+            return list(value)
+        except (TypeError, ValueError):
+            logger.warning(f"无法解析 PostgreSQL 数组: {value} (类型: {type(value)})")
             return []
     
     def extract_foreign_keys(self, schema: str, table: str) -> List[ForeignKey]:
@@ -159,12 +204,16 @@ class MetadataExtractor:
             
             foreign_keys = []
             for row in results:
+                # 解析 PostgreSQL 数组类型
+                source_columns = self._parse_pg_array(row.get("source_columns"))
+                target_columns = self._parse_pg_array(row.get("target_columns"))
+                
                 fk = ForeignKey(
                     constraint_name=row["constraint_name"],
-                    source_columns=row["source_columns"] if isinstance(row["source_columns"], list) else [],
+                    source_columns=source_columns,
                     target_schema=row["target_schema"],
                     target_table=row["target_table"],
-                    target_columns=row["target_columns"] if isinstance(row["target_columns"], list) else [],
+                    target_columns=target_columns,
                     on_delete=row.get("delete_rule", "NO ACTION"),
                     on_update=row.get("update_rule", "NO ACTION"),
                 )
@@ -192,9 +241,12 @@ class MetadataExtractor:
             
             unique_constraints = []
             for row in results:
+                # 解析 PostgreSQL 数组类型
+                columns = self._parse_pg_array(row.get("columns"))
+                
                 uc = UniqueConstraint(
                     constraint_name=row["constraint_name"],
-                    columns=row["columns"] if isinstance(row["columns"], list) else [],
+                    columns=columns,
                     is_partial=False,  # PostgreSQL 不直接标记部分索引，需要另外判断
                 )
                 unique_constraints.append(uc)
@@ -221,10 +273,13 @@ class MetadataExtractor:
             
             indexes = []
             for row in results:
+                # 解析 PostgreSQL 数组类型
+                columns = self._parse_pg_array(row.get("columns"))
+                
                 idx = IndexInfo(
                     index_name=row["index_name"],
                     index_type=row.get("index_type", "btree"),
-                    columns=row["columns"] if isinstance(row["columns"], list) else [],
+                    columns=columns,
                     is_unique=row.get("is_unique", False),
                     is_primary=row.get("is_primary", False),
                     condition=row.get("condition"),

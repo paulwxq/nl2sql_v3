@@ -133,36 +133,61 @@ sampling:
 
 # LLM 配置
 llm:
-  # 提供商：qwen-plus | deepseek
-  provider: qwen-plus
+  # 当前激活的 LLM 提供商
+  active: qwen                    # 可选值: qwen | deepseek
   
-  # 模型名称
-  # qwen 系列：qwen-turbo（快速）, qwen-plus（平衡）, qwen-max（最强）, qwen-long（长文本）
-  # deepseek 系列：deepseek-chat
-  model: ${DASHSCOPE_MODEL:qwen-plus}
+  # 批量处理和重试配置
+  batch_size: 10                  # 批量处理大小
+  retry_times: 2                  # API 调用失败时的最大重试次数（应用层重试）
+  retry_delay: 2                  # 重试间隔（秒）
   
-  # API 密钥（建议使用环境变量）
-  # qwen-plus 使用 DASHSCOPE_API_KEY
-  # deepseek 使用 DEEPSEEK_API_KEY
-  api_key: ${DASHSCOPE_API_KEY}
-  
-  # API 基础 URL（deepseek 需要）
-  api_base: ${DEEPSEEK_API_BASE:https://api.deepseek.com/v1}
-  
-  # 模型参数
-  temperature: 0.3
-  max_tokens: 500
-  timeout: 30
-  
-  # 批量处理配置
-  batch_size: 10
-  retry_times: 3
+  # LangChain 客户端配置（通用）
+  langchain_config:
+    use_async: true               # 是否使用异步 API (ainvoke)
+    async_concurrency: 5         # 异步并发限制（建议 10-50，防止触发限流）
+    max_retries: 3                # SDK 内部网络重试次数（覆盖默认值）
+
+  # 各 LLM 提供商配置
+  providers:
+    # Qwen 配置
+    qwen:
+      model: qwen-plus            # 模型名称：qwen-turbo, qwen-plus, qwen-max, qwen-long
+      api_key: ${DASHSCOPE_API_KEY}
+      api_base: ${DASHSCOPE_BASE_URI:}  # 可选，默认使用 Dashscope 默认地址
+      
+      # 基础参数
+      temperature: 0.3
+      #max_tokens: 500
+      timeout: 60
+      
+      # Qwen 特定参数（可选，空值不传递）
+      extra_params:
+        enable_thinking: false     # 启用思考模式（Qwen 特有）
+        streaming: false          # 是否流式输出（注意：参数名是 streaming 不是 stream）
+        #top_p: 0.8                # Top-P 采样（可选，控制采样范围）
+    
+    # DeepSeek 配置
+    deepseek:
+      model: deepseek-chat        # 模型名称
+      api_key: ${DEEPSEEK_API_KEY}
+      api_base: ${DEEPSEEK_BASE_URI:https://api.deepseek.com/v1}
+      
+      # 基础参数
+      temperature: 0.3
+      #max_tokens: 500
+      timeout: 60
+      
+      # DeepSeek 特定参数（可选，空值不传递）
+      # extra_params:
+      #   top_p: 0.95
+      #   frequency_penalty: 0.0
+      #   presence_penalty: 0.0
 
 # 注释生成配置
 comment_generation:
-  enabled: true
-  generate_table_comment: true
-  generate_column_comment: true
+  enabled: true                 # 总开关
+  generate_table_comment: true  # 调用LLM自动补充缺失的表注释
+  generate_column_comment: true # 调用LLM自动补充缺失的字段注释
   language: zh-CN  # 生成中文注释
   
   # 缓存配置

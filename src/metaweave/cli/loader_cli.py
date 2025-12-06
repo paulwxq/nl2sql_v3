@@ -102,9 +102,6 @@ def load_command(load_type: str, config: str, clean: bool, debug: bool):
             click.echo("⚠️  警告: 您即将清空目标数据库的所有数据！")
             click.echo("⚠️  此操作不可逆，请确认您知道自己在做什么。")
             click.echo("")
-            if not click.confirm("是否继续？"):
-                click.echo("操作已取消")
-                return
 
         # 创建加载器
         click.echo(f"🔧 创建加载器: {load_type.upper()}Loader")

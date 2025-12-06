@@ -75,7 +75,8 @@ class CommentGenerator:
         # 准备样本数据
         sample_dict = None
         if sample_data is not None and not sample_data.empty:
-            sample_dict = dataframe_to_sample_dict(sample_data, max_rows=3)
+            # 统一使用最多5行样本数据，便于 LLM 理解表结构
+            sample_dict = dataframe_to_sample_dict(sample_data, max_rows=5)
         
         # 调用 LLM 生成注释
         try:
@@ -154,7 +155,8 @@ class CommentGenerator:
         # 准备样本数据
         sample_dict = None
         if sample_data is not None and not sample_data.empty:
-            sample_dict = dataframe_to_sample_dict(sample_data, max_rows=3)
+            # 与表注释一致，最多提供5行样本数据
+            sample_dict = dataframe_to_sample_dict(sample_data, max_rows=5)
         
         # 调用 LLM 生成注释
         try:

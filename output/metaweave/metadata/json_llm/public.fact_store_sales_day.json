@@ -1,6 +1,6 @@
 {
   "metadata_version": "2.0",
-  "generated_at": "2025-12-04T14:19:06.970101Z",
+  "generated_at": "2025-12-05T17:50:59.128224Z",
   "table_info": {
     "schema_name": "public",
     "table_name": "fact_store_sales_day",
@@ -189,7 +189,7 @@
     "sample_method": "random",
     "sample_size": 5,
     "total_rows": 0,
-    "sampled_at": "2025-12-04T14:19:06.970101Z",
+    "sampled_at": "2025-12-05T17:50:59.128224Z",
     "records": [
       {
         "store_id": "101",

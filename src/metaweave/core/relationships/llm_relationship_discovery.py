@@ -5,11 +5,12 @@
 - 评分阶段：复用 RelationshipScorer，需要数据库连接
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from itertools import combinations
 from pathlib import Path
 from typing import Dict, List, Set, Tuple
 import json
+import time
 
 from src.metaweave.core.metadata.connector import DatabaseConnector
 from src.metaweave.core.relationships.models import Relation
@@ -23,7 +24,7 @@ logger = get_metaweave_logger("relationships.llm_discovery")
 
 # LLM 提示词
 RELATIONSHIP_DISCOVERY_PROMPT = """
-你是一个数据库关系分析专家。请分析以下两个表，判断它们之间是否存在关联关系。
+你是一个数据库关系分析专家。请分析以下两个表以及表中的采样数据，判断它们之间是否存在关联关系。
 
 ## 表 1: {table1_name}
 ```json
@@ -111,8 +112,32 @@ class LLMRelationshipDiscovery:
         # 复用 MetadataRepository 提取物理外键（包含 cardinality、relationship_id）
         self.repo = MetadataRepository(self.json_llm_dir, rel_id_salt=rel_id_salt)
         
+        # 读取决策阈值配置
+        decision_config = config.get("relationships", {}).get("decision", {})
+        self.accept_threshold = decision_config.get("accept_threshold", 0.65)
+        self.high_confidence_threshold = decision_config.get("high_confidence_threshold", 0.90)
+        self.medium_confidence_threshold = decision_config.get("medium_confidence_threshold", 0.80)
+        
+        # 读取 LLM 重试配置
+        llm_config = config.get("llm", {})
+        self.llm_max_retries = llm_config.get("retry_times", 2)
+        self.llm_retry_delay = llm_config.get("retry_delay", 1)  # 重试延迟（秒）
+        
+        logger.info(
+            f"阈值配置: accept={self.accept_threshold}, "
+            f"high={self.high_confidence_threshold}, "
+            f"medium={self.medium_confidence_threshold}"
+        )
+        logger.info(
+            f"LLM 重试配置: max_retries={self.llm_max_retries}, "
+            f"retry_delay={self.llm_retry_delay}s"
+        )
+        
     def discover(self) -> Dict:
         """发现关联关系，返回 rel JSON 格式的结果"""
+        import time
+        start_time = time.time()
+        
         logger.info("=" * 60)
         logger.info("开始 LLM 辅助关联关系发现")
         logger.info("=" * 60)
@@ -124,7 +149,7 @@ class LLMRelationshipDiscovery:
         
         # 2. 提取物理外键（复用 MetadataRepository，包含 cardinality、relationship_id）
         logger.info("阶段2: 提取物理外键")
-        fk_relation_objects, fk_signatures = self.repo.collect_foreign_keys(tables)
+        fk_relation_objects, fk_relationship_ids = self.repo.collect_foreign_keys(tables)
         logger.info(f"物理外键直通: {len(fk_relation_objects)} 个")
         
         # 3. 两两组合调用 LLM
@@ -144,23 +169,55 @@ class LLMRelationshipDiscovery:
         
         logger.info(f"LLM 返回候选: {len(llm_candidates)} 个")
         
-        # 4. 过滤已有物理外键
-        logger.info("阶段4: 过滤已有物理外键")
-        filtered_candidates = self._filter_existing_fks(llm_candidates, fk_signatures)
-        logger.info(f"过滤后候选: {len(filtered_candidates)} 个")
+        # 4. 过滤已有物理外键（使用 relationship_id，避免评分计算）
+        logger.info("阶段4: 过滤已有物理外键（基于 relationship_id）")
+        filtered_candidates = self._filter_existing_fks(llm_candidates, fk_relationship_ids)
+        skipped_fk_count = len(llm_candidates) - len(filtered_candidates)
+        logger.info(
+            f"过滤后候选: {len(filtered_candidates)} 个 "
+            f"(已跳过 {skipped_fk_count} 个物理外键)"
+        )
         
-        # 5. 评分
+        # 5. 评分（仅对非物理外键的候选进行评分）
+        score_start = time.time()
         logger.info("阶段5: 对候选关联进行评分")
         scored_relations = self._score_candidates(filtered_candidates, tables)
-        logger.info(f"评分后关系: {len(scored_relations)} 个")
+        score_duration = time.time() - score_start
+        logger.info(
+            f"评分后关系: {len(scored_relations)} 个 "
+            f"(耗时: {score_duration:.2f}秒, 节省了 {skipped_fk_count} 个物理外键的评分计算)"
+        )
         
-        # 6. 合并结果（将 Relation 对象转换为字典）
-        logger.info("阶段6: 合并物理外键和推断关系")
+        # 6. 阈值过滤
+        logger.info(f"阶段6: 阈值过滤 (threshold={self.accept_threshold})")
+        accepted_relations, rejected_relations = self._filter_by_threshold(scored_relations)
+        logger.info(f"过滤后接受: {len(accepted_relations)} 个")
+        
+        # 7. 合并结果并二次去重（防御性兜底）
+        logger.info("阶段7: 合并物理外键和推断关系")
         fk_relations = [self._relation_to_dict(rel) for rel in fk_relation_objects]
-        all_relations = fk_relations + scored_relations
+        
+        # 二次去重（理论上阶段4已经过滤，这里是防御性检查）
+        before_dedup_count = len(fk_relations) + len(accepted_relations)
+        all_relations = self._deduplicate_by_relationship_id(fk_relations, accepted_relations)
+        
+        # 如果发现重复，记录警告（说明阶段4可能有遗漏）
+        if before_dedup_count > len(all_relations):
+            dup_count = before_dedup_count - len(all_relations)
+            logger.warning(
+                f"⚠️ 阶段7发现 {dup_count} 个重复关系（阶段4可能遗漏），已去重。"
+                f"建议检查 relationship_id 生成逻辑。"
+            )
+        else:
+            logger.debug("✓ 阶段7未发现重复，阶段4去重有效")
+        
         logger.info(f"最终关系总数: {len(all_relations)}")
         
-        return self._build_output(all_relations)
+        # 总耗时统计
+        total_duration = time.time() - start_time
+        logger.info(f"✓ 关系发现总耗时: {total_duration:.2f}秒")
+        
+        return self._build_output(all_relations, rejected_relations)
     
     def _load_all_tables(self) -> Dict[str, Dict]:
         """加载所有 json_llm 文件"""
@@ -209,7 +266,7 @@ class LLMRelationshipDiscovery:
         return flip_map.get(cardinality, cardinality)
     
     def _call_llm(self, table1: Dict, table2: Dict) -> List[Dict]:
-        """调用 LLM 获取候选关联
+        """调用 LLM 获取候选关联（带重试）
         
         注意：table1/table2 来自 json_llm 文件，不查询数据库
         """
@@ -229,15 +286,38 @@ class LLMRelationshipDiscovery:
         # 添加调试日志：输出提示词长度
         logger.debug(f"LLM 提示词长度: {len(prompt)} 字符, 表对: {table1_name} <-> {table2_name}")
         
-        try:
-            response = self.llm_service._call_llm(prompt)
-            candidates = self._parse_llm_response(response)
-            logger.debug(f"LLM 返回 {len(candidates)} 个候选: {table1_name} <-> {table2_name}")
-            return candidates
-        except Exception as e:
-            logger.warning(f"LLM 调用失败: {table1_name} <-> {table2_name}, 错误: {e}")
-            logger.debug(f"调用失败时的提示词（前1000字符）: {prompt[:1000]}")
-            return []
+        # 重试逻辑
+        for attempt in range(self.llm_max_retries + 1):
+            try:
+                response = self.llm_service._call_llm(prompt)
+                candidates = self._parse_llm_response(response)
+                
+                # 如果之前有重试，记录成功信息
+                if attempt > 0:
+                    logger.info(
+                        f"✓ LLM 调用成功（重试 {attempt} 次后）: {table1_name} <-> {table2_name}"
+                    )
+                
+                logger.debug(f"LLM 返回 {len(candidates)} 个候选: {table1_name} <-> {table2_name}")
+                return candidates
+                
+            except Exception as e:
+                if attempt < self.llm_max_retries:
+                    # 还有重试机会
+                    logger.warning(
+                        f"LLM 调用失败 (尝试 {attempt + 1}/{self.llm_max_retries + 1}): "
+                        f"{table1_name} <-> {table2_name}, 错误: {e}, "
+                        f"{self.llm_retry_delay}秒后重试..."
+                    )
+                    time.sleep(self.llm_retry_delay)
+                else:
+                    # 已达最大重试次数
+                    logger.error(
+                        f"✗ LLM 调用失败（已重试 {self.llm_max_retries} 次）: "
+                        f"{table1_name} <-> {table2_name}, 最终错误: {e}"
+                    )
+                    logger.debug(f"调用失败时的提示词（前1000字符）: {prompt[:1000]}")
+                    return []
     
     def _parse_llm_response(self, response: str) -> List[Dict]:
         """解析 LLM 返回"""
@@ -376,6 +456,50 @@ class LLMRelationshipDiscovery:
         
         return scored_relations
     
+    def _filter_by_threshold(
+        self, 
+        scored_relations: List[Dict]
+    ) -> Tuple[List[Dict], List[Dict]]:
+        """根据阈值过滤关系
+        
+        Args:
+            scored_relations: 评分后的关系列表
+            
+        Returns:
+            (accepted_relations, rejected_relations)
+        """
+        accepted = []
+        rejected = []
+        
+        for relation in scored_relations:
+            composite_score = relation.get("composite_score", 0)
+            
+            from_table = relation.get("from_table", {})
+            to_table = relation.get("to_table", {})
+            from_schema = from_table.get("schema", "")
+            from_name = from_table.get("table", "")
+            to_schema = to_table.get("schema", "")
+            to_name = to_table.get("table", "")
+            
+            rel_desc = f"{from_schema}.{from_name} -> {to_schema}.{to_name}"
+            
+            if composite_score >= self.accept_threshold:
+                accepted.append(relation)
+                logger.debug(
+                    f"✓ 通过阈值: {rel_desc} (score={composite_score:.4f})"
+                )
+            else:
+                rejected.append(relation)
+                logger.info(
+                    f"✗ 低于阈值: {rel_desc} "
+                    f"(score={composite_score:.4f} < {self.accept_threshold})"
+                )
+        
+        logger.info(
+            f"阈值过滤结果: {len(accepted)} 个通过, {len(rejected)} 个被拒绝"
+        )
+        return accepted, rejected
+    
     def _get_confidence_level(self, score: float) -> str:
         """根据评分确定置信度等级"""
         if score >= 0.8:
@@ -391,49 +515,133 @@ class LLMRelationshipDiscovery:
         tgt_cols_str = ",".join(sorted(tgt_cols))
         return f"{src_schema}.{src_table}[{src_cols_str}]->{tgt_schema}.{tgt_table}[{tgt_cols_str}]"
     
-    def _filter_existing_fks(self, candidates: List[Dict], fk_signatures: Set[str]) -> List[Dict]:
-        """过滤已有的物理外键
+    def _filter_existing_fks(self, candidates: List[Dict], fk_relationship_ids: Set[str]) -> List[Dict]:
+        """过滤已有的物理外键（使用 relationship_id 去重，双向一致）
         
-        注意签名方向：
-        - fk_signatures 来自 MetadataRepository，方向是 外键表->主键表
-        - LLM 候选的 from/to 方向是 主键表->外键表
-        - 因此需要翻转 LLM 候选的方向再生成签名
+        优化说明：
+        - 使用 relationship_id 而非签名，避免方向性问题
+        - 在评分前就排除物理外键，节省数据库查询和计算资源
+        - relationship_id 是双向的，不受 LLM 返回方向影响
+        
+        Args:
+            candidates: LLM 返回的候选关系
+            fk_relationship_ids: 物理外键的 relationship_id 集合
+            
+        Returns:
+            过滤后的候选关系（排除了物理外键）
         """
         filtered = []
+        skipped_count = 0
+        
         for candidate in candidates:
-            from_info = candidate["from_table"]  # 主键表
-            to_info = candidate["to_table"]      # 外键表
+            from_info = candidate["from_table"]
+            to_info = candidate["to_table"]
             
             if candidate["type"] == "single_column":
-                from_cols = [candidate["from_column"]]  # 主键列
-                to_cols = [candidate["to_column"]]      # 外键列
+                from_cols = [candidate["from_column"]]
+                to_cols = [candidate["to_column"]]
             else:
                 from_cols = candidate["from_columns"]
                 to_cols = candidate["to_columns"]
             
-            # 翻转方向：外键表->主键表，与 fk_signatures 一致
-            sig = self._make_signature(
-                to_info["schema"], to_info["table"], to_cols,      # 外键表、外键列
-                from_info["schema"], from_info["table"], from_cols  # 主键表、主键列
+            # 生成候选的 relationship_id（双向一致，与物理外键的 ID 可比较）
+            candidate_rel_id = MetadataRepository.compute_relationship_id(
+                source_schema=from_info["schema"],
+                source_table=from_info["table"],
+                source_columns=from_cols,
+                target_schema=to_info["schema"],
+                target_table=to_info["table"],
+                target_columns=to_cols,
+                rel_id_salt=self.repo.rel_id_salt
             )
             
-            if sig not in fk_signatures:
+            # 基于 relationship_id 匹配（不受方向影响）
+            if candidate_rel_id not in fk_relationship_ids:
                 filtered.append(candidate)
             else:
-                logger.debug(f"跳过已有物理外键: {sig}")
+                skipped_count += 1
+                logger.debug(
+                    f"跳过物理外键: {from_info['schema']}.{from_info['table']} <-> "
+                    f"{to_info['schema']}.{to_info['table']} "
+                    f"(relationship_id={candidate_rel_id})"
+                )
+        
+        if skipped_count > 0:
+            logger.info(f"✓ 阶段4去重: 跳过 {skipped_count} 个物理外键，避免重复评分")
         
         return filtered
     
-    def _build_output(self, relations: List[Dict]) -> Dict:
-        """构建输出 JSON（与现有 rel JSON 格式一致）"""
+    def _deduplicate_by_relationship_id(
+        self, 
+        fk_relations: List[Dict], 
+        llm_relations: List[Dict]
+    ) -> List[Dict]:
+        """根据 relationship_id 去重，优先保留物理外键
+        
+        Args:
+            fk_relations: 物理外键关系列表
+            llm_relations: LLM 推断关系列表
+            
+        Returns:
+            去重后的关系列表
+        """
+        # 建立 relationship_id -> 物理外键 的映射
+        fk_id_map = {rel["relationship_id"]: rel for rel in fk_relations}
+        
+        # 过滤 LLM 关系：如果 relationship_id 与物理外键重复，跳过
+        filtered_llm_relations = []
+        for llm_rel in llm_relations:
+            rel_id = llm_rel["relationship_id"]
+            if rel_id in fk_id_map:
+                # 记录被去重的关系
+                from_table = llm_rel.get("from_table", {})
+                to_table = llm_rel.get("to_table", {})
+                logger.debug(
+                    f"去重：跳过 LLM 推断关系 {from_table.get('schema')}.{from_table.get('table')} -> "
+                    f"{to_table.get('schema')}.{to_table.get('table')} "
+                    f"(relationship_id={rel_id}，物理外键已存在)"
+                )
+            else:
+                filtered_llm_relations.append(llm_rel)
+        
+        # 合并：物理外键 + 去重后的 LLM 关系
+        all_relations = fk_relations + filtered_llm_relations
+        
+        if len(llm_relations) > len(filtered_llm_relations):
+            dedup_count = len(llm_relations) - len(filtered_llm_relations)
+            logger.info(f"去重：移除 {dedup_count} 个与物理外键重复的 LLM 推断关系")
+        
+        return all_relations
+    
+    def _build_output(self, relations: List[Dict], rejected: List[Dict] = None) -> Dict:
+        """构建输出 JSON（与现有 rel JSON 格式一致）
+        
+        Args:
+            relations: 接受的关系列表
+            rejected: 被拒绝的关系列表（可选）
+            
+        Returns:
+            输出 JSON 字典
+        """
+        stats = {
+            "total_relationships_found": len(relations),
+            "foreign_key_relationships": sum(
+                1 for r in relations if r.get("discovery_method") == "foreign_key_constraint"
+            ),
+            "llm_assisted_relationships": sum(
+                1 for r in relations if r.get("discovery_method") == "llm_assisted"
+            )
+        }
+        
+        # 记录被拒绝的关系统计
+        if rejected:
+            stats["rejected_low_confidence"] = len(rejected)
+            logger.info(f"被拒绝的低置信度关系: {len(rejected)} 个")
+        
         return {
             "metadata_source": "json_llm_files",
-            "analysis_timestamp": datetime.utcnow().isoformat() + "Z",
-            "statistics": {
-                "total_relationships_found": len(relations),
-                "foreign_key_relationships": sum(1 for r in relations if r.get("discovery_method") == "foreign_key_constraint"),
-                "llm_assisted_relationships": sum(1 for r in relations if r.get("discovery_method") == "llm_assisted")
-            },
+            "analysis_timestamp": datetime.now(timezone.utc).isoformat(),
+            "statistics": stats,
             "relationships": relations
         }
 

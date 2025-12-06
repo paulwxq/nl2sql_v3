@@ -1,0 +1,368 @@
+{
+  "metadata_version": "2.0",
+  "generated_at": "2025-12-05T17:50:59.067654Z",
+  "table_info": {
+    "schema_name": "public",
+    "table_name": "employee",
+    "table_type": "table",
+    "comment": "",
+    "comment_source": "",
+    "total_rows": 0,
+    "total_columns": 7
+  },
+  "column_profiles": {
+    "emp_id": {
+      "column_name": "emp_id",
+      "ordinal_position": 1,
+      "data_type": "integer",
+      "character_maximum_length": null,
+      "numeric_precision": 32,
+      "numeric_scale": 0,
+      "is_nullable": false,
+      "column_default": "nextval('employee_emp_id_seq'::regclass)",
+      "comment": "",
+      "comment_source": "",
+      "statistics": {
+        "sample_count": 20,
+        "unique_count": 20,
+        "null_count": 0,
+        "null_rate": 0.0,
+        "uniqueness": 1.0,
+        "min": "1",
+        "max": "20",
+        "mean": "10.5"
+      },
+      "structure_flags": {
+        "is_primary_key": true,
+        "is_composite_primary_key_member": false,
+        "is_foreign_key": false,
+        "is_composite_foreign_key_member": false,
+        "is_unique": false,
+        "is_composite_unique_member": false,
+        "is_unique_constraint": false,
+        "is_composite_unique_constraint_member": false,
+        "is_indexed": true,
+        "is_composite_indexed_member": false,
+        "is_nullable": false
+      }
+    },
+    "emp_no": {
+      "column_name": "emp_no",
+      "ordinal_position": 2,
+      "data_type": "character varying",
+      "character_maximum_length": 20,
+      "numeric_precision": null,
+      "numeric_scale": null,
+      "is_nullable": false,
+      "column_default": null,
+      "comment": "",
+      "comment_source": "",
+      "statistics": {
+        "sample_count": 20,
+        "unique_count": 20,
+        "null_count": 0,
+        "null_rate": 0.0,
+        "uniqueness": 1.0,
+        "avg_length": 5.0,
+        "min_length": 5,
+        "max_length": 5,
+        "median_length": 5.0,
+        "length_std": 0.0
+      },
+      "structure_flags": {
+        "is_primary_key": false,
+        "is_composite_primary_key_member": false,
+        "is_foreign_key": false,
+        "is_composite_foreign_key_member": false,
+        "is_unique": false,
+        "is_composite_unique_member": false,
+        "is_unique_constraint": true,
+        "is_composite_unique_constraint_member": false,
+        "is_indexed": true,
+        "is_composite_indexed_member": false,
+        "is_nullable": false
+      }
+    },
+    "emp_name": {
+      "column_name": "emp_name",
+      "ordinal_position": 3,
+      "data_type": "character varying",
+      "character_maximum_length": 100,
+      "numeric_precision": null,
+      "numeric_scale": null,
+      "is_nullable": false,
+      "column_default": null,
+      "comment": "",
+      "comment_source": "",
+      "statistics": {
+        "sample_count": 20,
+        "unique_count": 20,
+        "null_count": 0,
+        "null_rate": 0.0,
+        "uniqueness": 1.0,
+        "avg_length": 2.0,
+        "min_length": 2,
+        "max_length": 2,
+        "median_length": 2.0,
+        "length_std": 0.0
+      },
+      "structure_flags": {
+        "is_primary_key": false,
+        "is_composite_primary_key_member": false,
+        "is_foreign_key": false,
+        "is_composite_foreign_key_member": false,
+        "is_unique": false,
+        "is_composite_unique_member": false,
+        "is_unique_constraint": false,
+        "is_composite_unique_constraint_member": false,
+        "is_indexed": false,
+        "is_composite_indexed_member": false,
+        "is_nullable": false
+      }
+    },
+    "gender": {
+      "column_name": "gender",
+      "ordinal_position": 4,
+      "data_type": "character",
+      "character_maximum_length": 1,
+      "numeric_precision": null,
+      "numeric_scale": null,
+      "is_nullable": false,
+      "column_default": null,
+      "comment": "",
+      "comment_source": "",
+      "statistics": {
+        "sample_count": 20,
+        "unique_count": 2,
+        "null_count": 0,
+        "null_rate": 0.0,
+        "uniqueness": 0.1,
+        "avg_length": 1.0,
+        "min_length": 1,
+        "max_length": 1,
+        "median_length": 1.0,
+        "length_std": 0.0,
+        "value_distribution": {
+          "M": 11,
+          "F": 9
+        }
+      },
+      "structure_flags": {
+        "is_primary_key": false,
+        "is_composite_primary_key_member": false,
+        "is_foreign_key": false,
+        "is_composite_foreign_key_member": false,
+        "is_unique": false,
+        "is_composite_unique_member": false,
+        "is_unique_constraint": false,
+        "is_composite_unique_constraint_member": false,
+        "is_indexed": false,
+        "is_composite_indexed_member": false,
+        "is_nullable": false
+      }
+    },
+    "hire_date": {
+      "column_name": "hire_date",
+      "ordinal_position": 5,
+      "data_type": "date",
+      "character_maximum_length": null,
+      "numeric_precision": null,
+      "numeric_scale": null,
+      "is_nullable": false,
+      "column_default": null,
+      "comment": "",
+      "comment_source": "",
+      "statistics": {
+        "sample_count": 20,
+        "unique_count": 20,
+        "null_count": 0,
+        "null_rate": 0.0,
+        "uniqueness": 1.0,
+        "avg_length": 10.0,
+        "min_length": 10,
+        "max_length": 10,
+        "median_length": 10.0,
+        "length_std": 0.0
+      },
+      "structure_flags": {
+        "is_primary_key": false,
+        "is_composite_primary_key_member": false,
+        "is_foreign_key": false,
+        "is_composite_foreign_key_member": false,
+        "is_unique": false,
+        "is_composite_unique_member": false,
+        "is_unique_constraint": false,
+        "is_composite_unique_constraint_member": false,
+        "is_indexed": false,
+        "is_composite_indexed_member": false,
+        "is_nullable": false
+      }
+    },
+    "salary": {
+      "column_name": "salary",
+      "ordinal_position": 6,
+      "data_type": "numeric",
+      "character_maximum_length": null,
+      "numeric_precision": 10,
+      "numeric_scale": 2,
+      "is_nullable": false,
+      "column_default": null,
+      "comment": "",
+      "comment_source": "",
+      "statistics": {
+        "sample_count": 20,
+        "unique_count": 20,
+        "null_count": 0,
+        "null_rate": 0.0,
+        "uniqueness": 1.0,
+        "min": "8800.0",
+        "max": "24000.0",
+        "mean": "14820.0"
+      },
+      "structure_flags": {
+        "is_primary_key": false,
+        "is_composite_primary_key_member": false,
+        "is_foreign_key": false,
+        "is_composite_foreign_key_member": false,
+        "is_unique": false,
+        "is_composite_unique_member": false,
+        "is_unique_constraint": false,
+        "is_composite_unique_constraint_member": false,
+        "is_indexed": false,
+        "is_composite_indexed_member": false,
+        "is_nullable": false
+      }
+    },
+    "dept_id": {
+      "column_name": "dept_id",
+      "ordinal_position": 7,
+      "data_type": "integer",
+      "character_maximum_length": null,
+      "numeric_precision": 32,
+      "numeric_scale": 0,
+      "is_nullable": false,
+      "column_default": null,
+      "comment": "",
+      "comment_source": "",
+      "statistics": {
+        "sample_count": 20,
+        "unique_count": 19,
+        "null_count": 0,
+        "null_rate": 0.0,
+        "uniqueness": 0.95,
+        "min": "1",
+        "max": "20",
+        "mean": "10.0"
+      },
+      "structure_flags": {
+        "is_primary_key": false,
+        "is_composite_primary_key_member": false,
+        "is_foreign_key": true,
+        "is_composite_foreign_key_member": false,
+        "is_unique": false,
+        "is_composite_unique_member": false,
+        "is_unique_constraint": false,
+        "is_composite_unique_constraint_member": false,
+        "is_indexed": false,
+        "is_composite_indexed_member": false,
+        "is_nullable": false
+      }
+    }
+  },
+  "table_profile": {
+    "physical_constraints": {
+      "primary_key": {
+        "constraint_name": "employee_pkey",
+        "columns": [
+          "emp_id"
+        ]
+      },
+      "foreign_keys": [
+        {
+          "constraint_name": "fk_employee_department",
+          "source_columns": [
+            "dept_id"
+          ],
+          "target_schema": "public",
+          "target_table": "department",
+          "target_columns": [
+            "dept_id"
+          ],
+          "on_delete": "NO ACTION",
+          "on_update": "NO ACTION"
+        }
+      ],
+      "unique_constraints": [
+        {
+          "constraint_name": "employee_emp_no_key",
+          "columns": [
+            "emp_no"
+          ]
+        }
+      ],
+      "indexes": [
+        {
+          "index_name": "employee_emp_no_key",
+          "columns": [
+            "emp_no"
+          ],
+          "is_unique": true,
+          "index_type": "btree"
+        }
+      ]
+    }
+  },
+  "sample_records": {
+    "sample_method": "random",
+    "sample_size": 5,
+    "total_rows": 0,
+    "sampled_at": "2025-12-05T17:50:59.067654Z",
+    "records": [
+      {
+        "emp_id": "1",
+        "emp_no": "E0001",
+        "emp_name": "张伟",
+        "gender": "M",
+        "hire_date": "2020-03-15",
+        "salary": "12000.0",
+        "dept_id": "1"
+      },
+      {
+        "emp_id": "2",
+        "emp_no": "E0002",
+        "emp_name": "李娜",
+        "gender": "F",
+        "hire_date": "2019-07-01",
+        "salary": "15000.0",
+        "dept_id": "3"
+      },
+      {
+        "emp_id": "3",
+        "emp_no": "E0003",
+        "emp_name": "王强",
+        "gender": "M",
+        "hire_date": "2021-01-10",
+        "salary": "9800.0",
+        "dept_id": "2"
+      },
+      {
+        "emp_id": "4",
+        "emp_no": "E0004",
+        "emp_name": "赵敏",
+        "gender": "F",
+        "hire_date": "2018-11-20",
+        "salary": "13500.0",
+        "dept_id": "5"
+      },
+      {
+        "emp_id": "5",
+        "emp_no": "E0005",
+        "emp_name": "刘洋",
+        "gender": "M",
+        "hire_date": "2017-05-03",
+        "salary": "16800.0",
+        "dept_id": "8"
+      }
+    ]
+  }
+}

@@ -83,12 +83,12 @@ class MetadataRepository:
             tables: 表元数据字典 {full_name: json_data}
 
         Returns:
-            (pre_existing_relations, fk_signature_set)
+            (pre_existing_relations, fk_relationship_id_set)
             - pre_existing_relations: 外键直通关系列表
-            - fk_signature_set: FK签名集合（用于后续候选去重）
+            - fk_relationship_id_set: 外键的 relationship_id 集合（用于后续候选去重，双向一致）
         """
         pre_existing_relations: List[Relation] = []
-        fk_signature_set: Set[str] = set()
+        fk_relationship_id_set: Set[str] = set()
 
         for full_name, table_data in tables.items():
             table_info = table_data.get("table_info", {})
@@ -123,12 +123,6 @@ class MetadataRepository:
                         target_schema, target_table, target_columns
                     )
 
-                    # 生成FK签名（用于去重）
-                    fk_sig = self._generate_fk_signature(
-                        source_schema, source_table, source_columns,
-                        target_schema, target_table, target_columns
-                    )
-
                     # 创建Relation对象
                     relation = Relation(
                         relationship_id=rel_id,
@@ -143,7 +137,8 @@ class MetadataRepository:
                     )
 
                     pre_existing_relations.append(relation)
-                    fk_signature_set.add(fk_sig)
+                    # 收集 relationship_id 用于去重（双向一致，不受方向影响）
+                    fk_relationship_id_set.add(rel_id)
 
                     logger.debug(f"外键直通: {source_schema}.{source_table}.{source_columns} -> "
                                  f"{target_schema}.{target_table}.{target_columns}")
@@ -152,7 +147,7 @@ class MetadataRepository:
                     logger.error(f"处理外键失败 ({full_name}): {e}")
 
         logger.info(f"提取到 {len(pre_existing_relations)} 个外键直通关系")
-        return pre_existing_relations, fk_signature_set
+        return pre_existing_relations, fk_relationship_id_set
 
     @staticmethod
     def compute_relationship_id(

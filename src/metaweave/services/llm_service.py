@@ -22,53 +22,128 @@ class LLMService:
         
         Args:
             config: LLM 配置字典
-                - provider: qwen-plus | deepseek
-                - model: 模型名称
-                - api_key: API 密钥
-                - api_base: API 基础 URL (可选，deepseek 需要)
-                - temperature: 温度参数
-                - max_tokens: 最大 token 数
-                - timeout: 超时时间（秒）
+                - active: 当前激活的提供商名称
+                - providers: 各提供商配置字典
+                - batch_size: 批量大小
+                - retry_times: 重试次数
         """
-        self.config = config
-        self.provider = config.get("provider", "qwen-plus")
-        self.model = config.get("model", "qwen-plus")
-        self.api_key = config.get("api_key")
-        self.temperature = config.get("temperature", 0.3)
-        self.max_tokens = config.get("max_tokens", 500)
-        self.timeout = config.get("timeout", 30)
+        # 1. 读取激活的 LLM 配置名称
+        self.provider_type = config.get("active", "qwen")
         
+        # 2. 获取对应的配置段
+        providers = config.get("providers", {})
+        if self.provider_type not in providers:
+            raise ValueError(
+                f"找不到 LLM 配置: '{self.provider_type}'\n"
+                f"可用配置: {list(providers.keys())}\n"
+                f"请检查 metadata_config.yaml 中的 llm.active 和 llm.providers 配置"
+            )
+        
+        provider_config = providers[self.provider_type]
+        
+        # 3. 提取通用参数
+        self.model = provider_config.get("model")
+        self.api_key = provider_config.get("api_key")
+        self.api_base = provider_config.get("api_base")
+        self.temperature = provider_config.get("temperature", 0.3)
+        self.max_tokens = provider_config.get("max_tokens", 500)
+        self.timeout = provider_config.get("timeout", 30)
+        
+        # 早期校验：API Key 必须存在
         if not self.api_key:
-            raise ValueError("LLM API Key 未配置")
+            raise ValueError(
+                f"LLM API Key 未配置: {self.provider_type}\n"
+                f"请在 .env 文件中设置相应的 API Key 环境变量"
+            )
         
-        # 初始化 LLM 客户端
+        # 早期校验：model 必须存在
+        if not self.model:
+            raise ValueError(
+                f"LLM 模型未配置: {self.provider_type}\n"
+                f"请在 metadata_config.yaml 中设置 llm.providers.{self.provider_type}.model"
+            )
+        
+        # 4. 提取特定参数
+        self.extra_params = provider_config.get("extra_params", {})
+        
+        # 5. 提取批量配置
+        self.batch_size = config.get("batch_size", 10)
+        self.retry_times = config.get("retry_times", 3)
+        
+        # 6. 初始化 LLM 客户端
         self.llm: BaseChatModel = self._init_llm()
         
-        logger.info(f"LLM 服务已初始化: {self.provider} ({self.model})")
+        logger.info(f"LLM 服务已初始化: {self.provider_type} ({self.model})")
     
     def _init_llm(self) -> BaseChatModel:
-        """初始化 LLM 客户端"""
-        if self.provider == "qwen-plus":
+        """初始化 LLM 客户端（根据 provider_type 判断）"""
+        if self.provider_type == "qwen":
             return self._init_qwen()
-        elif self.provider == "deepseek":
+        elif self.provider_type == "deepseek":
             return self._init_deepseek()
         else:
-            raise ValueError(f"不支持的 LLM 提供商: {self.provider}")
+            raise ValueError(
+                f"不支持的 LLM 提供商: '{self.provider_type}'\n"
+                f"当前支持: qwen, deepseek"
+            )
     
     def _init_qwen(self) -> BaseChatModel:
-        """初始化通义千问（qwen-plus）"""
+        """初始化通义千问"""
         try:
             from langchain_community.chat_models.tongyi import ChatTongyi
             
-            llm = ChatTongyi(
-                model=self.model,
-                dashscope_api_key=self.api_key,
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
-                timeout=self.timeout,
-            )
-            logger.info("通义千问 LLM 初始化成功")
-            return llm
+            # 基础参数
+            init_params = {
+                "model": self.model,
+                "dashscope_api_key": self.api_key,
+                "temperature": self.temperature,
+                "max_tokens": self.max_tokens,
+                "timeout": self.timeout,
+                "max_retries": self.retry_times,
+            }
+            
+            # 可选：api_base
+            if self.api_base:
+                init_params["dashscope_api_base"] = self.api_base
+            
+            # 处理 extra_params（区分顶层参数和 extra_body 参数）
+            extra_body_params = {}  # 需要放入 extra_body 的参数
+            top_level_params = {}   # 顶层参数
+            
+            # 定义需要放入 extra_body 的参数列表
+            extra_body_keys = {"enable_thinking"}
+            
+            # 定义参数名映射（处理参数名不一致的情况）
+            param_rename_map = {"stream": "streaming"}  # stream -> streaming
+            
+            for key, value in self.extra_params.items():
+                if value is not None:  # 只过滤 None，允许 False 透传
+                    # 重命名参数（如果需要）
+                    actual_key = param_rename_map.get(key, key)
+                    
+                    if key in extra_body_keys:
+                        extra_body_params[actual_key] = value
+                        logger.debug(f"Qwen extra_body 参数: {actual_key}={value}")
+                    else:
+                        top_level_params[actual_key] = value
+                        if actual_key != key:
+                            logger.debug(f"Qwen 参数重命名: {key} -> {actual_key}={value}")
+                        else:
+                            logger.debug(f"Qwen 顶层参数: {actual_key}={value}")
+            
+            # 添加顶层参数
+            init_params.update(top_level_params)
+            
+            # 添加 extra_body 参数（仅在有值时）
+            if extra_body_params:
+                init_params["extra_body"] = extra_body_params
+            
+            logger.info(f"初始化 Qwen LLM: {self.model}")
+            logger.debug(f"Qwen 初始化参数: {list(init_params.keys())}")
+            if extra_body_params:
+                logger.debug(f"Qwen extra_body: {extra_body_params}")
+            
+            return ChatTongyi(**init_params)
         except ImportError as e:
             logger.error(f"导入 ChatTongyi 失败: {e}")
             raise
@@ -81,19 +156,30 @@ class LLMService:
         try:
             from langchain_openai import ChatOpenAI
             
-            # DeepSeek 使用 OpenAI 兼容的 API
-            api_base = self.config.get("api_base", "https://api.deepseek.com/v1")
+            # 基础参数
+            init_params = {
+                "model": self.model,
+                "openai_api_key": self.api_key,
+                "temperature": self.temperature,
+                "max_tokens": self.max_tokens,
+                "timeout": self.timeout,
+                "max_retries": self.retry_times,
+            }
             
-            llm = ChatOpenAI(
-                model=self.model,
-                openai_api_key=self.api_key,
-                openai_api_base=api_base,
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
-                timeout=self.timeout,
-            )
-            logger.info("DeepSeek LLM 初始化成功")
-            return llm
+            # 可选：api_base（默认值）
+            api_base = self.api_base or "https://api.deepseek.com/v1"
+            init_params["openai_api_base"] = api_base
+            
+            # 添加特定参数（过滤 None 值）
+            for key, value in self.extra_params.items():
+                if value is not None:
+                    init_params[key] = value
+                    logger.debug(f"DeepSeek 额外参数: {key}={value}")
+            
+            logger.info(f"初始化 DeepSeek LLM: {self.model}")
+            logger.debug(f"DeepSeek 初始化参数: {list(init_params.keys())}")
+            
+            return ChatOpenAI(**init_params)
         except ImportError as e:
             logger.error(f"导入 ChatOpenAI 失败: {e}")
             raise

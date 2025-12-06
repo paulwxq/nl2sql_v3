@@ -174,16 +174,12 @@ class JSONReader:
                 if uk_data:
                     uk.append(uk_data)
 
-        # 提取外键（转换为字典列表）
+        # 提取外键（只保留源列名，转换为二维数组，与 indexes/logic_pk 格式一致）
         fk = []
         for fk_data in physical_constraints.get("foreign_keys", []):
-            fk.append({
-                "constraint_name": fk_data.get("constraint_name", ""),
-                "source_columns": fk_data.get("source_columns", []),
-                "target_schema": fk_data.get("target_schema", ""),
-                "target_table": fk_data.get("target_table", ""),
-                "target_columns": fk_data.get("target_columns", [])
-            })
+            source_columns = fk_data.get("source_columns", [])
+            if source_columns:  # 只添加非空的列列表
+                fk.append(source_columns)
 
         # 提取索引（只保留列名列表，符合 list<list<string>> 规范）
         indexes = []

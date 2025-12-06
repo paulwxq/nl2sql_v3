@@ -34,7 +34,7 @@ class TableNode:
     # 约束和索引
     pk: List[str] = field(default_factory=list)  # 物理主键
     uk: List[List[str]] = field(default_factory=list)  # 物理唯一约束
-    fk: List[Dict[str, Any]] = field(default_factory=list)  # 物理外键
+    fk: List[List[str]] = field(default_factory=list)  # 物理外键（只保留源列名）
     logic_pk: List[List[str]] = field(default_factory=list)  # 候选逻辑主键
     logic_fk: List[List[str]] = field(default_factory=list)  # 逻辑外键
     logic_uk: List[List[str]] = field(default_factory=list)  # 逻辑唯一

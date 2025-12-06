@@ -150,7 +150,7 @@ class RelationshipScorer:
                     logger.info(f"已评分: {i + 1}/{len(candidates)} 个候选")
 
             except Exception as e:
-                logger.error(f"候选评分失败: {e}", exc_info=True)
+                logger.error(f"候选评分失败: {e}")
 
         logger.info(f"候选评分完成: {len(scored_candidates)} 个")
         return scored_candidates
@@ -333,7 +333,7 @@ class RelationshipScorer:
             return inclusion_rate, jaccard_index, source_uniqueness, target_uniqueness, join_multiplicity
 
         except Exception as e:
-            logger.error(f"数据库采样失败: {e}", exc_info=True)
+            logger.error(f"数据库采样失败: {e}")
             return 0.0, 0.0, 0.0, 0.0, 1.0
 
     def _execute_join_count(
@@ -399,7 +399,7 @@ class RelationshipScorer:
             return multiplicity
 
         except Exception as e:
-            logger.error(f"执行 JOIN COUNT 失败: {e}", exc_info=True)
+            logger.error(f"执行 JOIN COUNT 失败: {e}")
             return 1.0  # 失败时返回 1.0（保守估计，避免误判为 M:N）
 
     def _calculate_cardinality(

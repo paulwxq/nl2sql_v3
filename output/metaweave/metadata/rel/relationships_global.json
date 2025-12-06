@@ -1,12 +1,50 @@
 {
   "metadata_source": "json_llm_files",
-  "analysis_timestamp": "2025-12-04T14:34:44.410502Z",
+  "analysis_timestamp": "2025-12-05T17:55:41.026750+00:00",
   "statistics": {
-    "total_relationships_found": 9,
-    "foreign_key_relationships": 0,
+    "total_relationships_found": 11,
+    "foreign_key_relationships": 2,
     "llm_assisted_relationships": 9
   },
   "relationships": [
+    {
+      "relationship_id": "rel_3fc3390a1211",
+      "type": "single_column",
+      "from_table": {
+        "schema": "public",
+        "table": "department"
+      },
+      "to_table": {
+        "schema": "public",
+        "table": "employee"
+      },
+      "discovery_method": "foreign_key_constraint",
+      "cardinality": "1:1",
+      "from_column": "dept_id",
+      "to_column": "dept_id"
+    },
+    {
+      "relationship_id": "rel_565fe28cfc05",
+      "type": "composite",
+      "from_table": {
+        "schema": "public",
+        "table": "order_header"
+      },
+      "to_table": {
+        "schema": "public",
+        "table": "order_item"
+      },
+      "discovery_method": "foreign_key_constraint",
+      "cardinality": "1:N",
+      "from_columns": [
+        "order_date",
+        "order_id"
+      ],
+      "to_columns": [
+        "order_date",
+        "order_id"
+      ]
+    },
     {
       "relationship_id": "rel_2eb5cb1dc7e5",
       "type": "single_column",

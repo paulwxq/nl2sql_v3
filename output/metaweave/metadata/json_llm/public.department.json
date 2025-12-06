@@ -1,0 +1,228 @@
+{
+  "metadata_version": "2.0",
+  "generated_at": "2025-12-05T17:50:58.891780Z",
+  "table_info": {
+    "schema_name": "public",
+    "table_name": "department",
+    "table_type": "table",
+    "comment": "",
+    "comment_source": "",
+    "total_rows": 0,
+    "total_columns": 4
+  },
+  "column_profiles": {
+    "dept_id": {
+      "column_name": "dept_id",
+      "ordinal_position": 1,
+      "data_type": "integer",
+      "character_maximum_length": null,
+      "numeric_precision": 32,
+      "numeric_scale": 0,
+      "is_nullable": false,
+      "column_default": "nextval('department_dept_id_seq'::regclass)",
+      "comment": "",
+      "comment_source": "",
+      "statistics": {
+        "sample_count": 20,
+        "unique_count": 20,
+        "null_count": 0,
+        "null_rate": 0.0,
+        "uniqueness": 1.0,
+        "min": "1",
+        "max": "20",
+        "mean": "10.5"
+      },
+      "structure_flags": {
+        "is_primary_key": true,
+        "is_composite_primary_key_member": false,
+        "is_foreign_key": false,
+        "is_composite_foreign_key_member": false,
+        "is_unique": false,
+        "is_composite_unique_member": false,
+        "is_unique_constraint": false,
+        "is_composite_unique_constraint_member": false,
+        "is_indexed": true,
+        "is_composite_indexed_member": false,
+        "is_nullable": false
+      }
+    },
+    "dept_code": {
+      "column_name": "dept_code",
+      "ordinal_position": 2,
+      "data_type": "character varying",
+      "character_maximum_length": 20,
+      "numeric_precision": null,
+      "numeric_scale": null,
+      "is_nullable": false,
+      "column_default": null,
+      "comment": "",
+      "comment_source": "",
+      "statistics": {
+        "sample_count": 20,
+        "unique_count": 20,
+        "null_count": 0,
+        "null_rate": 0.0,
+        "uniqueness": 1.0,
+        "avg_length": 3.3,
+        "min_length": 2,
+        "max_length": 6,
+        "median_length": 3.0,
+        "length_std": 1.17
+      },
+      "structure_flags": {
+        "is_primary_key": false,
+        "is_composite_primary_key_member": false,
+        "is_foreign_key": false,
+        "is_composite_foreign_key_member": false,
+        "is_unique": false,
+        "is_composite_unique_member": false,
+        "is_unique_constraint": true,
+        "is_composite_unique_constraint_member": false,
+        "is_indexed": true,
+        "is_composite_indexed_member": false,
+        "is_nullable": false
+      }
+    },
+    "dept_name": {
+      "column_name": "dept_name",
+      "ordinal_position": 3,
+      "data_type": "character varying",
+      "character_maximum_length": 100,
+      "numeric_precision": null,
+      "numeric_scale": null,
+      "is_nullable": false,
+      "column_default": null,
+      "comment": "",
+      "comment_source": "",
+      "statistics": {
+        "sample_count": 20,
+        "unique_count": 20,
+        "null_count": 0,
+        "null_rate": 0.0,
+        "uniqueness": 1.0,
+        "avg_length": 4.1,
+        "min_length": 3,
+        "max_length": 7,
+        "median_length": 4.0,
+        "length_std": 1.12
+      },
+      "structure_flags": {
+        "is_primary_key": false,
+        "is_composite_primary_key_member": false,
+        "is_foreign_key": false,
+        "is_composite_foreign_key_member": false,
+        "is_unique": false,
+        "is_composite_unique_member": false,
+        "is_unique_constraint": false,
+        "is_composite_unique_constraint_member": false,
+        "is_indexed": false,
+        "is_composite_indexed_member": false,
+        "is_nullable": false
+      }
+    },
+    "location": {
+      "column_name": "location",
+      "ordinal_position": 4,
+      "data_type": "character varying",
+      "character_maximum_length": 100,
+      "numeric_precision": null,
+      "numeric_scale": null,
+      "is_nullable": true,
+      "column_default": null,
+      "comment": "",
+      "comment_source": "",
+      "statistics": {
+        "sample_count": 20,
+        "unique_count": 11,
+        "null_count": 0,
+        "null_rate": 0.0,
+        "uniqueness": 0.55,
+        "avg_length": 2.0,
+        "min_length": 2,
+        "max_length": 2,
+        "median_length": 2.0,
+        "length_std": 0.0
+      },
+      "structure_flags": {
+        "is_primary_key": false,
+        "is_composite_primary_key_member": false,
+        "is_foreign_key": false,
+        "is_composite_foreign_key_member": false,
+        "is_unique": false,
+        "is_composite_unique_member": false,
+        "is_unique_constraint": false,
+        "is_composite_unique_constraint_member": false,
+        "is_indexed": false,
+        "is_composite_indexed_member": false,
+        "is_nullable": true
+      }
+    }
+  },
+  "table_profile": {
+    "physical_constraints": {
+      "primary_key": {
+        "constraint_name": "department_pkey",
+        "columns": [
+          "dept_id"
+        ]
+      },
+      "foreign_keys": [],
+      "unique_constraints": [
+        {
+          "constraint_name": "department_dept_code_key",
+          "columns": [
+            "dept_code"
+          ]
+        }
+      ],
+      "indexes": [
+        {
+          "index_name": "department_dept_code_key",
+          "columns": [
+            "dept_code"
+          ],
+          "is_unique": true,
+          "index_type": "btree"
+        }
+      ]
+    }
+  },
+  "sample_records": {
+    "sample_method": "random",
+    "sample_size": 5,
+    "total_rows": 0,
+    "sampled_at": "2025-12-05T17:50:58.891780Z",
+    "records": [
+      {
+        "dept_id": "1",
+        "dept_code": "HR",
+        "dept_name": "人力资源部",
+        "location": "北京"
+      },
+      {
+        "dept_id": "2",
+        "dept_code": "FIN",
+        "dept_name": "财务部",
+        "location": "北京"
+      },
+      {
+        "dept_id": "3",
+        "dept_code": "IT",
+        "dept_name": "信息技术部",
+        "location": "上海"
+      },
+      {
+        "dept_id": "4",
+        "dept_code": "OPS",
+        "dept_name": "运营部",
+        "location": "上海"
+      },
+      {
+        "dept_id": "5",
+        "dept_code": "SALES",
+        "dept_name": "销售一部",
+        "location": "广州"
+      }
+    ]
+  }
+}
