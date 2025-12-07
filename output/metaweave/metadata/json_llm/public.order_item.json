@@ -1,6 +1,6 @@
 {
   "metadata_version": "2.0",
-  "generated_at": "2025-12-05T17:50:59.267422Z",
+  "generated_at": "2025-12-06T10:08:05.137220Z",
   "table_info": {
     "schema_name": "public",
     "table_name": "order_item",
@@ -258,7 +258,7 @@
     "sample_method": "random",
     "sample_size": 5,
     "total_rows": 0,
-    "sampled_at": "2025-12-05T17:50:59.267422Z",
+    "sampled_at": "2025-12-06T10:08:05.137220Z",
     "records": [
       {
         "item_id": "1",

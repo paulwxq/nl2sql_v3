@@ -1,16 +1,17 @@
-"""LLM 辅助关联关系发现
+"""LLM 辅助关联关系发现。
 
 数据来源：
 - LLM 调用：从 json_llm 文件读取，不查询数据库
 - 评分阶段：复用 RelationshipScorer，需要数据库连接
 """
 
+import asyncio
+import json
+import time
 from datetime import datetime, timezone
 from itertools import combinations
 from pathlib import Path
 from typing import Dict, List, Set, Tuple
-import json
-import time
 
 from src.metaweave.core.metadata.connector import DatabaseConnector
 from src.metaweave.core.relationships.models import Relation
@@ -100,8 +101,10 @@ class LLMRelationshipDiscovery:
         self.config = config
         self.connector = connector  # 仅用于评分阶段
         self.scorer = RelationshipScorer(config.get("relationships", {}), connector)
-        self.llm_service = LLMService(config.get("llm", {}))
-        
+
+        llm_config = config.get("llm", {})
+        self.llm_service = LLMService(llm_config)
+
         output_config = config.get("output", {})
         json_llm_dir = output_config.get("json_llm_directory", "output/metaweave/metadata/json_llm")
         self.json_llm_dir = Path(json_llm_dir)
@@ -119,14 +122,22 @@ class LLMRelationshipDiscovery:
         self.medium_confidence_threshold = decision_config.get("medium_confidence_threshold", 0.80)
         
         # 读取 LLM 重试配置
-        llm_config = config.get("llm", {})
         self.llm_max_retries = llm_config.get("retry_times", 2)
         self.llm_retry_delay = llm_config.get("retry_delay", 1)  # 重试延迟（秒）
-        
+
+        langchain_config = llm_config.get("langchain_config", {})
+        self.use_async = langchain_config.get("use_async", False)
+        self.batch_size = max(1, int(langchain_config.get("batch_size", 50) or 50))
+
         logger.info(
             f"阈值配置: accept={self.accept_threshold}, "
             f"high={self.high_confidence_threshold}, "
             f"medium={self.medium_confidence_threshold}"
+        )
+        logger.info(
+            "LLM 异步配置: use_async=%s, batch_size=%s",
+            self.use_async,
+            self.batch_size,
         )
         logger.info(
             f"LLM 重试配置: max_retries={self.llm_max_retries}, "
@@ -134,91 +145,242 @@ class LLMRelationshipDiscovery:
         )
         
     def discover(self) -> Dict:
-        """发现关联关系，返回 rel JSON 格式的结果"""
-        import time
+        """同步入口：发现关联关系。"""
+
         start_time = time.time()
-        
         logger.info("=" * 60)
         logger.info("开始 LLM 辅助关联关系发现")
         logger.info("=" * 60)
-        
-        # 1. 加载所有 json_llm 文件
+
+        tables, fk_relation_objects, fk_relationship_ids = self._load_tables_and_foreign_keys()
+
+        logger.info("阶段3: 两两组合调用 LLM")
+        table_pairs = list(combinations(tables.keys(), 2))
+        total_pairs = len(table_pairs)
+        logger.info(f"共 {total_pairs} 个表对需要处理")
+
+        if self.use_async:
+            logger.info(f"阶段3: 异步并发调用 LLM (分批大小={self.batch_size})")
+            llm_candidates = self._run_async(
+                self._discover_llm_candidates_async(tables, table_pairs)
+            )
+        else:
+            logger.info("阶段3: 同步串行调用 LLM")
+            llm_candidates = self._discover_llm_candidates_sync(tables, table_pairs)
+
+        logger.info(f"LLM 返回候选: {len(llm_candidates)} 个")
+
+        return self._finalize_relations(
+            tables,
+            fk_relation_objects,
+            fk_relationship_ids,
+            llm_candidates,
+            start_time,
+        )
+
+    async def discover_async(self) -> Dict:
+        """异步入口，适用于已有事件循环的环境。"""
+
+        start_time = time.time()
+        logger.info("=" * 60)
+        logger.info("开始 LLM 辅助关联关系发现 (async)")
+        logger.info("=" * 60)
+
+        tables, fk_relation_objects, fk_relationship_ids = self._load_tables_and_foreign_keys()
+
+        logger.info("阶段3: 两两组合调用 LLM")
+        table_pairs = list(combinations(tables.keys(), 2))
+        total_pairs = len(table_pairs)
+        logger.info(f"共 {total_pairs} 个表对需要处理")
+
+        if self.use_async:
+            logger.info(f"阶段3: 异步并发调用 LLM (分批大小={self.batch_size})")
+            llm_candidates = await self._discover_llm_candidates_async(tables, table_pairs)
+        else:
+            logger.info("阶段3: 同步串行调用 LLM")
+            llm_candidates = self._discover_llm_candidates_sync(tables, table_pairs)
+
+        logger.info(f"LLM 返回候选: {len(llm_candidates)} 个")
+
+        return self._finalize_relations(
+            tables,
+            fk_relation_objects,
+            fk_relationship_ids,
+            llm_candidates,
+            start_time,
+        )
+    
+    def _load_tables_and_foreign_keys(self):
         logger.info(f"阶段1: 加载 json_llm 文件，目录: {self.json_llm_dir}")
         tables = self._load_all_tables()
         logger.info(f"已加载 {len(tables)} 张表的元数据")
-        
-        # 2. 提取物理外键（复用 MetadataRepository，包含 cardinality、relationship_id）
+
         logger.info("阶段2: 提取物理外键")
         fk_relation_objects, fk_relationship_ids = self.repo.collect_foreign_keys(tables)
         logger.info(f"物理外键直通: {len(fk_relation_objects)} 个")
-        
-        # 3. 两两组合调用 LLM
-        logger.info("阶段3: 两两组合调用 LLM")
-        table_pairs = list(combinations(tables.keys(), 2))
-        logger.info(f"共 {len(table_pairs)} 个表对需要处理")
-        
-        llm_candidates = []
+        return tables, fk_relation_objects, fk_relationship_ids
+
+    def _discover_llm_candidates_sync(
+        self,
+        tables: Dict[str, Dict],
+        table_pairs: List[Tuple[str, str]],
+    ) -> List[Dict]:
+        llm_candidates: List[Dict] = []
         for i, (table1_name, table2_name) in enumerate(table_pairs):
-            logger.debug(f"处理表对 [{i+1}/{len(table_pairs)}]: {table1_name} <-> {table2_name}")
-            
+            logger.debug(
+                "处理表对 [%s/%s]: %s <-> %s",
+                i + 1,
+                len(table_pairs),
+                table1_name,
+                table2_name,
+            )
+
             candidates = self._call_llm(tables[table1_name], tables[table2_name])
             llm_candidates.extend(candidates)
-            
+
             if (i + 1) % 10 == 0:
-                logger.info(f"LLM 调用进度: {i+1}/{len(table_pairs)}")
-        
-        logger.info(f"LLM 返回候选: {len(llm_candidates)} 个")
-        
-        # 4. 过滤已有物理外键（使用 relationship_id，避免评分计算）
+                logger.info(f"LLM 调用进度: {i + 1}/{len(table_pairs)}")
+
+        return llm_candidates
+
+    async def _discover_llm_candidates_async(
+        self,
+        tables: Dict[str, Dict],
+        table_pairs: List[Tuple[str, str]],
+    ) -> List[Dict]:
+        total_pairs = len(table_pairs)
+        if total_pairs == 0:
+            return []
+
+        llm_candidates: List[Dict] = []
+        progress_step = max(1, total_pairs // 5)
+
+        for batch_start in range(0, total_pairs, self.batch_size):
+            batch_end = min(batch_start + self.batch_size, total_pairs)
+            batch_pairs = table_pairs[batch_start:batch_end]
+            batch_num = batch_start // self.batch_size + 1
+            logger.info(
+                "处理批次 %s: 表对 %s-%s/%s",
+                batch_num,
+                batch_start + 1,
+                batch_end,
+                total_pairs,
+            )
+
+            batch_prompts = [
+                self._build_prompt(tables[t1], tables[t2])
+                for t1, t2 in batch_pairs
+            ]
+
+            def on_progress(completed: int, total: int):
+                global_completed = batch_start + completed
+                if completed == total or global_completed % progress_step == 0:
+                    logger.info(
+                        "LLM 调用进度: %s/%s",
+                        global_completed,
+                        total_pairs,
+                    )
+                else:
+                    logger.debug(
+                        "LLM 调用完成: %s/%s",
+                        global_completed,
+                        total_pairs,
+                    )
+
+            results = await self.llm_service.batch_call_llm_async(
+                batch_prompts,
+                on_progress=on_progress,
+            )
+
+            pair_by_idx = dict(enumerate(batch_pairs))
+            for idx, response in results:
+                t1, t2 = pair_by_idx[idx]
+                if response:
+                    candidates = self._parse_llm_response(response)
+                    llm_candidates.extend(candidates)
+                else:
+                    logger.warning(f"表对 {t1} <-> {t2} 无响应")
+
+            del batch_prompts
+            del pair_by_idx
+
+        return llm_candidates
+
+    def _build_prompt(self, table1: Dict, table2: Dict) -> str:
+        table1_info = table1.get("table_info", {})
+        table2_info = table2.get("table_info", {})
+        table1_name = f"{table1_info['schema_name']}.{table1_info['table_name']}"
+        table2_name = f"{table2_info['schema_name']}.{table2_info['table_name']}"
+
+        return RELATIONSHIP_DISCOVERY_PROMPT.format(
+            table1_name=table1_name,
+            table1_json=json.dumps(table1, ensure_ascii=False, indent=2),
+            table2_name=table2_name,
+            table2_json=json.dumps(table2, ensure_ascii=False, indent=2),
+        )
+
+    def _run_async(self, coro):
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(coro)
+        raise RuntimeError(
+            "检测到已存在运行中的事件循环。"
+            "请改用 await discovery.discover_async() 或在 CLI 层调用 asyncio.run()."
+        )
+
+    def _finalize_relations(
+        self,
+        tables: Dict[str, Dict],
+        fk_relation_objects: List[Relation],
+        fk_relationship_ids: Set[str],
+        llm_candidates: List[Dict],
+        start_time: float,
+    ) -> Dict:
         logger.info("阶段4: 过滤已有物理外键（基于 relationship_id）")
         filtered_candidates = self._filter_existing_fks(llm_candidates, fk_relationship_ids)
         skipped_fk_count = len(llm_candidates) - len(filtered_candidates)
         logger.info(
-            f"过滤后候选: {len(filtered_candidates)} 个 "
-            f"(已跳过 {skipped_fk_count} 个物理外键)"
+            "过滤后候选: %s 个 (已跳过 %s 个物理外键)",
+            len(filtered_candidates),
+            skipped_fk_count,
         )
-        
-        # 5. 评分（仅对非物理外键的候选进行评分）
+
         score_start = time.time()
         logger.info("阶段5: 对候选关联进行评分")
         scored_relations = self._score_candidates(filtered_candidates, tables)
         score_duration = time.time() - score_start
         logger.info(
-            f"评分后关系: {len(scored_relations)} 个 "
-            f"(耗时: {score_duration:.2f}秒, 节省了 {skipped_fk_count} 个物理外键的评分计算)"
+            "评分后关系: %s 个 (耗时: %.2f秒, 节省了 %s 个物理外键的评分计算)",
+            len(scored_relations),
+            score_duration,
+            skipped_fk_count,
         )
-        
-        # 6. 阈值过滤
+
         logger.info(f"阶段6: 阈值过滤 (threshold={self.accept_threshold})")
         accepted_relations, rejected_relations = self._filter_by_threshold(scored_relations)
         logger.info(f"过滤后接受: {len(accepted_relations)} 个")
-        
-        # 7. 合并结果并二次去重（防御性兜底）
+
         logger.info("阶段7: 合并物理外键和推断关系")
         fk_relations = [self._relation_to_dict(rel) for rel in fk_relation_objects]
-        
-        # 二次去重（理论上阶段4已经过滤，这里是防御性检查）
         before_dedup_count = len(fk_relations) + len(accepted_relations)
         all_relations = self._deduplicate_by_relationship_id(fk_relations, accepted_relations)
-        
-        # 如果发现重复，记录警告（说明阶段4可能有遗漏）
+
         if before_dedup_count > len(all_relations):
             dup_count = before_dedup_count - len(all_relations)
             logger.warning(
-                f"⚠️ 阶段7发现 {dup_count} 个重复关系（阶段4可能遗漏），已去重。"
-                f"建议检查 relationship_id 生成逻辑。"
+                "⚠️ 阶段7发现 %s 个重复关系（阶段4可能遗漏），已去重。",
+                dup_count,
             )
         else:
             logger.debug("✓ 阶段7未发现重复，阶段4去重有效")
-        
+
         logger.info(f"最终关系总数: {len(all_relations)}")
-        
-        # 总耗时统计
         total_duration = time.time() - start_time
         logger.info(f"✓ 关系发现总耗时: {total_duration:.2f}秒")
-        
+
         return self._build_output(all_relations, rejected_relations)
-    
+
     def _load_all_tables(self) -> Dict[str, Dict]:
         """加载所有 json_llm 文件"""
         tables = {}

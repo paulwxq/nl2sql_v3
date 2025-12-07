@@ -1,7 +1,7 @@
 -- ====================================
 -- Table: public.order_header
 -- Comment: 订单信息表，存储订单的基本信息和客户信息
--- Generated: 2025-12-06 01:50:30
+-- Generated: 2025-12-06 18:07:56
 -- ====================================
 
 CREATE TABLE IF NOT EXISTS public.order_header (
@@ -23,7 +23,7 @@ COMMENT ON TABLE public.order_header IS '订单信息表，存储订单的基本
 {
   "version": 1,
   "table": "public.order_header",
-  "generated_at": "2025-12-05T17:50:30.993664Z",
+  "generated_at": "2025-12-06T10:07:56.658880Z",
   "records": [
     {
       "label": "Record 1",

@@ -144,8 +144,9 @@ llm:
   # LangChain 客户端配置（通用）
   langchain_config:
     use_async: true               # 是否使用异步 API (ainvoke)
-    async_concurrency: 5         # 异步并发限制（建议 10-50，防止触发限流）
+    async_concurrency: 10          # 异步并发限制（建议 10-50，防止触发限流）
     max_retries: 3                # SDK 内部网络重试次数（覆盖默认值）
+    batch_size: 50                # 异步批量构建 prompt 的大小（控制内存）
 
   # 各 LLM 提供商配置
   providers:
@@ -153,7 +154,7 @@ llm:
     qwen:
       model: qwen-plus            # 模型名称：qwen-turbo, qwen-plus, qwen-max, qwen-long
       api_key: ${DASHSCOPE_API_KEY}
-      api_base: ${DASHSCOPE_BASE_URI:}  # 可选，默认使用 Dashscope 默认地址
+      api_base: ${DASHSCOPE_BASE_URI}  # 可选，默认使用 Dashscope 默认地址
       
       # 基础参数
       temperature: 0.3
@@ -170,7 +171,7 @@ llm:
     deepseek:
       model: deepseek-chat        # 模型名称
       api_key: ${DEEPSEEK_API_KEY}
-      api_base: ${DEEPSEEK_BASE_URI:https://api.deepseek.com/v1}
+      api_base: ${DEEPSEEK_BASE_URI}
       
       # 基础参数
       temperature: 0.3
@@ -182,6 +183,25 @@ llm:
       #   top_p: 0.95
       #   frequency_penalty: 0.0
       #   presence_penalty: 0.0
+
+# Embedding 配置
+embedding:
+  # 当前激活的 Embedding 提供商
+  active: qwen                    # 可选值: qwen（预留扩展其他 provider）
+
+  # 批量处理和重试配置
+  batch_size: 16                  # 预留：批量请求大小
+  max_retries: 3                  # API 调用失败时的最大重试次数
+  timeout: 30                     # 请求超时（秒）
+
+  # 各 Embedding 提供商配置
+  providers:
+    # Qwen Embedding 配置
+    qwen:
+      model: text-embedding-v3
+      api_key: ${DASHSCOPE_API_KEY}
+      api_base: ${DASHSCOPE_BASE_URI}   # 复用系统已有 DashScope 地址
+      dimensions: 1024                  # 模型输出维度（用于预分配与校验）
 
 # 注释生成配置
 comment_generation:
@@ -279,8 +299,8 @@ single_column:
     - description  # 新增：description 字段不适合作为关联键
   logical_key_min_confidence: 0.8
   min_type_compatibility: 0.8  # 最低类型兼容性阈值
-  name_similarity_important_target: 0.6  # 目标列是关键字段时的名称相似度阈值
-  name_similarity_normal_target: 0.9     # 目标列是普通字段时的名称相似度阈值
+  name_similarity_important_target: 0.6  # 目标列是关键字段时的名称相似度阈值,非embedding方式建议0.6,embedding方式建议0.9
+  name_similarity_normal_target: 0.9     # 目标列是普通字段时的名称相似度阈值,非embedding方式建议0.9
 
 # 复合键候选配置
 composite:
@@ -290,7 +310,7 @@ composite:
     # - composite_indexes
   min_type_compatibility: 0.8  # 类型兼容性阈值
   logical_key_min_confidence: 0.8  # 逻辑主键最低置信度
-  name_similarity_important_target: 0.6  # 特权模式目标列的名称相似度阈值
+  name_similarity_important_target: 0.6  # 特权模式目标列的名称相似度阈值,非embedding方式建议0.6,embedding方式建议0.9
 
   # === 复合键排除的语义角色（可配置） ===
   # 说明：

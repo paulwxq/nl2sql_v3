@@ -1,6 +1,6 @@
 {
   "metadata_version": "2.0",
-  "generated_at": "2025-12-05T17:50:59.067654Z",
+  "generated_at": "2025-12-06T10:08:04.949565Z",
   "table_info": {
     "schema_name": "public",
     "table_name": "employee",
@@ -316,7 +316,7 @@
     "sample_method": "random",
     "sample_size": 5,
     "total_rows": 0,
-    "sampled_at": "2025-12-05T17:50:59.067654Z",
+    "sampled_at": "2025-12-06T10:08:04.949565Z",
     "records": [
       {
         "emp_id": "1",

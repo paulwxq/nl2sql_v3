@@ -3,8 +3,9 @@
 封装 LLM 调用，支持 qwen-plus (DashScope) 和 deepseek。
 """
 
+import asyncio
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_core.language_models.chat_models import BaseChatModel
 
@@ -69,11 +70,24 @@ class LLMService:
         # 5. 提取批量配置
         self.batch_size = config.get("batch_size", 10)
         self.retry_times = config.get("retry_times", 3)
-        
-        # 6. 初始化 LLM 客户端
+
+        # 6. LangChain 异步配置
+        langchain_config = config.get("langchain_config", {})
+        self.use_async = langchain_config.get("use_async", False)
+        self.async_concurrency = langchain_config.get("async_concurrency", 20)
+        # 优先使用 langchain_config 中的 max_retries
+        self.retry_times = langchain_config.get("max_retries", self.retry_times)
+
+        logger.info(
+            "LLM 服务已初始化: %s (%s), 异步模式: %s, 并发限制: %s",
+            self.provider_type,
+            self.model,
+            "启用" if self.use_async else "禁用",
+            self.async_concurrency,
+        )
+
+        # 7. 初始化 LLM 客户端
         self.llm: BaseChatModel = self._init_llm()
-        
-        logger.info(f"LLM 服务已初始化: {self.provider_type} ({self.model})")
     
     def _init_llm(self) -> BaseChatModel:
         """初始化 LLM 客户端（根据 provider_type 判断）"""
@@ -240,7 +254,7 @@ class LLMService:
         except Exception as e:
             logger.error(f"生成字段注释失败 ({table_name}): {e}")
             return {}
-    
+
     def _call_llm(self, prompt: str, system_message: Optional[str] = None) -> str:
         """调用 LLM
         
@@ -264,6 +278,74 @@ class LLMService:
         except Exception as e:
             logger.error(f"调用 LLM 失败: {e}")
             raise
+
+    async def _call_llm_async(
+        self,
+        prompt: str,
+        system_message: Optional[str] = None,
+    ) -> str:
+        """异步调用 LLM。"""
+
+        messages = []
+        if system_message:
+            messages.append(SystemMessage(content=system_message))
+        messages.append(HumanMessage(content=prompt))
+
+        try:
+            response = await self.llm.ainvoke(messages)
+            return response.content
+        except Exception as e:
+            logger.error(f"异步调用 LLM 失败: {e}")
+            raise
+
+    async def batch_call_llm_async(
+        self,
+        prompts: List[str],
+        system_message: Optional[str] = None,
+        on_progress: Optional[Callable[[int, int], None]] = None,
+    ) -> List[Tuple[int, str]]:
+        """批量异步调用 LLM（集中并发控制）。"""
+
+        if not prompts:
+            return []
+
+        if not self.use_async:
+            logger.warning("异步模式未启用，batch_call_llm_async 回退到同步调用")
+            results: List[Tuple[int, str]] = []
+            for idx, prompt in enumerate(prompts):
+                try:
+                    response = self._call_llm(prompt, system_message)
+                    results.append((idx, response))
+                except Exception as e:
+                    logger.error(f"Prompt {idx} 调用失败: {e}")
+                    results.append((idx, ""))
+                if on_progress:
+                    on_progress(idx + 1, len(prompts))
+            return results
+
+        semaphore = asyncio.Semaphore(max(1, self.async_concurrency))
+        total = len(prompts)
+        completed = 0
+
+        async def bounded_call(index: int, prompt: str) -> Tuple[int, str]:
+            nonlocal completed
+            async with semaphore:
+                try:
+                    response = await self._call_llm_async(prompt, system_message)
+                    return index, response
+                except Exception as e:
+                    logger.error(f"Prompt {index} 调用失败: {e}")
+                    return index, ""
+                finally:
+                    completed += 1
+                    if on_progress:
+                        on_progress(completed, total)
+
+        tasks = [bounded_call(idx, prompt) for idx, prompt in enumerate(prompts)]
+        results = await asyncio.gather(*tasks)
+
+        # 确保按原始顺序返回，方便调用方映射
+        return sorted(results, key=lambda item: item[0])
     
     def _build_table_comment_prompt(
         self,

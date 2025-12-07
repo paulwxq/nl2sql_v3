@@ -1,7 +1,7 @@
 -- ====================================
 -- Table: public.employee
 -- Comment: 员工基本信息及雇佣信息表
--- Generated: 2025-12-06 01:50:30
+-- Generated: 2025-12-06 18:07:56
 -- ====================================
 
 CREATE TABLE IF NOT EXISTS public.employee (
@@ -33,7 +33,7 @@ COMMENT ON TABLE public.employee IS '员工基本信息及雇佣信息表';
 {
   "version": 1,
   "table": "public.employee",
-  "generated_at": "2025-12-05T17:50:30.903049Z",
+  "generated_at": "2025-12-06T10:07:56.499113Z",
   "records": [
     {
       "label": "Record 1",
