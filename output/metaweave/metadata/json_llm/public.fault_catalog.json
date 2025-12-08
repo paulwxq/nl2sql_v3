@@ -1,6 +1,6 @@
 {
   "metadata_version": "2.0",
-  "generated_at": "2025-12-06T10:08:05.068023Z",
+  "generated_at": "2025-12-07T11:00:04.735351Z",
   "table_info": {
     "schema_name": "public",
     "table_name": "fault_catalog",
@@ -236,7 +236,7 @@
     "sample_method": "random",
     "sample_size": 5,
     "total_rows": 0,
-    "sampled_at": "2025-12-06T10:08:05.068023Z",
+    "sampled_at": "2025-12-07T11:00:04.735351Z",
     "records": [
       {
         "product_line_code": "LINE_A",

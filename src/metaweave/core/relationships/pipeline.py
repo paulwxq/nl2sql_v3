@@ -14,6 +14,7 @@ from src.metaweave.core.relationships.candidate_generator import CandidateGenera
 from src.metaweave.core.relationships.scorer import RelationshipScorer
 from src.metaweave.core.relationships.decision_engine import DecisionEngine
 from src.metaweave.core.relationships.writer import RelationshipWriter
+from src.metaweave.core.relationships.name_similarity import NameSimilarityService
 from src.metaweave.utils.file_utils import get_project_root
 from src.metaweave.utils.logger import get_metaweave_logger
 from src.services.config_loader import ConfigLoader
@@ -40,6 +41,11 @@ class RelationshipDiscoveryPipeline:
         """
         self.config_path = Path(config_path)
         self.config = self._load_config()
+        self.rel_config = self.config.get("relationships", {}).copy()
+        for key in ["single_column", "composite", "decision", "weights"]:
+            if key in self.config and key not in self.rel_config:
+                self.rel_config[key] = self.config[key]
+        self.embedding_config = self.config.get("embedding", {})
 
         # 获取JSON目录（支持直接配置 json_directory，或从 output_dir 推导）
         output_config = self.config.get("output", {})
@@ -58,15 +64,22 @@ class RelationshipDiscoveryPipeline:
         db_config = self.config.get("database", {})
         self.connector = DatabaseConnector(db_config)
 
-        # 初始化各模块（传入 top-level config）
+        # 初始化各模块（传入配置）
         rel_id_salt = output_config.get("rel_id_salt", "")
         self.repository = MetadataRepository(self.json_dir, rel_id_salt=rel_id_salt)
 
         # candidate_generator需要fk_signature_set，稍后设置
         self.candidate_generator = None
 
-        # scorer需要connector和config（传入top-level config）
-        self.scorer = RelationshipScorer(self.config, self.connector)
+        # name similarity service（按开关初始化）
+        name_sim_config = self.rel_config.get("name_similarity", {})
+        if (name_sim_config.get("method") or "string").lower() != "string":
+            self.name_similarity_service = NameSimilarityService(name_sim_config, self.embedding_config)
+        else:
+            self.name_similarity_service = None
+
+        # scorer需要connector和config（传入关系配置）
+        self.scorer = RelationshipScorer(self.rel_config, self.connector, self.name_similarity_service)
 
         # decision_engine（传入top-level config）
         self.decision_engine = DecisionEngine(self.config)
@@ -120,7 +133,7 @@ class RelationshipDiscoveryPipeline:
 
             # Stage 2: 候选生成
             logger.info("阶段2: 生成候选关系（复合键 + 单列）")
-            self.candidate_generator = CandidateGenerator(self.config, fk_sigs)
+            self.candidate_generator = CandidateGenerator(self.rel_config, fk_sigs, self.name_similarity_service)
             candidates = self.candidate_generator.generate_candidates(tables)
             logger.info(f"候选关系: {len(candidates)} 个")
             if logger.isEnabledFor(logging.DEBUG):

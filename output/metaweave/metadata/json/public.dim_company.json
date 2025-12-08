@@ -1,6 +1,6 @@
 {
   "metadata_version": "2.0",
-  "generated_at": "2025-12-04T03:41:54.681678Z",
+  "generated_at": "2025-12-07T11:11:56.192540Z",
   "table_info": {
     "schema_name": "public",
     "table_name": "dim_company",
@@ -166,7 +166,7 @@
     "sample_method": "random",
     "sample_size": 3,
     "total_rows": 3,
-    "sampled_at": "2025-12-04T03:20:26.820777Z",
+    "sampled_at": "2025-12-07T11:11:44.417762Z",
     "records": [
       {
         "company_id": 1,

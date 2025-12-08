@@ -7,6 +7,7 @@ from typing import Dict, List, Set, Any, Optional, Tuple
 from difflib import SequenceMatcher
 from itertools import permutations
 
+from src.metaweave.core.relationships.name_similarity import NameSimilarityService
 from src.metaweave.utils.logger import get_metaweave_logger
 
 logger = get_metaweave_logger("relationships.candidate_generator")
@@ -20,7 +21,12 @@ class CandidateGenerator:
     2. 单列候选（主动搜索、逻辑键匹配）
     """
 
-    def __init__(self, config: dict, fk_signature_set: Set[str]):
+    def __init__(
+            self,
+            config: dict,
+            fk_signature_set: Set[str],
+            name_similarity_service: Optional[NameSimilarityService] = None,
+    ):
         """初始化候选生成器
 
         Args:
@@ -29,6 +35,7 @@ class CandidateGenerator:
         """
         self.config = config
         self.fk_signature_set = fk_signature_set
+        self.name_similarity_service = name_similarity_service
 
         # 单列配置（single_column 节点）
         single_config = config["single_column"]
@@ -1060,6 +1067,8 @@ class CandidateGenerator:
 
     def _calculate_name_similarity(self, name1: str, name2: str) -> float:
         """计算列名相似度（0-1，大小写不敏感）"""
+        if self.name_similarity_service:
+            return self.name_similarity_service.compare_pair(name1, name2)
         if name1.lower() == name2.lower():
             return 1.0
 

@@ -1,6 +1,6 @@
 {
   "metadata_version": "2.0",
-  "generated_at": "2025-12-04T03:41:54.795968Z",
+  "generated_at": "2025-12-07T11:11:56.464570Z",
   "table_info": {
     "schema_name": "public",
     "table_name": "fact_store_sales_month",
@@ -297,7 +297,7 @@
     "sample_method": "random",
     "sample_size": 5,
     "total_rows": 72,
-    "sampled_at": "2025-12-04T03:20:26.956962Z",
+    "sampled_at": "2025-12-07T11:11:44.626745Z",
     "records": [
       {
         "store_id": 203,

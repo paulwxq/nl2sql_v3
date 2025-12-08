@@ -1,13 +1,13 @@
 {
   "metadata_version": "2.0",
-  "generated_at": "2025-12-07T11:00:04.836590Z",
+  "generated_at": "2025-12-07T11:11:56.558045Z",
   "table_info": {
     "schema_name": "public",
     "table_name": "order_item",
     "table_type": "table",
-    "comment": "",
-    "comment_source": "",
-    "total_rows": 0,
+    "comment": "订单商品明细，记录每个订单中的商品及数量信息",
+    "comment_source": "ddl",
+    "total_rows": 20,
     "total_columns": 5
   },
   "column_profiles": {
@@ -17,11 +17,11 @@
       "data_type": "integer",
       "character_maximum_length": null,
       "numeric_precision": 32,
-      "numeric_scale": 0,
+      "numeric_scale": null,
       "is_nullable": false,
       "column_default": "nextval('order_item_item_id_seq'::regclass)",
-      "comment": "",
-      "comment_source": "",
+      "comment": "订单商品唯一标识ID",
+      "comment_source": "ddl",
       "statistics": {
         "sample_count": 20,
         "unique_count": 20,
@@ -32,18 +32,38 @@
         "max": "20",
         "mean": "10.5"
       },
+      "semantic_analysis": {
+        "semantic_role": "identifier",
+        "semantic_confidence": 1.0,
+        "inference_basis": [
+          "type_whitelist_passed",
+          "physical_constraint:primary_key"
+        ]
+      },
       "structure_flags": {
         "is_primary_key": true,
         "is_composite_primary_key_member": false,
         "is_foreign_key": false,
         "is_composite_foreign_key_member": false,
-        "is_unique": false,
+        "is_unique": true,
         "is_composite_unique_member": false,
         "is_unique_constraint": false,
         "is_composite_unique_constraint_member": false,
-        "is_indexed": true,
+        "is_indexed": false,
         "is_composite_indexed_member": false,
         "is_nullable": false
+      },
+      "role_specific_info": {
+        "identifier_info": {
+          "naming_pattern": "primary_key",
+          "is_surrogate": true
+        },
+        "primary_key_info": {
+          "source": "constraint",
+          "confidence": null,
+          "is_single_column": true,
+          "composite_columns": null
+        }
       }
     },
     "order_id": {
@@ -52,11 +72,11 @@
       "data_type": "integer",
       "character_maximum_length": null,
       "numeric_precision": 32,
-      "numeric_scale": 0,
+      "numeric_scale": null,
       "is_nullable": false,
       "column_default": null,
-      "comment": "",
-      "comment_source": "",
+      "comment": "订单编号",
+      "comment_source": "ddl",
       "statistics": {
         "sample_count": 20,
         "unique_count": 10,
@@ -79,6 +99,14 @@
           "5010": 2
         }
       },
+      "semantic_analysis": {
+        "semantic_role": "identifier",
+        "semantic_confidence": 1.0,
+        "inference_basis": [
+          "type_whitelist_passed",
+          "physical_constraint:foreign_key"
+        ]
+      },
       "structure_flags": {
         "is_primary_key": false,
         "is_composite_primary_key_member": false,
@@ -91,6 +119,22 @@
         "is_indexed": false,
         "is_composite_indexed_member": false,
         "is_nullable": false
+      },
+      "role_specific_info": {
+        "identifier_info": {
+          "naming_pattern": "foreign_key",
+          "is_surrogate": true
+        },
+        "foreign_key_info": {
+          "target_schema": "public",
+          "target_table": "order_header",
+          "target_columns": [
+            "order_date",
+            "order_id"
+          ],
+          "on_delete": "NO ACTION",
+          "on_update": "NO ACTION"
+        }
       }
     },
     "order_date": {
@@ -102,8 +146,8 @@
       "numeric_scale": null,
       "is_nullable": false,
       "column_default": null,
-      "comment": "",
-      "comment_source": "",
+      "comment": "订单创建日期",
+      "comment_source": "ddl",
       "statistics": {
         "sample_count": 20,
         "unique_count": 10,
@@ -128,6 +172,13 @@
           "2024-01-10": 2
         }
       },
+      "semantic_analysis": {
+        "semantic_role": "audit",
+        "semantic_confidence": 0.95,
+        "inference_basis": [
+          "audit_pattern:_date$"
+        ]
+      },
       "structure_flags": {
         "is_primary_key": false,
         "is_composite_primary_key_member": false,
@@ -140,6 +191,22 @@
         "is_indexed": false,
         "is_composite_indexed_member": false,
         "is_nullable": false
+      },
+      "role_specific_info": {
+        "audit_info": {
+          "audit_type": "timestamp",
+          "description": "审计时间戳"
+        },
+        "foreign_key_info": {
+          "target_schema": "public",
+          "target_table": "order_header",
+          "target_columns": [
+            "order_date",
+            "order_id"
+          ],
+          "on_delete": "NO ACTION",
+          "on_update": "NO ACTION"
+        }
       }
     },
     "product": {
@@ -151,8 +218,8 @@
       "numeric_scale": null,
       "is_nullable": true,
       "column_default": null,
-      "comment": "",
-      "comment_source": "",
+      "comment": "商品名称",
+      "comment_source": "ddl",
       "statistics": {
         "sample_count": 20,
         "unique_count": 20,
@@ -165,18 +232,32 @@
         "median_length": 2.0,
         "length_std": 0.47
       },
+      "semantic_analysis": {
+        "semantic_role": "identifier",
+        "semantic_confidence": 0.95,
+        "inference_basis": [
+          "type_whitelist_passed",
+          "high_uniqueness"
+        ]
+      },
       "structure_flags": {
         "is_primary_key": false,
         "is_composite_primary_key_member": false,
         "is_foreign_key": false,
         "is_composite_foreign_key_member": false,
-        "is_unique": false,
+        "is_unique": true,
         "is_composite_unique_member": false,
         "is_unique_constraint": false,
         "is_composite_unique_constraint_member": false,
         "is_indexed": false,
         "is_composite_indexed_member": false,
         "is_nullable": true
+      },
+      "role_specific_info": {
+        "identifier_info": {
+          "naming_pattern": "logical_primary_key",
+          "is_surrogate": true
+        }
       }
     },
     "quantity": {
@@ -185,11 +266,11 @@
       "data_type": "integer",
       "character_maximum_length": null,
       "numeric_precision": 32,
-      "numeric_scale": 0,
+      "numeric_scale": null,
       "is_nullable": false,
       "column_default": null,
-      "comment": "",
-      "comment_source": "",
+      "comment": "商品数量",
+      "comment_source": "ddl",
       "statistics": {
         "sample_count": 20,
         "unique_count": 8,
@@ -210,6 +291,14 @@
           "10": 1
         }
       },
+      "semantic_analysis": {
+        "semantic_role": "metric",
+        "semantic_confidence": 0.95,
+        "inference_basis": [
+          "numeric_type",
+          "metric_pattern:quantity"
+        ]
+      },
       "structure_flags": {
         "is_primary_key": false,
         "is_composite_primary_key_member": false,
@@ -222,10 +311,23 @@
         "is_indexed": false,
         "is_composite_indexed_member": false,
         "is_nullable": false
+      },
+      "role_specific_info": {
+        "metric_info": {
+          "metric_category": "count",
+          "suggested_aggregations": [
+            "SUM"
+          ]
+        }
       }
     }
   },
   "table_profile": {
+    "table_category": "bridge",
+    "confidence": 0.85,
+    "inference_basis": [
+      "bridge_fk_threshold"
+    ],
     "physical_constraints": {
       "primary_key": {
         "constraint_name": "order_item_pkey",
@@ -252,48 +354,70 @@
       ],
       "unique_constraints": [],
       "indexes": []
+    },
+    "column_statistics": {
+      "total_columns": 5,
+      "identifier_count": 3,
+      "metric_count": 1,
+      "datetime_count": 0,
+      "enum_count": 0,
+      "audit_count": 1,
+      "attribute_count": 0,
+      "primary_key_count": 1,
+      "foreign_key_count": 2
+    },
+    "bridge_table_info": {
+      "foreign_key_pairs": [
+        [
+          "order_date",
+          "order_id"
+        ]
+      ],
+      "weight_columns": [
+        "quantity"
+      ]
     }
   },
   "sample_records": {
     "sample_method": "random",
     "sample_size": 5,
-    "total_rows": 0,
-    "sampled_at": "2025-12-07T11:00:04.836590Z",
+    "total_rows": 20,
+    "sampled_at": "2025-12-07T11:11:44.909530Z",
     "records": [
       {
-        "item_id": "1",
-        "order_id": "5001",
+        "item_id": 1,
+        "order_id": 5001,
         "order_date": "2024-01-01",
         "product": "苹果",
-        "quantity": "3"
+        "quantity": 3
       },
       {
-        "item_id": "2",
-        "order_id": "5001",
+        "item_id": 2,
+        "order_id": 5001,
         "order_date": "2024-01-01",
         "product": "香蕉",
-        "quantity": "2"
+        "quantity": 2
       },
       {
-        "item_id": "3",
-        "order_id": "5002",
+        "item_id": 3,
+        "order_id": 5002,
         "order_date": "2024-01-02",
         "product": "牛奶",
-        "quantity": "1"
+        "quantity": 1
       },
       {
-        "item_id": "4",
-        "order_id": "5002",
+        "item_id": 4,
+        "order_id": 5002,
         "order_date": "2024-01-02",
         "product": "面包",
-        "quantity": "5"
+        "quantity": 5
       },
       {
-        "item_id": "5",
-        "order_id": "5003",
+        "item_id": 5,
+        "order_id": 5003,
         "order_date": "2024-01-03",
         "product": "鸡蛋",
-        "quantity": "12"
+        "quantity": 12
       }
     ]
   }

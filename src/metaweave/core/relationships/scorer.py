@@ -3,10 +3,11 @@
 为候选关系计算4维度评分（必须使用数据库采样）。
 """
 
-from typing import Dict, List, Tuple, Any, Set
+from typing import Dict, List, Tuple, Any, Set, Optional
 from difflib import SequenceMatcher
 
 from src.metaweave.core.metadata.connector import DatabaseConnector
+from src.metaweave.core.relationships.name_similarity import NameSimilarityService
 from src.metaweave.utils.logger import get_metaweave_logger
 
 logger = get_metaweave_logger("relationships.scorer")
@@ -34,7 +35,12 @@ class RelationshipScorer:
     - semantic_role_bonus：推断不严谨，权重过小，意义不大
     """
 
-    def __init__(self, config: dict, connector: DatabaseConnector):
+    def __init__(
+            self,
+            config: dict,
+            connector: DatabaseConnector,
+            name_similarity_service: Optional[NameSimilarityService] = None,
+    ):
         """初始化评分器
 
         Args:
@@ -44,6 +50,7 @@ class RelationshipScorer:
         self.config = config
         self.connector = connector
         self.weights = config.get("weights", DEFAULT_WEIGHTS)
+        self.name_similarity_service = name_similarity_service
 
         # 采样配置
         sampling_config = config.get("sampling", {})
@@ -517,6 +524,9 @@ class RelationshipScorer:
         """
         if len(source_columns) != len(target_columns):
             return 0.0
+
+        if self.name_similarity_service:
+            return self.name_similarity_service.compare_columns(source_columns, target_columns)
 
         total_sim = 0
         for src_col, tgt_col in zip(source_columns, target_columns):

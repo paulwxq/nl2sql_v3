@@ -1,13 +1,13 @@
 {
   "metadata_version": "2.0",
-  "generated_at": "2025-12-07T11:00:04.809812Z",
+  "generated_at": "2025-12-07T11:11:56.529799Z",
   "table_info": {
     "schema_name": "public",
     "table_name": "order_header",
     "table_type": "table",
-    "comment": "",
-    "comment_source": "",
-    "total_rows": 0,
+    "comment": "订单信息表，存储订单的基本信息和客户信息",
+    "comment_source": "ddl",
+    "total_rows": 10,
     "total_columns": 3
   },
   "column_profiles": {
@@ -17,11 +17,11 @@
       "data_type": "integer",
       "character_maximum_length": null,
       "numeric_precision": 32,
-      "numeric_scale": 0,
+      "numeric_scale": null,
       "is_nullable": false,
       "column_default": null,
-      "comment": "",
-      "comment_source": "",
+      "comment": "订单唯一标识ID",
+      "comment_source": "ddl",
       "statistics": {
         "sample_count": 10,
         "unique_count": 10,
@@ -44,18 +44,41 @@
           "5010": 1
         }
       },
+      "semantic_analysis": {
+        "semantic_role": "identifier",
+        "semantic_confidence": 1.0,
+        "inference_basis": [
+          "type_whitelist_passed",
+          "physical_constraint:primary_key"
+        ]
+      },
       "structure_flags": {
         "is_primary_key": false,
         "is_composite_primary_key_member": true,
         "is_foreign_key": false,
         "is_composite_foreign_key_member": false,
-        "is_unique": false,
+        "is_unique": true,
         "is_composite_unique_member": false,
         "is_unique_constraint": false,
         "is_composite_unique_constraint_member": false,
         "is_indexed": false,
-        "is_composite_indexed_member": true,
+        "is_composite_indexed_member": false,
         "is_nullable": false
+      },
+      "role_specific_info": {
+        "identifier_info": {
+          "naming_pattern": "primary_key",
+          "is_surrogate": true
+        },
+        "primary_key_info": {
+          "source": "constraint",
+          "confidence": null,
+          "is_single_column": false,
+          "composite_columns": [
+            "order_id",
+            "order_date"
+          ]
+        }
       }
     },
     "order_date": {
@@ -67,8 +90,8 @@
       "numeric_scale": null,
       "is_nullable": false,
       "column_default": null,
-      "comment": "",
-      "comment_source": "",
+      "comment": "订单创建日期",
+      "comment_source": "ddl",
       "statistics": {
         "sample_count": 10,
         "unique_count": 10,
@@ -93,18 +116,40 @@
           "2024-01-10": 1
         }
       },
+      "semantic_analysis": {
+        "semantic_role": "audit",
+        "semantic_confidence": 0.95,
+        "inference_basis": [
+          "audit_pattern:_date$"
+        ]
+      },
       "structure_flags": {
         "is_primary_key": false,
         "is_composite_primary_key_member": true,
         "is_foreign_key": false,
         "is_composite_foreign_key_member": false,
-        "is_unique": false,
+        "is_unique": true,
         "is_composite_unique_member": false,
         "is_unique_constraint": false,
         "is_composite_unique_constraint_member": false,
         "is_indexed": false,
-        "is_composite_indexed_member": true,
+        "is_composite_indexed_member": false,
         "is_nullable": false
+      },
+      "role_specific_info": {
+        "audit_info": {
+          "audit_type": "timestamp",
+          "description": "审计时间戳"
+        },
+        "primary_key_info": {
+          "source": "constraint",
+          "confidence": null,
+          "is_single_column": false,
+          "composite_columns": [
+            "order_id",
+            "order_date"
+          ]
+        }
       }
     },
     "customer": {
@@ -116,8 +161,8 @@
       "numeric_scale": null,
       "is_nullable": true,
       "column_default": null,
-      "comment": "",
-      "comment_source": "",
+      "comment": "订单客户姓名",
+      "comment_source": "ddl",
       "statistics": {
         "sample_count": 10,
         "unique_count": 10,
@@ -142,22 +187,43 @@
           "孙十二": 1
         }
       },
+      "semantic_analysis": {
+        "semantic_role": "identifier",
+        "semantic_confidence": 0.95,
+        "inference_basis": [
+          "type_whitelist_passed",
+          "high_uniqueness"
+        ]
+      },
       "structure_flags": {
         "is_primary_key": false,
         "is_composite_primary_key_member": false,
         "is_foreign_key": false,
         "is_composite_foreign_key_member": false,
-        "is_unique": false,
+        "is_unique": true,
         "is_composite_unique_member": false,
         "is_unique_constraint": false,
         "is_composite_unique_constraint_member": false,
         "is_indexed": false,
         "is_composite_indexed_member": false,
         "is_nullable": true
+      },
+      "role_specific_info": {
+        "identifier_info": {
+          "naming_pattern": "logical_primary_key",
+          "is_surrogate": true
+        }
       }
     }
   },
   "table_profile": {
+    "table_category": "dim",
+    "confidence": 0.95,
+    "inference_basis": [
+      "fact_dimension_columns",
+      "dim_identifier_columns",
+      "dim_has_primary_key"
+    ],
     "physical_constraints": {
       "primary_key": {
         "constraint_name": "order_header_pkey",
@@ -169,36 +235,52 @@
       "foreign_keys": [],
       "unique_constraints": [],
       "indexes": []
+    },
+    "column_statistics": {
+      "total_columns": 3,
+      "identifier_count": 2,
+      "metric_count": 0,
+      "datetime_count": 0,
+      "enum_count": 0,
+      "audit_count": 1,
+      "attribute_count": 0,
+      "primary_key_count": 2,
+      "foreign_key_count": 0
+    },
+    "dim_table_info": {
+      "natural_key": null,
+      "surrogate_key": "order_id",
+      "attributes": []
     }
   },
   "sample_records": {
     "sample_method": "random",
     "sample_size": 5,
-    "total_rows": 0,
-    "sampled_at": "2025-12-07T11:00:04.809812Z",
+    "total_rows": 10,
+    "sampled_at": "2025-12-07T11:11:44.812776Z",
     "records": [
       {
-        "order_id": "5001",
+        "order_id": 5001,
         "order_date": "2024-01-01",
         "customer": "张三"
       },
       {
-        "order_id": "5002",
+        "order_id": 5002,
         "order_date": "2024-01-02",
         "customer": "李四"
       },
       {
-        "order_id": "5003",
+        "order_id": 5003,
         "order_date": "2024-01-03",
         "customer": "王五"
       },
       {
-        "order_id": "5004",
+        "order_id": 5004,
         "order_date": "2024-01-04",
         "customer": "赵六"
       },
       {
-        "order_id": "5005",
+        "order_id": 5005,
         "order_date": "2024-01-05",
         "customer": "陈七"
       }

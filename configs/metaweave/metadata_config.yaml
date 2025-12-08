@@ -280,6 +280,10 @@ relationships:
   sampling:
     sample_size: 1000
   
+  name_similarity:
+    method: embedding
+    cache_size: 5000
+  
   # 评分权重（4维度评分体系）
   weights:
     inclusion_rate: 0.55        # 数据包含率（核心指标）

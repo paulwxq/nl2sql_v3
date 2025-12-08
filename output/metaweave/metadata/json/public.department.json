@@ -1,13 +1,13 @@
 {
   "metadata_version": "2.0",
-  "generated_at": "2025-12-07T11:00:04.361601Z",
+  "generated_at": "2025-12-07T11:11:56.183014Z",
   "table_info": {
     "schema_name": "public",
     "table_name": "department",
     "table_type": "table",
-    "comment": "",
-    "comment_source": "",
-    "total_rows": 0,
+    "comment": "部门信息表，存储各部门的编号、代码、名称及所在位置",
+    "comment_source": "ddl",
+    "total_rows": 20,
     "total_columns": 4
   },
   "column_profiles": {
@@ -17,11 +17,11 @@
       "data_type": "integer",
       "character_maximum_length": null,
       "numeric_precision": 32,
-      "numeric_scale": 0,
+      "numeric_scale": null,
       "is_nullable": false,
       "column_default": "nextval('department_dept_id_seq'::regclass)",
-      "comment": "",
-      "comment_source": "",
+      "comment": "部门唯一标识ID",
+      "comment_source": "ddl",
       "statistics": {
         "sample_count": 20,
         "unique_count": 20,
@@ -32,18 +32,38 @@
         "max": "20",
         "mean": "10.5"
       },
+      "semantic_analysis": {
+        "semantic_role": "identifier",
+        "semantic_confidence": 1.0,
+        "inference_basis": [
+          "type_whitelist_passed",
+          "physical_constraint:primary_key"
+        ]
+      },
       "structure_flags": {
         "is_primary_key": true,
         "is_composite_primary_key_member": false,
         "is_foreign_key": false,
         "is_composite_foreign_key_member": false,
-        "is_unique": false,
+        "is_unique": true,
         "is_composite_unique_member": false,
         "is_unique_constraint": false,
         "is_composite_unique_constraint_member": false,
-        "is_indexed": true,
+        "is_indexed": false,
         "is_composite_indexed_member": false,
         "is_nullable": false
+      },
+      "role_specific_info": {
+        "identifier_info": {
+          "naming_pattern": "primary_key",
+          "is_surrogate": true
+        },
+        "primary_key_info": {
+          "source": "constraint",
+          "confidence": null,
+          "is_single_column": true,
+          "composite_columns": null
+        }
       }
     },
     "dept_code": {
@@ -55,8 +75,8 @@
       "numeric_scale": null,
       "is_nullable": false,
       "column_default": null,
-      "comment": "",
-      "comment_source": "",
+      "comment": "部门编码（如HR、FIN）",
+      "comment_source": "ddl",
       "statistics": {
         "sample_count": 20,
         "unique_count": 20,
@@ -69,6 +89,14 @@
         "median_length": 3.0,
         "length_std": 1.17
       },
+      "semantic_analysis": {
+        "semantic_role": "identifier",
+        "semantic_confidence": 1.0,
+        "inference_basis": [
+          "type_whitelist_passed",
+          "physical_constraint:unique_constraint"
+        ]
+      },
       "structure_flags": {
         "is_primary_key": false,
         "is_composite_primary_key_member": false,
@@ -78,9 +106,15 @@
         "is_composite_unique_member": false,
         "is_unique_constraint": true,
         "is_composite_unique_constraint_member": false,
-        "is_indexed": true,
+        "is_indexed": false,
         "is_composite_indexed_member": false,
         "is_nullable": false
+      },
+      "role_specific_info": {
+        "identifier_info": {
+          "naming_pattern": "unique_constraint",
+          "is_surrogate": true
+        }
       }
     },
     "dept_name": {
@@ -92,8 +126,8 @@
       "numeric_scale": null,
       "is_nullable": false,
       "column_default": null,
-      "comment": "",
-      "comment_source": "",
+      "comment": "部门名称（如人力资源部）",
+      "comment_source": "ddl",
       "statistics": {
         "sample_count": 20,
         "unique_count": 20,
@@ -106,19 +140,27 @@
         "median_length": 4.0,
         "length_std": 1.12
       },
+      "semantic_analysis": {
+        "semantic_role": "attribute",
+        "semantic_confidence": 0.7,
+        "inference_basis": [
+          "fallback_attribute"
+        ]
+      },
       "structure_flags": {
         "is_primary_key": false,
         "is_composite_primary_key_member": false,
         "is_foreign_key": false,
         "is_composite_foreign_key_member": false,
-        "is_unique": false,
+        "is_unique": true,
         "is_composite_unique_member": false,
         "is_unique_constraint": false,
         "is_composite_unique_constraint_member": false,
         "is_indexed": false,
         "is_composite_indexed_member": false,
         "is_nullable": false
-      }
+      },
+      "role_specific_info": {}
     },
     "location": {
       "column_name": "location",
@@ -129,8 +171,8 @@
       "numeric_scale": null,
       "is_nullable": true,
       "column_default": null,
-      "comment": "",
-      "comment_source": "",
+      "comment": "部门所在城市（如北京、上海）",
+      "comment_source": "ddl",
       "statistics": {
         "sample_count": 20,
         "unique_count": 11,
@@ -142,6 +184,13 @@
         "max_length": 2,
         "median_length": 2.0,
         "length_std": 0.0
+      },
+      "semantic_analysis": {
+        "semantic_role": "attribute",
+        "semantic_confidence": 0.7,
+        "inference_basis": [
+          "fallback_attribute"
+        ]
       },
       "structure_flags": {
         "is_primary_key": false,
@@ -155,10 +204,18 @@
         "is_indexed": false,
         "is_composite_indexed_member": false,
         "is_nullable": true
-      }
+      },
+      "role_specific_info": {}
     }
   },
   "table_profile": {
+    "table_category": "dim",
+    "confidence": 0.95,
+    "inference_basis": [
+      "fact_dimension_columns",
+      "dim_identifier_columns",
+      "dim_has_primary_key"
+    ],
     "physical_constraints": {
       "primary_key": {
         "constraint_name": "department_pkey",
@@ -172,53 +229,64 @@
           "constraint_name": "department_dept_code_key",
           "columns": [
             "dept_code"
-          ]
+          ],
+          "is_partial": false
         }
       ],
-      "indexes": [
-        {
-          "index_name": "department_dept_code_key",
-          "columns": [
-            "dept_code"
-          ],
-          "is_unique": true,
-          "index_type": "btree"
-        }
+      "indexes": []
+    },
+    "column_statistics": {
+      "total_columns": 4,
+      "identifier_count": 2,
+      "metric_count": 0,
+      "datetime_count": 0,
+      "enum_count": 0,
+      "audit_count": 0,
+      "attribute_count": 2,
+      "primary_key_count": 1,
+      "foreign_key_count": 0
+    },
+    "dim_table_info": {
+      "natural_key": null,
+      "surrogate_key": "dept_id",
+      "attributes": [
+        "dept_name",
+        "location"
       ]
     }
   },
   "sample_records": {
     "sample_method": "random",
     "sample_size": 5,
-    "total_rows": 0,
-    "sampled_at": "2025-12-07T11:00:04.361601Z",
+    "total_rows": 20,
+    "sampled_at": "2025-12-07T11:11:44.407936Z",
     "records": [
       {
-        "dept_id": "1",
+        "dept_id": 1,
         "dept_code": "HR",
         "dept_name": "人力资源部",
         "location": "北京"
       },
       {
-        "dept_id": "2",
+        "dept_id": 2,
         "dept_code": "FIN",
         "dept_name": "财务部",
         "location": "北京"
       },
       {
-        "dept_id": "3",
+        "dept_id": 3,
         "dept_code": "IT",
         "dept_name": "信息技术部",
         "location": "上海"
       },
       {
-        "dept_id": "4",
+        "dept_id": 4,
         "dept_code": "OPS",
         "dept_name": "运营部",
         "location": "上海"
       },
       {
-        "dept_id": "5",
+        "dept_id": 5,
         "dept_code": "SALES",
         "dept_name": "销售一部",
         "location": "广州"

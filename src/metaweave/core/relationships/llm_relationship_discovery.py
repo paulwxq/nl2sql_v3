@@ -17,6 +17,7 @@ from src.metaweave.core.metadata.connector import DatabaseConnector
 from src.metaweave.core.relationships.models import Relation
 from src.metaweave.core.relationships.repository import MetadataRepository
 from src.metaweave.core.relationships.scorer import RelationshipScorer
+from src.metaweave.core.relationships.name_similarity import NameSimilarityService
 from src.metaweave.services.llm_service import LLMService
 from src.metaweave.utils.logger import get_metaweave_logger
 
@@ -100,7 +101,22 @@ class LLMRelationshipDiscovery:
     def __init__(self, config: Dict, connector: DatabaseConnector):
         self.config = config
         self.connector = connector  # 仅用于评分阶段
-        self.scorer = RelationshipScorer(config.get("relationships", {}), connector)
+
+        # 构造关系配置（兼容混合结构）
+        self.rel_config = config.get("relationships", {}).copy()
+        for key in ["single_column", "composite", "decision", "weights"]:
+            if key in config and key not in self.rel_config:
+                self.rel_config[key] = config[key]
+
+        # 初始化名称相似度服务
+        embedding_config = config.get("embedding", {})
+        name_sim_config = self.rel_config.get("name_similarity", {})
+        if (name_sim_config.get("method") or "string").lower() != "string":
+            self.name_similarity_service = NameSimilarityService(name_sim_config, embedding_config)
+        else:
+            self.name_similarity_service = None
+
+        self.scorer = RelationshipScorer(self.rel_config, connector, self.name_similarity_service)
 
         llm_config = config.get("llm", {})
         self.llm_service = LLMService(llm_config)
@@ -116,7 +132,7 @@ class LLMRelationshipDiscovery:
         self.repo = MetadataRepository(self.json_llm_dir, rel_id_salt=rel_id_salt)
         
         # 读取决策阈值配置
-        decision_config = config.get("relationships", {}).get("decision", {})
+        decision_config = self.rel_config.get("decision", {})
         self.accept_threshold = decision_config.get("accept_threshold", 0.65)
         self.high_confidence_threshold = decision_config.get("high_confidence_threshold", 0.90)
         self.medium_confidence_threshold = decision_config.get("medium_confidence_threshold", 0.80)

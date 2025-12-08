@@ -30,12 +30,11 @@ relationships:
     jaccard_index: 0.10
 
   name_similarity:
-    enabled: true                  # 全局开关；false 则退回 SequenceMatcher
-    method: embedding              # 预留: embedding | string
+    method: embedding              # embedding | string（缺省 string 不创建服务）
     cache_size: 5000               # 可选，控制 LRU 缓存容量
     # provider 选择统一使用顶层 embedding.active（不在此处重复配置）
 ```
-> 若 `enabled=false` 或 `method=string`，直接使用原来的 SequenceMatcher，不触发 embedding。
+> 若 `method=string`（或缺省），直接使用原来的 SequenceMatcher，不触发 embedding。
 
 ### 4.2 配置位置与兼容性
 - 现状：`metadata_config.yaml` 中 `single_column`、`composite`、`weights`、`decision` 等是顶层节点；`LLMRelationshipDiscovery` 则读取 `config["relationships"]`。
@@ -251,7 +250,7 @@ embedding:
    ```
 5. **单元测试 / 集成测试**：
    - 构造假 embedding service（可注入 mock 向量）验证多列平均值、缓存次数等。
-   - 添加配置解析测试，确保 `enabled=false` 时不会实例化 embedding 客户端。
+   - 添加配置解析测试，确保 `method=string`（默认）时不会实例化 embedding 客户端。
 6. **文档 & 示例脚本**：
    - 在 README 或使用指南中补充开关说明。
    - 可复用 `scripts/embedding_similarity_probe.py` 的思路，另建 MetaWeave 专用调试脚本（可选）。
@@ -260,7 +259,7 @@ embedding:
 - **单元测试**：
   - `NameSimilarityService`：字符串模式 vs embedding 模式结果是否符合预期；列数量不等返回 0；缓存命中不重复调用底层客户端。
   - `EmbeddingService`：模拟 dashscope 响应/错误，验证重试与异常处理。
-- **集成测试**：在 `tests/test_full_relationship_pipeline.py` 或新增测试里，设置 `name_similarity.enabled=false/true` 比较得分变化，确保 pipeline 可运行。
+- **集成测试**：在 `tests/test_full_relationship_pipeline.py` 或新增测试里，设置 `name_similarity.method=string/embedding` 比较得分变化，确保 pipeline 可运行。
 - **性能测试**：在拥有大量候选的样本库上评估 embedding 开关对耗时的影响，必要时调优批量大小与缓存策略。
 
 ## 8. 风险与缓解
@@ -282,7 +281,7 @@ embedding:
 - `NameSimilarityService` 补充 `acompare_pair/acompare_columns`，异步 pipeline（如 `LLMRelationshipDiscovery`）调用 async 接口，同步 pipeline 继续使用同步方法，实例可复用以共享缓存。
 - 配置建议：在 `configs/metaweave/metadata_config.yaml` 的 `embedding` 节增加 `use_async`（默认 false）与 `async_concurrency`（默认 10），用于控制是否启用异步及并发度；仍复用现有 DashScope 环境变量 `DASHSCOPE_API_KEY` / `DASHSCOPE_BASE_URI`。
 - 技术实现：异步接口基于 Python 原生 asyncio，而非依赖 LangChain；Embedding 请求直接走 DashScope SDK/HTTP，保持 MetaWeave 模块内聚。
-- 失败处理：无论同步/异步，Embedding 请求都会按配置（默认 3 次）重试；仍失败则抛出错误并退出，日志记录“无法连接 embedding 模型”；只有在配置显式 `method=string` 或 `enabled=false` 时才使用字符串算法。
+- 失败处理：无论同步/异步，Embedding 请求都会按配置（默认 3 次）重试；仍失败则抛出错误并退出，日志记录“无法连接 embedding 模型”；只有在配置显式 `method=string`（默认）时才使用字符串算法。
 
 **配置传递约定**
 - 入口统一拿两份配置：按 4.2 的合并逻辑构造 `rel_config`（先拷贝 `config.get("relationships", {})`，再补顶层的 `single_column`/`composite`/`decision`/`weights` 等缺失字段），以及顶层 `embedding_config = config.get("embedding", {})`（与 `llm` 平级）。

@@ -1,13 +1,13 @@
 {
   "metadata_version": "2.0",
-  "generated_at": "2025-12-07T11:00:04.579431Z",
+  "generated_at": "2025-12-07T11:11:56.302203Z",
   "table_info": {
     "schema_name": "public",
     "table_name": "employee",
     "table_type": "table",
-    "comment": "",
-    "comment_source": "",
-    "total_rows": 0,
+    "comment": "员工基本信息及雇佣信息表",
+    "comment_source": "ddl",
+    "total_rows": 20,
     "total_columns": 7
   },
   "column_profiles": {
@@ -17,11 +17,11 @@
       "data_type": "integer",
       "character_maximum_length": null,
       "numeric_precision": 32,
-      "numeric_scale": 0,
+      "numeric_scale": null,
       "is_nullable": false,
       "column_default": "nextval('employee_emp_id_seq'::regclass)",
-      "comment": "",
-      "comment_source": "",
+      "comment": "员工唯一标识ID",
+      "comment_source": "ddl",
       "statistics": {
         "sample_count": 20,
         "unique_count": 20,
@@ -32,18 +32,38 @@
         "max": "20",
         "mean": "10.5"
       },
+      "semantic_analysis": {
+        "semantic_role": "identifier",
+        "semantic_confidence": 1.0,
+        "inference_basis": [
+          "type_whitelist_passed",
+          "physical_constraint:primary_key"
+        ]
+      },
       "structure_flags": {
         "is_primary_key": true,
         "is_composite_primary_key_member": false,
         "is_foreign_key": false,
         "is_composite_foreign_key_member": false,
-        "is_unique": false,
+        "is_unique": true,
         "is_composite_unique_member": false,
         "is_unique_constraint": false,
         "is_composite_unique_constraint_member": false,
-        "is_indexed": true,
+        "is_indexed": false,
         "is_composite_indexed_member": false,
         "is_nullable": false
+      },
+      "role_specific_info": {
+        "identifier_info": {
+          "naming_pattern": "primary_key",
+          "is_surrogate": true
+        },
+        "primary_key_info": {
+          "source": "constraint",
+          "confidence": null,
+          "is_single_column": true,
+          "composite_columns": null
+        }
       }
     },
     "emp_no": {
@@ -55,8 +75,8 @@
       "numeric_scale": null,
       "is_nullable": false,
       "column_default": null,
-      "comment": "",
-      "comment_source": "",
+      "comment": "员工编号",
+      "comment_source": "ddl",
       "statistics": {
         "sample_count": 20,
         "unique_count": 20,
@@ -69,6 +89,14 @@
         "median_length": 5.0,
         "length_std": 0.0
       },
+      "semantic_analysis": {
+        "semantic_role": "identifier",
+        "semantic_confidence": 1.0,
+        "inference_basis": [
+          "type_whitelist_passed",
+          "physical_constraint:unique_constraint"
+        ]
+      },
       "structure_flags": {
         "is_primary_key": false,
         "is_composite_primary_key_member": false,
@@ -78,9 +106,15 @@
         "is_composite_unique_member": false,
         "is_unique_constraint": true,
         "is_composite_unique_constraint_member": false,
-        "is_indexed": true,
+        "is_indexed": false,
         "is_composite_indexed_member": false,
         "is_nullable": false
+      },
+      "role_specific_info": {
+        "identifier_info": {
+          "naming_pattern": "unique_constraint",
+          "is_surrogate": true
+        }
       }
     },
     "emp_name": {
@@ -92,8 +126,8 @@
       "numeric_scale": null,
       "is_nullable": false,
       "column_default": null,
-      "comment": "",
-      "comment_source": "",
+      "comment": "员工姓名",
+      "comment_source": "ddl",
       "statistics": {
         "sample_count": 20,
         "unique_count": 20,
@@ -106,19 +140,27 @@
         "median_length": 2.0,
         "length_std": 0.0
       },
+      "semantic_analysis": {
+        "semantic_role": "attribute",
+        "semantic_confidence": 0.7,
+        "inference_basis": [
+          "fallback_attribute"
+        ]
+      },
       "structure_flags": {
         "is_primary_key": false,
         "is_composite_primary_key_member": false,
         "is_foreign_key": false,
         "is_composite_foreign_key_member": false,
-        "is_unique": false,
+        "is_unique": true,
         "is_composite_unique_member": false,
         "is_unique_constraint": false,
         "is_composite_unique_constraint_member": false,
         "is_indexed": false,
         "is_composite_indexed_member": false,
         "is_nullable": false
-      }
+      },
+      "role_specific_info": {}
     },
     "gender": {
       "column_name": "gender",
@@ -129,8 +171,8 @@
       "numeric_scale": null,
       "is_nullable": false,
       "column_default": null,
-      "comment": "",
-      "comment_source": "",
+      "comment": "员工性别（M-男，F-女）",
+      "comment_source": "ddl",
       "statistics": {
         "sample_count": 20,
         "unique_count": 2,
@@ -147,6 +189,13 @@
           "F": 9
         }
       },
+      "semantic_analysis": {
+        "semantic_role": "enum",
+        "semantic_confidence": 0.85,
+        "inference_basis": [
+          "simple_two_value_enum"
+        ]
+      },
       "structure_flags": {
         "is_primary_key": false,
         "is_composite_primary_key_member": false,
@@ -159,6 +208,16 @@
         "is_indexed": false,
         "is_composite_indexed_member": false,
         "is_nullable": false
+      },
+      "role_specific_info": {
+        "enum_info": {
+          "cardinality": 2,
+          "cardinality_level": "low",
+          "values": [
+            "M",
+            "F"
+          ]
+        }
       }
     },
     "hire_date": {
@@ -170,8 +229,8 @@
       "numeric_scale": null,
       "is_nullable": false,
       "column_default": null,
-      "comment": "",
-      "comment_source": "",
+      "comment": "入职日期",
+      "comment_source": "ddl",
       "statistics": {
         "sample_count": 20,
         "unique_count": 20,
@@ -184,18 +243,31 @@
         "median_length": 10.0,
         "length_std": 0.0
       },
+      "semantic_analysis": {
+        "semantic_role": "audit",
+        "semantic_confidence": 0.95,
+        "inference_basis": [
+          "audit_pattern:_date$"
+        ]
+      },
       "structure_flags": {
         "is_primary_key": false,
         "is_composite_primary_key_member": false,
         "is_foreign_key": false,
         "is_composite_foreign_key_member": false,
-        "is_unique": false,
+        "is_unique": true,
         "is_composite_unique_member": false,
         "is_unique_constraint": false,
         "is_composite_unique_constraint_member": false,
         "is_indexed": false,
         "is_composite_indexed_member": false,
         "is_nullable": false
+      },
+      "role_specific_info": {
+        "audit_info": {
+          "audit_type": "timestamp",
+          "description": "审计时间戳"
+        }
       }
     },
     "salary": {
@@ -207,8 +279,8 @@
       "numeric_scale": 2,
       "is_nullable": false,
       "column_default": null,
-      "comment": "",
-      "comment_source": "",
+      "comment": "员工薪资",
+      "comment_source": "ddl",
       "statistics": {
         "sample_count": 20,
         "unique_count": 20,
@@ -219,18 +291,36 @@
         "max": "24000.0",
         "mean": "14820.0"
       },
+      "semantic_analysis": {
+        "semantic_role": "metric",
+        "semantic_confidence": 0.7,
+        "inference_basis": [
+          "numeric_type"
+        ]
+      },
       "structure_flags": {
         "is_primary_key": false,
         "is_composite_primary_key_member": false,
         "is_foreign_key": false,
         "is_composite_foreign_key_member": false,
-        "is_unique": false,
+        "is_unique": true,
         "is_composite_unique_member": false,
         "is_unique_constraint": false,
         "is_composite_unique_constraint_member": false,
         "is_indexed": false,
         "is_composite_indexed_member": false,
         "is_nullable": false
+      },
+      "role_specific_info": {
+        "metric_info": {
+          "metric_category": "metric",
+          "suggested_aggregations": [
+            "SUM",
+            "AVG",
+            "MIN",
+            "MAX"
+          ]
+        }
       }
     },
     "dept_id": {
@@ -239,11 +329,11 @@
       "data_type": "integer",
       "character_maximum_length": null,
       "numeric_precision": 32,
-      "numeric_scale": 0,
+      "numeric_scale": null,
       "is_nullable": false,
       "column_default": null,
-      "comment": "",
-      "comment_source": "",
+      "comment": "所属部门ID",
+      "comment_source": "ddl",
       "statistics": {
         "sample_count": 20,
         "unique_count": 19,
@@ -253,6 +343,14 @@
         "min": "1",
         "max": "20",
         "mean": "10.0"
+      },
+      "semantic_analysis": {
+        "semantic_role": "identifier",
+        "semantic_confidence": 1.0,
+        "inference_basis": [
+          "type_whitelist_passed",
+          "physical_constraint:foreign_key"
+        ]
       },
       "structure_flags": {
         "is_primary_key": false,
@@ -266,10 +364,31 @@
         "is_indexed": false,
         "is_composite_indexed_member": false,
         "is_nullable": false
+      },
+      "role_specific_info": {
+        "identifier_info": {
+          "naming_pattern": "foreign_key",
+          "is_surrogate": false
+        },
+        "foreign_key_info": {
+          "target_schema": "public",
+          "target_table": "department",
+          "target_columns": [
+            "dept_id"
+          ],
+          "on_delete": "NO ACTION",
+          "on_update": "NO ACTION"
+        }
       }
     }
   },
   "table_profile": {
+    "table_category": "fact",
+    "confidence": 0.85,
+    "inference_basis": [
+      "fact_has_metric",
+      "fact_dimension_columns"
+    ],
     "physical_constraints": {
       "primary_key": {
         "constraint_name": "employee_pkey",
@@ -297,71 +416,88 @@
           "constraint_name": "employee_emp_no_key",
           "columns": [
             "emp_no"
-          ]
+          ],
+          "is_partial": false
         }
       ],
-      "indexes": [
-        {
-          "index_name": "employee_emp_no_key",
-          "columns": [
-            "emp_no"
-          ],
-          "is_unique": true,
-          "index_type": "btree"
-        }
-      ]
+      "indexes": []
+    },
+    "column_statistics": {
+      "total_columns": 7,
+      "identifier_count": 3,
+      "metric_count": 1,
+      "datetime_count": 0,
+      "enum_count": 0,
+      "audit_count": 1,
+      "attribute_count": 1,
+      "primary_key_count": 1,
+      "foreign_key_count": 1
+    },
+    "fact_table_info": {
+      "grain": [
+        "emp_id"
+      ],
+      "metrics": [
+        "salary"
+      ],
+      "dimensions": [
+        "emp_id",
+        "emp_no",
+        "dept_id"
+      ],
+      "time_dimension": null
     }
   },
   "sample_records": {
     "sample_method": "random",
     "sample_size": 5,
-    "total_rows": 0,
-    "sampled_at": "2025-12-07T11:00:04.579431Z",
+    "total_rows": 20,
+    "sampled_at": "2025-12-07T11:11:44.556160Z",
     "records": [
       {
-        "emp_id": "1",
+        "emp_id": 1,
         "emp_no": "E0001",
         "emp_name": "张伟",
         "gender": "M",
         "hire_date": "2020-03-15",
-        "salary": "12000.0",
-        "dept_id": "1"
+        "salary": 12000.0,
+        "dept_id": 1
       },
       {
-        "emp_id": "2",
+        "emp_id": 2,
         "emp_no": "E0002",
         "emp_name": "李娜",
         "gender": "F",
         "hire_date": "2019-07-01",
-        "salary": "15000.0",
-        "dept_id": "3"
+        "salary": 15000.0,
+        "dept_id": 3
       },
       {
-        "emp_id": "3",
+        "emp_id": 3,
         "emp_no": "E0003",
         "emp_name": "王强",
         "gender": "M",
         "hire_date": "2021-01-10",
-        "salary": "9800.0",
-        "dept_id": "2"
+        "salary": 9800.0,
+        "dept_id": 2
       },
       {
-        "emp_id": "4",
+        "emp_id": 4,
         "emp_no": "E0004",
         "emp_name": "赵敏",
         "gender": "F",
         "hire_date": "2018-11-20",
-        "salary": "13500.0",
-        "dept_id": "5"
+        "salary": 13500.0,
+        "dept_id": 5
       },
       {
-        "emp_id": "5",
+        "emp_id": 5,
         "emp_no": "E0005",
         "emp_name": "刘洋",
         "gender": "M",
         "hire_date": "2017-05-03",
-        "salary": "16800.0",
-        "dept_id": "8"
+        "salary": 16800.0,
+        "dept_id": 8
       }
     ]
   }

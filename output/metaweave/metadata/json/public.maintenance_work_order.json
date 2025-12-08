@@ -1,6 +1,6 @@
 {
   "metadata_version": "2.0",
-  "generated_at": "2025-12-04T03:41:55.036693Z",
+  "generated_at": "2025-12-07T11:11:56.829027Z",
   "table_info": {
     "schema_name": "public",
     "table_name": "maintenance_work_order",
@@ -761,7 +761,7 @@
     "sample_method": "random",
     "sample_size": 5,
     "total_rows": 200,
-    "sampled_at": "2025-12-04T03:20:27.275645Z",
+    "sampled_at": "2025-12-07T11:11:45.124708Z",
     "records": [
       {
         "wo_id": 20000,
