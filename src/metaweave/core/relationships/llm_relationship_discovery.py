@@ -9,9 +9,9 @@ import asyncio
 import json
 import time
 from datetime import datetime, timezone
-from itertools import combinations
+from itertools import combinations, product
 from pathlib import Path
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Set, Tuple, Optional
 
 from src.metaweave.core.metadata.connector import DatabaseConnector
 from src.metaweave.core.relationships.models import Relation
@@ -90,6 +90,94 @@ RELATIONSHIP_DISCOVERY_PROMPT = """
 """
 
 
+def _parse_domain_filter(domain: Optional[str]) -> Optional[List[str]]:
+    if not domain:
+        return None
+    if domain.lower() == "all":
+        return ["all"]
+    return [d.strip() for d in domain.split(",") if d.strip()]
+
+
+def _group_tables_by_domain(
+    tables: Dict[str, Dict],
+    domain_filter: Optional[List[str]],
+    all_domains: List[str],
+) -> Dict[str, List[str]]:
+    if not domain_filter or "all" in domain_filter:
+        target_domains = all_domains.copy()
+    else:
+        target_domains = domain_filter.copy()
+
+    domain_tables: Dict[str, List[str]] = {}
+    for full_name, data in tables.items():
+        table_domains = data.get("table_profile", {}).get("table_domains", [])
+        for d in table_domains:
+            if d in target_domains:
+                domain_tables.setdefault(d, []).append(full_name)
+    return domain_tables
+
+
+def generate_all_pairs(tables: Dict[str, Dict]) -> List[Tuple[str, str]]:
+    return list(combinations(tables.keys(), 2))
+
+
+def generate_intra_domain_pairs(
+    tables: Dict[str, Dict],
+    domain_filter: Optional[List[str]],
+    all_domains: List[str],
+) -> List[Tuple[str, str]]:
+    domain_tables = _group_tables_by_domain(tables, domain_filter, all_domains)
+    pairs: List[Tuple[str, str]] = []
+    for table_list in domain_tables.values():
+        pairs.extend(combinations(table_list, 2))
+    return pairs
+
+
+def generate_cross_domain_pairs(
+    tables: Dict[str, Dict],
+    domain_filter: Optional[List[str]],
+    all_domains: List[str],
+    intra_pairs: List[Tuple[str, str]] = None,
+) -> List[Tuple[str, str]]:
+    domain_tables = _group_tables_by_domain(tables, domain_filter, all_domains)
+    processed = set(intra_pairs or [])
+    pairs: List[Tuple[str, str]] = []
+    domain_list = list(domain_tables.keys())
+
+    for i, d1 in enumerate(domain_list):
+        for d2 in domain_list[i + 1 :]:
+            for t1, t2 in product(domain_tables[d1], domain_tables[d2]):
+                if t1 == t2:
+                    continue
+                pair = tuple(sorted([t1, t2]))
+                if pair not in processed:
+                    pairs.append(pair)
+                    processed.add(pair)
+    return pairs
+
+
+def get_table_pairs(
+    tables: Dict[str, Dict],
+    domain: Optional[str],
+    cross_domain: bool,
+    all_domains: List[str],
+) -> List[Tuple[str, str]]:
+    domain_filter = _parse_domain_filter(domain)
+    if not domain and not cross_domain:
+        return generate_all_pairs(tables)
+    if domain and not cross_domain:
+        return generate_intra_domain_pairs(tables, domain_filter, all_domains)
+    if domain and cross_domain:
+        intra_pairs = generate_intra_domain_pairs(tables, domain_filter, all_domains)
+        cross_pairs = generate_cross_domain_pairs(
+            tables, domain_filter, all_domains, intra_pairs=intra_pairs
+        )
+        return intra_pairs + cross_pairs
+    if not domain and cross_domain:
+        return generate_cross_domain_pairs(tables, None, all_domains, intra_pairs=[])
+    return []
+
+
 class LLMRelationshipDiscovery:
     """LLM 辅助关联关系发现
     
@@ -98,7 +186,14 @@ class LLMRelationshipDiscovery:
     - 评分阶段：复用 RelationshipScorer，需要数据库连接
     """
     
-    def __init__(self, config: Dict, connector: DatabaseConnector):
+    def __init__(
+        self,
+        config: Dict,
+        connector: DatabaseConnector,
+        domain_filter: Optional[str] = None,
+        cross_domain: bool = False,
+        db_domains_config: Optional[Dict] = None,
+    ):
         self.config = config
         self.connector = connector  # 仅用于评分阶段
 
@@ -159,6 +254,10 @@ class LLMRelationshipDiscovery:
             f"LLM 重试配置: max_retries={self.llm_max_retries}, "
             f"retry_delay={self.llm_retry_delay}s"
         )
+        # Domain 相关
+        self.domain_filter = domain_filter
+        self.cross_domain = cross_domain
+        self.db_domains_config = db_domains_config or {}
         
     def discover(self) -> Dict:
         """同步入口：发现关联关系。"""
@@ -171,7 +270,18 @@ class LLMRelationshipDiscovery:
         tables, fk_relation_objects, fk_relationship_ids = self._load_tables_and_foreign_keys()
 
         logger.info("阶段3: 两两组合调用 LLM")
-        table_pairs = list(combinations(tables.keys(), 2))
+        if self.domain_filter or self.cross_domain:
+            self._validate_table_domains(tables)
+            all_domains = [d["name"] for d in self.db_domains_config.get("domains", [])]
+            table_pairs = get_table_pairs(
+                tables=tables,
+                domain=self.domain_filter,
+                cross_domain=self.cross_domain,
+                all_domains=all_domains,
+            )
+        else:
+            table_pairs = list(combinations(tables.keys(), 2))
+
         total_pairs = len(table_pairs)
         logger.info(f"共 {total_pairs} 个表对需要处理")
 
@@ -205,7 +315,17 @@ class LLMRelationshipDiscovery:
         tables, fk_relation_objects, fk_relationship_ids = self._load_tables_and_foreign_keys()
 
         logger.info("阶段3: 两两组合调用 LLM")
-        table_pairs = list(combinations(tables.keys(), 2))
+        if self.domain_filter or self.cross_domain:
+            self._validate_table_domains(tables)
+            all_domains = [d["name"] for d in self.db_domains_config.get("domains", [])]
+            table_pairs = get_table_pairs(
+                tables=tables,
+                domain=self.domain_filter,
+                cross_domain=self.cross_domain,
+                all_domains=all_domains,
+            )
+        else:
+            table_pairs = list(combinations(tables.keys(), 2))
         total_pairs = len(table_pairs)
         logger.info(f"共 {total_pairs} 个表对需要处理")
 
@@ -235,6 +355,26 @@ class LLMRelationshipDiscovery:
         fk_relation_objects, fk_relationship_ids = self.repo.collect_foreign_keys(tables)
         logger.info(f"物理外键直通: {len(fk_relation_objects)} 个")
         return tables, fk_relation_objects, fk_relationship_ids
+
+    def _validate_table_domains(self, tables: Dict) -> None:
+        """校验所有表是否包含 table_domains 属性，缺失则报错退出。"""
+        missing_tables = []
+        for full_name, data in tables.items():
+            table_profile = data.get("table_profile", {})
+            if "table_domains" not in table_profile:
+                missing_tables.append(full_name)
+
+        if missing_tables:
+            logger.error(
+                "以下表的 JSON 文件缺少 table_domains 属性，"
+                "请先执行 --step json_llm --domain 生成："
+            )
+            for table in missing_tables:
+                logger.error(f"  - {table}")
+            raise ValueError(
+                f"发现 {len(missing_tables)} 个表缺少 table_domains 属性，"
+                "无法按 domain 进行关系发现"
+            )
 
     def _discover_llm_candidates_sync(
         self,

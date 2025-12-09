@@ -1,6 +1,6 @@
 {
   "metadata_version": "2.0",
-  "generated_at": "2025-12-07T11:00:04.579431Z",
+  "generated_at": "2025-12-09T08:08:03.744691Z",
   "table_info": {
     "schema_name": "public",
     "table_name": "employee",
@@ -310,13 +310,14 @@
           "index_type": "btree"
         }
       ]
-    }
+    },
+    "table_category": "dim"
   },
   "sample_records": {
     "sample_method": "random",
     "sample_size": 5,
     "total_rows": 0,
-    "sampled_at": "2025-12-07T11:00:04.579431Z",
+    "sampled_at": "2025-12-09T08:08:03.744691Z",
     "records": [
       {
         "emp_id": "1",

@@ -1,6 +1,6 @@
 {
   "metadata_version": "2.0",
-  "generated_at": "2025-12-07T11:00:04.361601Z",
+  "generated_at": "2025-12-09T08:08:03.528826Z",
   "table_info": {
     "schema_name": "public",
     "table_name": "department",
@@ -185,13 +185,14 @@
           "index_type": "btree"
         }
       ]
-    }
+    },
+    "table_category": "dim"
   },
   "sample_records": {
     "sample_method": "random",
     "sample_size": 5,
     "total_rows": 0,
-    "sampled_at": "2025-12-07T11:00:04.361601Z",
+    "sampled_at": "2025-12-09T08:08:03.528826Z",
     "records": [
       {
         "dept_id": "1",

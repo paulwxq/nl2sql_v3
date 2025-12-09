@@ -120,6 +120,11 @@ loggers:
     handlers: [metadata_file]
     propagate: true
 
+  metaweave.domain_generator:
+    level: DEBUG
+    handlers: [metadata_file]
+    propagate: true
+
   # ============================================================
   # Step 3: 关系发现 (--step rel)
   # 日志文件: relationships.log

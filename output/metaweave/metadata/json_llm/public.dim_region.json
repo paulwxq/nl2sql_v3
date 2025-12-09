@@ -1,6 +1,6 @@
 {
   "metadata_version": "2.0",
-  "generated_at": "2025-12-07T11:00:04.481608Z",
+  "generated_at": "2025-12-09T08:08:03.647116Z",
   "table_info": {
     "schema_name": "public",
     "table_name": "dim_region",
@@ -274,13 +274,14 @@
       "foreign_keys": [],
       "unique_constraints": [],
       "indexes": []
-    }
+    },
+    "table_category": "dim"
   },
   "sample_records": {
     "sample_method": "random",
     "sample_size": 5,
     "total_rows": 0,
-    "sampled_at": "2025-12-07T11:00:04.481608Z",
+    "sampled_at": "2025-12-09T08:08:03.647116Z",
     "records": [
       {
         "region_id": "440106",

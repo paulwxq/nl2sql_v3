@@ -1,7 +1,7 @@
 // import_all.cypher
 // Neo4j 元数据导入脚本（global 模式，包含所有表和关系）
-// 生成时间: 2025-12-07T19:18:35.261039
-// 统计: 13 张表, 60 个列, 28 个关系
+// 生成时间: 2025-12-09T16:14:38.020864
+// 统计: 13 张表, 60 个列, 11 个关系
 
 // =====================================================================
 // 1. 创建唯一约束
@@ -20,7 +20,7 @@ UNWIND [
     "full_name": "public.department",
     "schema": "public",
     "name": "department",
-    "comment": "部门信息表，存储各部门的编号、代码、名称及所在位置",
+    "comment": "",
     "pk": [
       "dept_id"
     ],
@@ -33,7 +33,13 @@ UNWIND [
     "logic_pk": [],
     "logic_fk": [],
     "logic_uk": [],
-    "indexes": []
+    "indexes": [
+      [
+        "dept_code"
+      ]
+    ],
+    "table_domains": [],
+    "table_category": "dim"
   },
   {
     "full_name": "public.dim_company",
@@ -43,14 +49,12 @@ UNWIND [
     "pk": [],
     "uk": [],
     "fk": [],
-    "logic_pk": [
-      [
-        "company_id"
-      ]
-    ],
+    "logic_pk": [],
     "logic_fk": [],
     "logic_uk": [],
-    "indexes": []
+    "indexes": [],
+    "table_domains": [],
+    "table_category": "dim"
   },
   {
     "full_name": "public.dim_product_type",
@@ -60,14 +64,12 @@ UNWIND [
     "pk": [],
     "uk": [],
     "fk": [],
-    "logic_pk": [
-      [
-        "product_type_id"
-      ]
-    ],
+    "logic_pk": [],
     "logic_fk": [],
     "logic_uk": [],
-    "indexes": []
+    "indexes": [],
+    "table_domains": [],
+    "table_category": "dim"
   },
   {
     "full_name": "public.dim_region",
@@ -77,14 +79,12 @@ UNWIND [
     "pk": [],
     "uk": [],
     "fk": [],
-    "logic_pk": [
-      [
-        "region_id"
-      ]
-    ],
+    "logic_pk": [],
     "logic_fk": [],
     "logic_uk": [],
-    "indexes": []
+    "indexes": [],
+    "table_domains": [],
+    "table_category": "dim"
   },
   {
     "full_name": "public.dim_store",
@@ -94,20 +94,18 @@ UNWIND [
     "pk": [],
     "uk": [],
     "fk": [],
-    "logic_pk": [
-      [
-        "store_id"
-      ]
-    ],
+    "logic_pk": [],
     "logic_fk": [],
     "logic_uk": [],
-    "indexes": []
+    "indexes": [],
+    "table_domains": [],
+    "table_category": "dim"
   },
   {
     "full_name": "public.employee",
     "schema": "public",
     "name": "employee",
-    "comment": "员工基本信息及雇佣信息表",
+    "comment": "",
     "pk": [
       "emp_id"
     ],
@@ -124,7 +122,13 @@ UNWIND [
     "logic_pk": [],
     "logic_fk": [],
     "logic_uk": [],
-    "indexes": []
+    "indexes": [
+      [
+        "emp_no"
+      ]
+    ],
+    "table_domains": [],
+    "table_category": "dim"
   },
   {
     "full_name": "public.equipment_config",
@@ -134,19 +138,12 @@ UNWIND [
     "pk": [],
     "uk": [],
     "fk": [],
-    "logic_pk": [
-      [
-        "equipment_id",
-        "config_version"
-      ],
-      [
-        "equipment_id",
-        "firmware_version"
-      ]
-    ],
+    "logic_pk": [],
     "logic_fk": [],
     "logic_uk": [],
-    "indexes": []
+    "indexes": [],
+    "table_domains": [],
+    "table_category": "dim"
   },
   {
     "full_name": "public.fact_store_sales_day",
@@ -156,16 +153,12 @@ UNWIND [
     "pk": [],
     "uk": [],
     "fk": [],
-    "logic_pk": [
-      [
-        "store_id",
-        "date_day",
-        "product_type_id"
-      ]
-    ],
+    "logic_pk": [],
     "logic_fk": [],
     "logic_uk": [],
-    "indexes": []
+    "indexes": [],
+    "table_domains": [],
+    "table_category": "fact"
   },
   {
     "full_name": "public.fact_store_sales_month",
@@ -175,16 +168,12 @@ UNWIND [
     "pk": [],
     "uk": [],
     "fk": [],
-    "logic_pk": [
-      [
-        "store_id",
-        "date_month",
-        "product_type_id"
-      ]
-    ],
+    "logic_pk": [],
     "logic_fk": [],
     "logic_uk": [],
-    "indexes": []
+    "indexes": [],
+    "table_domains": [],
+    "table_category": "fact"
   },
   {
     "full_name": "public.fault_catalog",
@@ -194,16 +183,12 @@ UNWIND [
     "pk": [],
     "uk": [],
     "fk": [],
-    "logic_pk": [
-      [
-        "product_line_code",
-        "subsystem_code",
-        "fault_code"
-      ]
-    ],
+    "logic_pk": [],
     "logic_fk": [],
     "logic_uk": [],
-    "indexes": []
+    "indexes": [],
+    "table_domains": [],
+    "table_category": "dim"
   },
   {
     "full_name": "public.maintenance_work_order",
@@ -213,89 +198,18 @@ UNWIND [
     "pk": [],
     "uk": [],
     "fk": [],
-    "logic_pk": [
-      [
-        "wo_id",
-        "wo_line_no"
-      ],
-      [
-        "wo_id",
-        "equipment_id"
-      ],
-      [
-        "wo_id",
-        "config_version"
-      ],
-      [
-        "wo_id",
-        "product_line_code"
-      ],
-      [
-        "wo_id",
-        "subsystem_code"
-      ],
-      [
-        "wo_id",
-        "fault_code"
-      ],
-      [
-        "wo_id",
-        "downtime_minutes"
-      ],
-      [
-        "wo_line_no",
-        "downtime_minutes"
-      ],
-      [
-        "equipment_id",
-        "downtime_minutes"
-      ],
-      [
-        "product_line_code",
-        "downtime_minutes"
-      ],
-      [
-        "subsystem_code",
-        "downtime_minutes"
-      ],
-      [
-        "fault_code",
-        "downtime_minutes"
-      ],
-      [
-        "wo_id",
-        "fault_ts"
-      ],
-      [
-        "wo_line_no",
-        "fault_ts"
-      ],
-      [
-        "fault_ts",
-        "equipment_id"
-      ],
-      [
-        "fault_ts",
-        "product_line_code"
-      ],
-      [
-        "fault_ts",
-        "subsystem_code"
-      ],
-      [
-        "fault_ts",
-        "fault_code"
-      ]
-    ],
+    "logic_pk": [],
     "logic_fk": [],
     "logic_uk": [],
-    "indexes": []
+    "indexes": [],
+    "table_domains": [],
+    "table_category": "fact"
   },
   {
     "full_name": "public.order_header",
     "schema": "public",
     "name": "order_header",
-    "comment": "订单信息表，存储订单的基本信息和客户信息",
+    "comment": "",
     "pk": [
       "order_id",
       "order_date"
@@ -305,13 +219,15 @@ UNWIND [
     "logic_pk": [],
     "logic_fk": [],
     "logic_uk": [],
-    "indexes": []
+    "indexes": [],
+    "table_domains": [],
+    "table_category": "unknown"
   },
   {
     "full_name": "public.order_item",
     "schema": "public",
     "name": "order_item",
-    "comment": "订单商品明细，记录每个订单中的商品及数量信息",
+    "comment": "",
     "pk": [
       "item_id"
     ],
@@ -325,7 +241,9 @@ UNWIND [
     "logic_pk": [],
     "logic_fk": [],
     "logic_uk": [],
-    "indexes": []
+    "indexes": [],
+    "table_domains": [],
+    "table_category": "fact"
   }
 ] AS t
 MERGE (n:Table {full_name: t.full_name})
@@ -339,7 +257,17 @@ SET n.id       = t.full_name,
     n.logic_pk = t.logic_pk,
     n.logic_fk = t.logic_fk,
     n.logic_uk = t.logic_uk,
-    n.indexes  = t.indexes;
+    n.indexes  = t.indexes,
+    n.table_domains = CASE
+        WHEN t.table_domains IS NOT NULL AND size(t.table_domains) > 0
+            THEN t.table_domains
+        ELSE coalesce(n.table_domains, [])
+    END,
+    n.table_category = CASE
+        WHEN t.table_category IS NOT NULL
+            THEN t.table_category
+        ELSE n.table_category
+    END;
 
 // =====================================================================
 // 3. 创建 Column 节点
@@ -351,9 +279,9 @@ UNWIND [
     "schema": "public",
     "table": "department",
     "name": "dept_id",
-    "comment": "部门唯一标识ID",
+    "comment": "",
     "data_type": "integer",
-    "semantic_role": "identifier",
+    "semantic_role": "",
     "is_pk": true,
     "is_uk": false,
     "is_fk": false,
@@ -368,9 +296,9 @@ UNWIND [
     "schema": "public",
     "table": "department",
     "name": "dept_code",
-    "comment": "部门编码（如HR、FIN）",
+    "comment": "",
     "data_type": "character varying",
-    "semantic_role": "identifier",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": true,
     "is_fk": false,
@@ -385,9 +313,9 @@ UNWIND [
     "schema": "public",
     "table": "department",
     "name": "dept_name",
-    "comment": "部门名称（如人力资源部）",
+    "comment": "",
     "data_type": "character varying",
-    "semantic_role": "attribute",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -402,9 +330,9 @@ UNWIND [
     "schema": "public",
     "table": "department",
     "name": "location",
-    "comment": "部门所在城市（如北京、上海）",
+    "comment": "",
     "data_type": "character varying",
-    "semantic_role": "attribute",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -421,7 +349,7 @@ UNWIND [
     "name": "company_id",
     "comment": "公司ID（主键）",
     "data_type": "integer",
-    "semantic_role": "identifier",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -438,7 +366,7 @@ UNWIND [
     "name": "company_name",
     "comment": "公司名称，唯一",
     "data_type": "character varying",
-    "semantic_role": "attribute",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -455,7 +383,7 @@ UNWIND [
     "name": "product_type_id",
     "comment": "商品类型ID（主键）",
     "data_type": "integer",
-    "semantic_role": "identifier",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -472,7 +400,7 @@ UNWIND [
     "name": "product_type_name",
     "comment": "商品类型名称，唯一",
     "data_type": "character varying",
-    "semantic_role": "attribute",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -489,7 +417,7 @@ UNWIND [
     "name": "region_id",
     "comment": "区（县）ID（主键）",
     "data_type": "integer",
-    "semantic_role": "identifier",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -506,7 +434,7 @@ UNWIND [
     "name": "region_name",
     "comment": "区（县）名称",
     "data_type": "character varying",
-    "semantic_role": "attribute",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -523,7 +451,7 @@ UNWIND [
     "name": "city_id",
     "comment": "城市ID",
     "data_type": "integer",
-    "semantic_role": "identifier",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -540,7 +468,7 @@ UNWIND [
     "name": "city_name",
     "comment": "城市名称",
     "data_type": "character varying",
-    "semantic_role": "attribute",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -557,7 +485,7 @@ UNWIND [
     "name": "province_id",
     "comment": "省份ID",
     "data_type": "integer",
-    "semantic_role": "identifier",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -574,7 +502,7 @@ UNWIND [
     "name": "province_name",
     "comment": "省份名称",
     "data_type": "character varying",
-    "semantic_role": "attribute",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -591,7 +519,7 @@ UNWIND [
     "name": "store_id",
     "comment": "店铺ID（主键）",
     "data_type": "integer",
-    "semantic_role": "identifier",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -608,7 +536,7 @@ UNWIND [
     "name": "store_name",
     "comment": "店铺名称（同一公司下唯一）",
     "data_type": "character varying",
-    "semantic_role": "attribute",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -625,7 +553,7 @@ UNWIND [
     "name": "company_id",
     "comment": "所属公司ID（外键）",
     "data_type": "integer",
-    "semantic_role": "identifier",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -642,7 +570,7 @@ UNWIND [
     "name": "region_id",
     "comment": "所属区（县）ID（外键）",
     "data_type": "integer",
-    "semantic_role": "identifier",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -657,9 +585,9 @@ UNWIND [
     "schema": "public",
     "table": "employee",
     "name": "emp_id",
-    "comment": "员工唯一标识ID",
+    "comment": "",
     "data_type": "integer",
-    "semantic_role": "identifier",
+    "semantic_role": "",
     "is_pk": true,
     "is_uk": false,
     "is_fk": false,
@@ -674,9 +602,9 @@ UNWIND [
     "schema": "public",
     "table": "employee",
     "name": "emp_no",
-    "comment": "员工编号",
+    "comment": "",
     "data_type": "character varying",
-    "semantic_role": "identifier",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": true,
     "is_fk": false,
@@ -691,9 +619,9 @@ UNWIND [
     "schema": "public",
     "table": "employee",
     "name": "emp_name",
-    "comment": "员工姓名",
+    "comment": "",
     "data_type": "character varying",
-    "semantic_role": "attribute",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -708,9 +636,9 @@ UNWIND [
     "schema": "public",
     "table": "employee",
     "name": "gender",
-    "comment": "员工性别（M-男，F-女）",
+    "comment": "",
     "data_type": "character",
-    "semantic_role": "enum",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -725,9 +653,9 @@ UNWIND [
     "schema": "public",
     "table": "employee",
     "name": "hire_date",
-    "comment": "入职日期",
+    "comment": "",
     "data_type": "date",
-    "semantic_role": "audit",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -742,14 +670,14 @@ UNWIND [
     "schema": "public",
     "table": "employee",
     "name": "salary",
-    "comment": "员工薪资",
+    "comment": "",
     "data_type": "numeric",
-    "semantic_role": "metric",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
     "is_time": false,
-    "is_measure": true,
+    "is_measure": false,
     "pk_position": 0,
     "uniqueness": 1.0,
     "null_rate": 0.0
@@ -759,9 +687,9 @@ UNWIND [
     "schema": "public",
     "table": "employee",
     "name": "dept_id",
-    "comment": "所属部门ID",
+    "comment": "",
     "data_type": "integer",
-    "semantic_role": "identifier",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": true,
@@ -778,7 +706,7 @@ UNWIND [
     "name": "equipment_id",
     "comment": "设备ID（资产编号）",
     "data_type": "integer",
-    "semantic_role": "identifier",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -795,7 +723,7 @@ UNWIND [
     "name": "config_version",
     "comment": "配置版本/改造批次（可为语义化版本或批次号）",
     "data_type": "character varying",
-    "semantic_role": "audit",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -812,7 +740,7 @@ UNWIND [
     "name": "controller_model",
     "comment": "控制器型号",
     "data_type": "character varying",
-    "semantic_role": "attribute",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -829,7 +757,7 @@ UNWIND [
     "name": "firmware_version",
     "comment": "固件版本号（语义化版本等）",
     "data_type": "character varying",
-    "semantic_role": "audit",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -846,7 +774,7 @@ UNWIND [
     "name": "store_id",
     "comment": "店铺ID（外键）",
     "data_type": "integer",
-    "semantic_role": "identifier",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -863,11 +791,11 @@ UNWIND [
     "name": "date_day",
     "comment": "交易日期（日粒度）",
     "data_type": "date",
-    "semantic_role": "datetime",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
-    "is_time": true,
+    "is_time": false,
     "is_measure": false,
     "pk_position": 0,
     "uniqueness": 0.0278,
@@ -880,7 +808,7 @@ UNWIND [
     "name": "product_type_id",
     "comment": "商品类型ID（外键）",
     "data_type": "integer",
-    "semantic_role": "identifier",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -897,12 +825,12 @@ UNWIND [
     "name": "amount",
     "comment": "销售金额（当日）",
     "data_type": "numeric",
-    "semantic_role": "metric",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
     "is_time": false,
-    "is_measure": true,
+    "is_measure": false,
     "pk_position": 0,
     "uniqueness": 0.625,
     "null_rate": 0.0
@@ -914,7 +842,7 @@ UNWIND [
     "name": "store_id",
     "comment": "店铺ID（外键）",
     "data_type": "integer",
-    "semantic_role": "identifier",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -931,11 +859,11 @@ UNWIND [
     "name": "date_month",
     "comment": "月份（建议为当月第一天）",
     "data_type": "date",
-    "semantic_role": "datetime",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
-    "is_time": true,
+    "is_time": false,
     "is_measure": false,
     "pk_position": 0,
     "uniqueness": 0.0278,
@@ -948,7 +876,7 @@ UNWIND [
     "name": "product_type_id",
     "comment": "商品类型ID（外键）",
     "data_type": "integer",
-    "semantic_role": "identifier",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -965,12 +893,12 @@ UNWIND [
     "name": "amount",
     "comment": "销售金额（当月累计值）",
     "data_type": "numeric",
-    "semantic_role": "metric",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
     "is_time": false,
-    "is_measure": true,
+    "is_measure": false,
     "pk_position": 0,
     "uniqueness": 0.75,
     "null_rate": 0.0
@@ -982,7 +910,7 @@ UNWIND [
     "name": "product_line_code",
     "comment": "产线/产品线编码",
     "data_type": "character varying",
-    "semantic_role": "identifier",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -999,7 +927,7 @@ UNWIND [
     "name": "subsystem_code",
     "comment": "子系统编码",
     "data_type": "character varying",
-    "semantic_role": "identifier",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -1016,7 +944,7 @@ UNWIND [
     "name": "fault_code",
     "comment": "故障码",
     "data_type": "character varying",
-    "semantic_role": "identifier",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -1033,7 +961,7 @@ UNWIND [
     "name": "fault_name",
     "comment": "故障名称（标准名）",
     "data_type": "character varying",
-    "semantic_role": "attribute",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -1050,7 +978,7 @@ UNWIND [
     "name": "recommended_action",
     "comment": "建议处理措施/排查步骤（长文本）",
     "data_type": "text",
-    "semantic_role": "description",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -1067,7 +995,7 @@ UNWIND [
     "name": "wo_id",
     "comment": "工单ID",
     "data_type": "integer",
-    "semantic_role": "identifier",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -1084,7 +1012,7 @@ UNWIND [
     "name": "wo_line_no",
     "comment": "工单行号/条目序号",
     "data_type": "smallint",
-    "semantic_role": "identifier",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -1101,7 +1029,7 @@ UNWIND [
     "name": "fault_ts",
     "comment": "故障发生时间",
     "data_type": "timestamp without time zone",
-    "semantic_role": "audit",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -1118,7 +1046,7 @@ UNWIND [
     "name": "equipment_id",
     "comment": "设备ID（资产编号）",
     "data_type": "integer",
-    "semantic_role": "identifier",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -1135,7 +1063,7 @@ UNWIND [
     "name": "config_version",
     "comment": "设备配置版本/改造批次（与设备配置表形成2列关联）",
     "data_type": "character varying",
-    "semantic_role": "audit",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -1152,7 +1080,7 @@ UNWIND [
     "name": "product_line_code",
     "comment": "产线/产品线编码（与故障码字典形成3列关联之一）",
     "data_type": "character varying",
-    "semantic_role": "identifier",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -1169,7 +1097,7 @@ UNWIND [
     "name": "subsystem_code",
     "comment": "子系统编码（与故障码字典形成3列关联之一）",
     "data_type": "character varying",
-    "semantic_role": "identifier",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -1186,7 +1114,7 @@ UNWIND [
     "name": "fault_code",
     "comment": "故障码（与故障码字典形成3列关联之一）",
     "data_type": "character varying",
-    "semantic_role": "identifier",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -1203,7 +1131,7 @@ UNWIND [
     "name": "downtime_minutes",
     "comment": "停机时长（分钟）",
     "data_type": "integer",
-    "semantic_role": "identifier",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -1220,12 +1148,12 @@ UNWIND [
     "name": "spare_part_cost",
     "comment": "备件费用（金额）",
     "data_type": "numeric",
-    "semantic_role": "metric",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
     "is_time": false,
-    "is_measure": true,
+    "is_measure": false,
     "pk_position": 0,
     "uniqueness": 1.0,
     "null_rate": 0.0
@@ -1235,9 +1163,9 @@ UNWIND [
     "schema": "public",
     "table": "order_header",
     "name": "order_id",
-    "comment": "订单唯一标识ID",
+    "comment": "",
     "data_type": "integer",
-    "semantic_role": "identifier",
+    "semantic_role": "",
     "is_pk": true,
     "is_uk": false,
     "is_fk": false,
@@ -1252,9 +1180,9 @@ UNWIND [
     "schema": "public",
     "table": "order_header",
     "name": "order_date",
-    "comment": "订单创建日期",
+    "comment": "",
     "data_type": "date",
-    "semantic_role": "audit",
+    "semantic_role": "",
     "is_pk": true,
     "is_uk": false,
     "is_fk": false,
@@ -1269,9 +1197,9 @@ UNWIND [
     "schema": "public",
     "table": "order_header",
     "name": "customer",
-    "comment": "订单客户姓名",
+    "comment": "",
     "data_type": "character varying",
-    "semantic_role": "identifier",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -1286,9 +1214,9 @@ UNWIND [
     "schema": "public",
     "table": "order_item",
     "name": "item_id",
-    "comment": "订单商品唯一标识ID",
+    "comment": "",
     "data_type": "integer",
-    "semantic_role": "identifier",
+    "semantic_role": "",
     "is_pk": true,
     "is_uk": false,
     "is_fk": false,
@@ -1303,9 +1231,9 @@ UNWIND [
     "schema": "public",
     "table": "order_item",
     "name": "order_id",
-    "comment": "订单编号",
+    "comment": "",
     "data_type": "integer",
-    "semantic_role": "identifier",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": true,
@@ -1320,9 +1248,9 @@ UNWIND [
     "schema": "public",
     "table": "order_item",
     "name": "order_date",
-    "comment": "订单创建日期",
+    "comment": "",
     "data_type": "date",
-    "semantic_role": "audit",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": true,
@@ -1337,9 +1265,9 @@ UNWIND [
     "schema": "public",
     "table": "order_item",
     "name": "product",
-    "comment": "商品名称",
+    "comment": "",
     "data_type": "character varying",
-    "semantic_role": "identifier",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
@@ -1354,14 +1282,14 @@ UNWIND [
     "schema": "public",
     "table": "order_item",
     "name": "quantity",
-    "comment": "商品数量",
+    "comment": "",
     "data_type": "integer",
-    "semantic_role": "metric",
+    "semantic_role": "",
     "is_pk": false,
     "is_uk": false,
     "is_fk": false,
     "is_time": false,
-    "is_measure": true,
+    "is_measure": false,
     "pk_position": 0,
     "uniqueness": 0.4,
     "null_rate": 0.0
@@ -1639,8 +1567,8 @@ MERGE (t)-[:HAS_COLUMN]->(c);
 
 UNWIND [
   {
-    "src_full_name": "public.employee",
-    "dst_full_name": "public.department",
+    "src_full_name": "public.department",
+    "dst_full_name": "public.employee",
     "cardinality": "1:1",
     "constraint_name": null,
     "join_type": "INNER JOIN",
@@ -1669,160 +1597,6 @@ UNWIND [
     ]
   },
   {
-    "src_full_name": "public.fact_store_sales_day",
-    "dst_full_name": "public.fact_store_sales_month",
-    "cardinality": "1:1",
-    "constraint_name": null,
-    "join_type": "INNER JOIN",
-    "on": "SRC.store_id = DST.store_id AND SRC.date_day = DST.date_month AND SRC.product_type_id = DST.product_type_id",
-    "source_columns": [
-      "store_id",
-      "date_day",
-      "product_type_id"
-    ],
-    "target_columns": [
-      "store_id",
-      "date_month",
-      "product_type_id"
-    ]
-  },
-  {
-    "src_full_name": "public.fact_store_sales_month",
-    "dst_full_name": "public.fact_store_sales_day",
-    "cardinality": "1:1",
-    "constraint_name": null,
-    "join_type": "INNER JOIN",
-    "on": "SRC.store_id = DST.store_id AND SRC.date_month = DST.date_day AND SRC.product_type_id = DST.product_type_id",
-    "source_columns": [
-      "store_id",
-      "date_month",
-      "product_type_id"
-    ],
-    "target_columns": [
-      "store_id",
-      "date_day",
-      "product_type_id"
-    ]
-  },
-  {
-    "src_full_name": "public.maintenance_work_order",
-    "dst_full_name": "public.fault_catalog",
-    "cardinality": "N:1",
-    "constraint_name": null,
-    "join_type": "INNER JOIN",
-    "on": "SRC.product_line_code = DST.product_line_code AND SRC.subsystem_code = DST.subsystem_code AND SRC.fault_code = DST.fault_code",
-    "source_columns": [
-      "product_line_code",
-      "subsystem_code",
-      "fault_code"
-    ],
-    "target_columns": [
-      "product_line_code",
-      "subsystem_code",
-      "fault_code"
-    ]
-  },
-  {
-    "src_full_name": "public.order_item",
-    "dst_full_name": "public.order_header",
-    "cardinality": "N:1",
-    "constraint_name": null,
-    "join_type": "INNER JOIN",
-    "on": "SRC.order_id = DST.order_id AND SRC.order_date = DST.order_date",
-    "source_columns": [
-      "order_id",
-      "order_date"
-    ],
-    "target_columns": [
-      "order_id",
-      "order_date"
-    ]
-  },
-  {
-    "src_full_name": "public.order_item",
-    "dst_full_name": "public.order_header",
-    "cardinality": "N:1",
-    "constraint_name": null,
-    "join_type": "INNER JOIN",
-    "on": "SRC.order_id = DST.order_id",
-    "source_columns": [
-      "order_id"
-    ],
-    "target_columns": [
-      "order_id"
-    ]
-  },
-  {
-    "src_full_name": "public.department",
-    "dst_full_name": "public.employee",
-    "cardinality": "1:1",
-    "constraint_name": null,
-    "join_type": "INNER JOIN",
-    "on": "SRC.dept_id = DST.emp_id",
-    "source_columns": [
-      "dept_id"
-    ],
-    "target_columns": [
-      "emp_id"
-    ]
-  },
-  {
-    "src_full_name": "public.department",
-    "dst_full_name": "public.employee",
-    "cardinality": "1:1",
-    "constraint_name": null,
-    "join_type": "INNER JOIN",
-    "on": "SRC.dept_id = DST.dept_id",
-    "source_columns": [
-      "dept_id"
-    ],
-    "target_columns": [
-      "dept_id"
-    ]
-  },
-  {
-    "src_full_name": "public.department",
-    "dst_full_name": "public.order_item",
-    "cardinality": "1:1",
-    "constraint_name": null,
-    "join_type": "INNER JOIN",
-    "on": "SRC.dept_id = DST.item_id",
-    "source_columns": [
-      "dept_id"
-    ],
-    "target_columns": [
-      "item_id"
-    ]
-  },
-  {
-    "src_full_name": "public.dim_company",
-    "dst_full_name": "public.department",
-    "cardinality": "1:1",
-    "constraint_name": null,
-    "join_type": "INNER JOIN",
-    "on": "SRC.company_id = DST.dept_id",
-    "source_columns": [
-      "company_id"
-    ],
-    "target_columns": [
-      "dept_id"
-    ]
-  },
-  {
-    "src_full_name": "public.dim_company",
-    "dst_full_name": "public.dim_product_type",
-    "cardinality": "1:1",
-    "constraint_name": null,
-    "join_type": "INNER JOIN",
-    "on": "SRC.company_id = DST.product_type_id",
-    "source_columns": [
-      "company_id"
-    ],
-    "target_columns": [
-      "product_type_id"
-    ]
-  },
-  {
     "src_full_name": "public.dim_store",
     "dst_full_name": "public.dim_company",
     "cardinality": "N:1",
@@ -1837,76 +1611,6 @@ UNWIND [
     ]
   },
   {
-    "src_full_name": "public.dim_company",
-    "dst_full_name": "public.employee",
-    "cardinality": "1:1",
-    "constraint_name": null,
-    "join_type": "INNER JOIN",
-    "on": "SRC.company_id = DST.emp_id",
-    "source_columns": [
-      "company_id"
-    ],
-    "target_columns": [
-      "emp_id"
-    ]
-  },
-  {
-    "src_full_name": "public.dim_company",
-    "dst_full_name": "public.order_item",
-    "cardinality": "1:1",
-    "constraint_name": null,
-    "join_type": "INNER JOIN",
-    "on": "SRC.company_id = DST.item_id",
-    "source_columns": [
-      "company_id"
-    ],
-    "target_columns": [
-      "item_id"
-    ]
-  },
-  {
-    "src_full_name": "public.dim_product_type",
-    "dst_full_name": "public.department",
-    "cardinality": "1:1",
-    "constraint_name": null,
-    "join_type": "INNER JOIN",
-    "on": "SRC.product_type_id = DST.dept_id",
-    "source_columns": [
-      "product_type_id"
-    ],
-    "target_columns": [
-      "dept_id"
-    ]
-  },
-  {
-    "src_full_name": "public.dim_product_type",
-    "dst_full_name": "public.dim_company",
-    "cardinality": "1:1",
-    "constraint_name": null,
-    "join_type": "INNER JOIN",
-    "on": "SRC.product_type_id = DST.company_id",
-    "source_columns": [
-      "product_type_id"
-    ],
-    "target_columns": [
-      "company_id"
-    ]
-  },
-  {
-    "src_full_name": "public.dim_product_type",
-    "dst_full_name": "public.employee",
-    "cardinality": "1:1",
-    "constraint_name": null,
-    "join_type": "INNER JOIN",
-    "on": "SRC.product_type_id = DST.emp_id",
-    "source_columns": [
-      "product_type_id"
-    ],
-    "target_columns": [
-      "emp_id"
-    ]
-  },
-  {
     "src_full_name": "public.fact_store_sales_day",
     "dst_full_name": "public.dim_product_type",
     "cardinality": "N:1",
@@ -1932,20 +1636,6 @@ UNWIND [
     ],
     "target_columns": [
       "product_type_id"
-    ]
-  },
-  {
-    "src_full_name": "public.dim_product_type",
-    "dst_full_name": "public.order_item",
-    "cardinality": "1:1",
-    "constraint_name": null,
-    "join_type": "INNER JOIN",
-    "on": "SRC.product_type_id = DST.item_id",
-    "source_columns": [
-      "product_type_id"
-    ],
-    "target_columns": [
-      "item_id"
     ]
   },
   {
@@ -1991,59 +1681,53 @@ UNWIND [
     ]
   },
   {
-    "src_full_name": "public.employee",
-    "dst_full_name": "public.department",
-    "cardinality": "1:1",
+    "src_full_name": "public.maintenance_work_order",
+    "dst_full_name": "public.equipment_config",
+    "cardinality": "N:1",
     "constraint_name": null,
     "join_type": "INNER JOIN",
-    "on": "SRC.emp_id = DST.dept_id",
+    "on": "SRC.equipment_id = DST.equipment_id AND SRC.config_version = DST.config_version",
     "source_columns": [
-      "emp_id"
+      "equipment_id",
+      "config_version"
     ],
     "target_columns": [
-      "dept_id"
+      "equipment_id",
+      "config_version"
     ]
   },
   {
-    "src_full_name": "public.employee",
-    "dst_full_name": "public.order_item",
-    "cardinality": "1:1",
+    "src_full_name": "public.fact_store_sales_day",
+    "dst_full_name": "public.fact_store_sales_month",
+    "cardinality": "M:N",
     "constraint_name": null,
     "join_type": "INNER JOIN",
-    "on": "SRC.emp_id = DST.item_id",
+    "on": "SRC.store_id = DST.store_id AND SRC.product_type_id = DST.product_type_id",
     "source_columns": [
-      "emp_id"
+      "store_id",
+      "product_type_id"
     ],
     "target_columns": [
-      "item_id"
+      "store_id",
+      "product_type_id"
     ]
   },
   {
-    "src_full_name": "public.order_item",
-    "dst_full_name": "public.department",
-    "cardinality": "1:1",
+    "src_full_name": "public.maintenance_work_order",
+    "dst_full_name": "public.fault_catalog",
+    "cardinality": "N:1",
     "constraint_name": null,
     "join_type": "INNER JOIN",
-    "on": "SRC.item_id = DST.dept_id",
+    "on": "SRC.product_line_code = DST.product_line_code AND SRC.subsystem_code = DST.subsystem_code AND SRC.fault_code = DST.fault_code",
     "source_columns": [
-      "item_id"
+      "product_line_code",
+      "subsystem_code",
+      "fault_code"
     ],
     "target_columns": [
-      "dept_id"
-    ]
-  },
-  {
-    "src_full_name": "public.order_item",
-    "dst_full_name": "public.employee",
-    "cardinality": "1:1",
-    "constraint_name": null,
-    "join_type": "INNER JOIN",
-    "on": "SRC.item_id = DST.emp_id",
-    "source_columns": [
-      "item_id"
-    ],
-    "target_columns": [
-      "emp_id"
+      "product_line_code",
+      "subsystem_code",
+      "fault_code"
     ]
   }
 ] AS j

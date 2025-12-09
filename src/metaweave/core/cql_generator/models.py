@@ -39,6 +39,8 @@ class TableNode:
     logic_fk: List[List[str]] = field(default_factory=list)  # 逻辑外键
     logic_uk: List[List[str]] = field(default_factory=list)  # 逻辑唯一
     indexes: List[List[str]] = field(default_factory=list)  # 索引
+    table_domains: List[str] = field(default_factory=list)  # 业务主题
+    table_category: Optional[str] = None  # 业务类型（fact/dim/bridge/unknown）
 
     @property
     def id(self) -> str:
@@ -58,7 +60,9 @@ class TableNode:
             "logic_pk": self.logic_pk,
             "logic_fk": self.logic_fk,
             "logic_uk": self.logic_uk,
-            "indexes": self.indexes
+            "indexes": self.indexes,
+            "table_domains": self.table_domains if self.table_domains else [],
+            "table_category": self.table_category,
         }
 
 

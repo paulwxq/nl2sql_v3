@@ -4,6 +4,8 @@ import click
 import json
 import logging
 from pathlib import Path
+from typing import Dict, List, Optional
+import yaml
 
 from src.metaweave.core.metadata.generator import MetadataGenerator
 from src.metaweave.utils.file_utils import get_project_root
@@ -51,13 +53,72 @@ logger = logging.getLogger("metaweave.cli")
     show_default=True,
     help="指定要执行的步骤：ddl/json/json_llm/cql/cql_llm/md/rel/rel_llm 或 all"
 )
+@click.option(
+    "--domain",
+    type=str,
+    default=None,
+    flag_value="all",
+    help="启用 domain 功能。不传值或传 'all' 表示使用所有 domain；传 'A,B' 表示只使用指定 domain"
+)
+@click.option(
+    "--domains-config",
+    type=click.Path(exists=False),
+    default="configs/metaweave/db_domains.yaml",
+    help="业务主题配置文件路径（默认：configs/metaweave/db_domains.yaml）"
+)
+@click.option(
+    "--generate-domains",
+    is_flag=True,
+    default=False,
+    help="根据 db_domains.yaml 中的 database.description 自动生成 domains 列表"
+)
+@click.option(
+    "--cross-domain",
+    is_flag=True,
+    default=False,
+    help="是否包含跨域关系。可与 --domain 一起使用，也可单独使用（只生成跨域关系）"
+)
+@click.option(
+    "--md-context",
+    is_flag=True,
+    default=False,
+    help="生成 domains 时附加 md 目录摘要"
+)
+@click.option(
+    "--md-context-dir",
+    type=click.Path(exists=False),
+    default="output/metaweave/metadata/md",
+    help="md 摘要目录（默认：output/metaweave/metadata/md）"
+)
+@click.option(
+    "--md-context-mode",
+    type=click.Choice(["name", "name_comment", "full"], case_sensitive=False),
+    default="name_comment",
+    show_default=True,
+    help="md 摘要模式：name 仅表名；name_comment 表名+首行；full 全文"
+)
+@click.option(
+    "--md-context-limit",
+    type=int,
+    default=100,
+    show_default=True,
+    help="md 文件数量上限，超出截断"
+)
 def metadata_command(
     config: str,
     schemas: str,
     tables: str,
     incremental: bool,
     max_workers: int,
-    step: str
+    step: str,
+    domain: Optional[str],
+    domains_config: str,
+    generate_domains: bool,
+    cross_domain: bool,
+    md_context: bool,
+    md_context_dir: str,
+    md_context_mode: str,
+    md_context_limit: int,
 ):
     """生成数据库元数据
     
@@ -73,6 +134,20 @@ def metadata_command(
         metaweave metadata -c config.yaml --tables users,orders --max-workers 8
     """
     try:
+        def _load_yaml(path: Path) -> Dict:
+            if not path.exists():
+                return {}
+            with open(path, "r", encoding="utf-8") as f:
+                return yaml.safe_load(f) or {}
+
+        def _parse_domain_filter(domain_value: Optional[str]) -> Optional[List[str]]:
+            if not domain_value:
+                return None
+            lower = domain_value.lower()
+            if lower == "all":
+                return ["all"]
+            return [d.strip() for d in domain_value.split(",") if d.strip()]
+
         # 解析配置文件路径
         config_path = Path(config)
         if not config_path.is_absolute():
@@ -80,21 +155,96 @@ def metadata_command(
 
         click.echo(f"📋 加载配置: {config_path}")
 
+        # 参数校验
+        if generate_domains and domain:
+            raise click.UsageError("--generate-domains 和 --domain 不能同时使用，请分两步执行")
+
+        domains_config_path = Path(domains_config)
+        if not domains_config_path.is_absolute():
+            domains_config_path = get_project_root() / domains_config_path
+        db_domains_config: Optional[Dict] = None
+
+        if domain or cross_domain:
+            if not domains_config_path.exists():
+                raise click.UsageError(f"错误：{domains_config} 文件不存在，无法使用 --domain/--cross-domain")
+            db_domains_config = _load_yaml(domains_config_path)
+            domains_list = db_domains_config.get("domains", [])
+            if not domains_list:
+                raise click.UsageError(f"错误：{domains_config} 中 domains 列表为空，请先执行 --generate-domains")
+
+        if generate_domains:
+            if not domains_config_path.exists():
+                raise click.UsageError(f"错误：{domains_config} 文件不存在，请先创建并填写 database.description")
+            db_domains_config = _load_yaml(domains_config_path)
+            description = db_domains_config.get("database", {}).get("description", "")
+            if not description or not description.strip():
+                raise click.UsageError("错误：database.description 为空，无法生成 domains 列表")
+
+        # generate-domains 可独立执行（不依赖 step）
+        if generate_domains and step != "json_llm":
+            from src.metaweave.core.metadata.domain_generator import DomainGenerator
+            from src.services.config_loader import load_config
+
+            config = load_config(config_path)
+            md_dir = Path(md_context_dir)
+            if not md_dir.is_absolute():
+                md_dir = get_project_root() / md_dir
+
+            generator = DomainGenerator(
+                config=config,
+                yaml_path=str(domains_config_path),
+                md_context=md_context,
+                md_context_dir=str(md_dir),
+                md_context_mode=md_context_mode,
+                md_context_limit=md_context_limit,
+            )
+            domains = generator.generate_from_description()
+            generator.write_to_yaml(domains)
+            click.echo(f"✅ 已生成 {len(domains)} 个 domain 并写入 {domains_config_path}")
+            return
+
+        domain_filter = _parse_domain_filter(domain)
+
         # Step: json_llm - 简化版 JSON 生成
         if step == "json_llm":
             from src.metaweave.core.metadata.llm_json_generator import LLMJsonGenerator
             from src.metaweave.core.metadata.connector import DatabaseConnector
             from src.services.config_loader import load_config
+            from src.metaweave.core.metadata.domain_generator import DomainGenerator
 
             click.echo("📦 开始生成简化版 JSON（json_llm）...")
             click.echo("")
 
             # 加载配置
             config = load_config(config_path)
+
+            # generate-domains 单独执行
+            if generate_domains:
+                md_dir = Path(md_context_dir)
+                if not md_dir.is_absolute():
+                    md_dir = get_project_root() / md_dir
+                generator = DomainGenerator(
+                    config=config,
+                    yaml_path=str(domains_config_path),
+                    md_context=md_context,
+                    md_context_dir=str(md_dir),
+                    md_context_mode=md_context_mode,
+                    md_context_limit=md_context_limit,
+                )
+                domains = generator.generate_from_description()
+                generator.write_to_yaml(domains)
+                click.echo(f"✅ 已生成 {len(domains)} 个 domain 并写入 {domains_config_path}")
+                return
             
             # 初始化连接器和生成器
             connector = DatabaseConnector(config.get("database", {}))
-            generator = LLMJsonGenerator(config, connector)
+            generator = LLMJsonGenerator(
+                config=config,
+                connector=connector,
+                include_domains=bool(domain),
+                domain_filter=domain_filter,
+                db_domains_config=db_domains_config
+            )
             
             # DDL 目录
             output_config = config.get("output", {})
@@ -138,7 +288,13 @@ def metadata_command(
             connector = DatabaseConnector(config.get("database", {}))
             
             # 初始化发现器
-            discovery = LLMRelationshipDiscovery(config, connector)
+            discovery = LLMRelationshipDiscovery(
+                config=config,
+                connector=connector,
+                domain_filter=domain,
+                cross_domain=cross_domain,
+                db_domains_config=db_domains_config
+            )
             
             # 检查 json_llm 目录
             if not discovery.json_llm_dir.exists():

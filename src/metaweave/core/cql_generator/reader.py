@@ -206,7 +206,9 @@ class JSONReader:
             logic_pk=logic_pk,
             logic_fk=[],  # 稍后从关系中填充
             logic_uk=[],  # 预留
-            indexes=indexes
+            indexes=indexes,
+            table_domains=table_profile.get("table_domains", []),
+            table_category=table_profile.get("table_category"),
         )
 
     def _extract_columns(

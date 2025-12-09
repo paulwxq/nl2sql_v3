@@ -107,7 +107,17 @@ SET n.id       = t.full_name,
     n.logic_pk = t.logic_pk,
     n.logic_fk = t.logic_fk,
     n.logic_uk = t.logic_uk,
-    n.indexes  = t.indexes;
+    n.indexes  = t.indexes,
+    n.table_domains = CASE
+        WHEN t.table_domains IS NOT NULL AND size(t.table_domains) > 0
+            THEN t.table_domains
+        ELSE coalesce(n.table_domains, [])
+    END,
+    n.table_category = CASE
+        WHEN t.table_category IS NOT NULL
+            THEN t.table_category
+        ELSE n.table_category
+    END;
 """
 
         with open(output_file, "w", encoding="utf-8") as f:
@@ -255,7 +265,17 @@ SET n.id       = t.full_name,
     n.logic_pk = t.logic_pk,
     n.logic_fk = t.logic_fk,
     n.logic_uk = t.logic_uk,
-    n.indexes  = t.indexes;
+    n.indexes  = t.indexes,
+    n.table_domains = CASE
+        WHEN t.table_domains IS NOT NULL AND size(t.table_domains) > 0
+            THEN t.table_domains
+        ELSE coalesce(n.table_domains, [])
+    END,
+    n.table_category = CASE
+        WHEN t.table_category IS NOT NULL
+            THEN t.table_category
+        ELSE n.table_category
+    END;
 
 // =====================================================================
 // 3. 创建 Column 节点
