@@ -1,12 +1,12 @@
 {
   "metadata_version": "2.0",
-  "generated_at": "2025-12-09T08:08:03.528826Z",
+  "generated_at": "2025-12-09T14:45:38.593565Z",
   "table_info": {
     "schema_name": "public",
     "table_name": "department",
     "table_type": "table",
-    "comment": "",
-    "comment_source": "",
+    "comment": "部门信息维度表，用于描述组织架构中的各个部门及其基本信息。",
+    "comment_source": "llm_generated",
     "total_rows": 0,
     "total_columns": 4
   },
@@ -20,8 +20,8 @@
       "numeric_scale": 0,
       "is_nullable": false,
       "column_default": "nextval('department_dept_id_seq'::regclass)",
-      "comment": "",
-      "comment_source": "",
+      "comment": "部门唯一标识ID，主键，用于唯一区分每个部门",
+      "comment_source": "llm_generated",
       "statistics": {
         "sample_count": 20,
         "unique_count": 20,
@@ -55,8 +55,8 @@
       "numeric_scale": null,
       "is_nullable": false,
       "column_default": null,
-      "comment": "",
-      "comment_source": "",
+      "comment": "部门编码，唯一标识部门的简写代码，用于系统内引用",
+      "comment_source": "llm_generated",
       "statistics": {
         "sample_count": 20,
         "unique_count": 20,
@@ -92,8 +92,8 @@
       "numeric_scale": null,
       "is_nullable": false,
       "column_default": null,
-      "comment": "",
-      "comment_source": "",
+      "comment": "部门名称，中文全称，表示部门的业务职能或组织名称",
+      "comment_source": "llm_generated",
       "statistics": {
         "sample_count": 20,
         "unique_count": 20,
@@ -129,8 +129,8 @@
       "numeric_scale": null,
       "is_nullable": true,
       "column_default": null,
-      "comment": "",
-      "comment_source": "",
+      "comment": "所在城市，表示该部门主要办公地点",
+      "comment_source": "llm_generated",
       "statistics": {
         "sample_count": 20,
         "unique_count": 11,
@@ -192,7 +192,7 @@
     "sample_method": "random",
     "sample_size": 5,
     "total_rows": 0,
-    "sampled_at": "2025-12-09T08:08:03.528826Z",
+    "sampled_at": "2025-12-09T14:45:38.593565Z",
     "records": [
       {
         "dept_id": "1",

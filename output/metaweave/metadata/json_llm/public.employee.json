@@ -1,12 +1,12 @@
 {
   "metadata_version": "2.0",
-  "generated_at": "2025-12-09T08:08:03.744691Z",
+  "generated_at": "2025-12-09T14:45:38.824969Z",
   "table_info": {
     "schema_name": "public",
     "table_name": "employee",
     "table_type": "table",
-    "comment": "",
-    "comment_source": "",
+    "comment": "员工信息维度表，记录企业员工的基本信息和所属部门",
+    "comment_source": "llm_generated",
     "total_rows": 0,
     "total_columns": 7
   },
@@ -20,8 +20,8 @@
       "numeric_scale": 0,
       "is_nullable": false,
       "column_default": "nextval('employee_emp_id_seq'::regclass)",
-      "comment": "",
-      "comment_source": "",
+      "comment": "员工唯一标识ID，主键",
+      "comment_source": "llm_generated",
       "statistics": {
         "sample_count": 20,
         "unique_count": 20,
@@ -55,8 +55,8 @@
       "numeric_scale": null,
       "is_nullable": false,
       "column_default": null,
-      "comment": "",
-      "comment_source": "",
+      "comment": "员工工号，系统内唯一编码",
+      "comment_source": "llm_generated",
       "statistics": {
         "sample_count": 20,
         "unique_count": 20,
@@ -92,8 +92,8 @@
       "numeric_scale": null,
       "is_nullable": false,
       "column_default": null,
-      "comment": "",
-      "comment_source": "",
+      "comment": "员工姓名",
+      "comment_source": "llm_generated",
       "statistics": {
         "sample_count": 20,
         "unique_count": 20,
@@ -129,8 +129,8 @@
       "numeric_scale": null,
       "is_nullable": false,
       "column_default": null,
-      "comment": "",
-      "comment_source": "",
+      "comment": "性别，M表示男性，F表示女性",
+      "comment_source": "llm_generated",
       "statistics": {
         "sample_count": 20,
         "unique_count": 2,
@@ -170,8 +170,8 @@
       "numeric_scale": null,
       "is_nullable": false,
       "column_default": null,
-      "comment": "",
-      "comment_source": "",
+      "comment": "入职日期",
+      "comment_source": "llm_generated",
       "statistics": {
         "sample_count": 20,
         "unique_count": 20,
@@ -207,8 +207,8 @@
       "numeric_scale": 2,
       "is_nullable": false,
       "column_default": null,
-      "comment": "",
-      "comment_source": "",
+      "comment": "月薪金额，单位为人民币元",
+      "comment_source": "llm_generated",
       "statistics": {
         "sample_count": 20,
         "unique_count": 20,
@@ -242,8 +242,8 @@
       "numeric_scale": 0,
       "is_nullable": false,
       "column_default": null,
-      "comment": "",
-      "comment_source": "",
+      "comment": "所属部门ID，外键关联部门表",
+      "comment_source": "llm_generated",
       "statistics": {
         "sample_count": 20,
         "unique_count": 19,
@@ -317,7 +317,7 @@
     "sample_method": "random",
     "sample_size": 5,
     "total_rows": 0,
-    "sampled_at": "2025-12-09T08:08:03.744691Z",
+    "sampled_at": "2025-12-09T14:45:38.824969Z",
     "records": [
       {
         "emp_id": "1",

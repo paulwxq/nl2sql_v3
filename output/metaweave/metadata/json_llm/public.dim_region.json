@@ -1,6 +1,6 @@
 {
   "metadata_version": "2.0",
-  "generated_at": "2025-12-09T08:08:03.647116Z",
+  "generated_at": "2025-12-09T14:45:38.714299Z",
   "table_info": {
     "schema_name": "public",
     "table_name": "dim_region",
@@ -281,7 +281,7 @@
     "sample_method": "random",
     "sample_size": 5,
     "total_rows": 0,
-    "sampled_at": "2025-12-09T08:08:03.647116Z",
+    "sampled_at": "2025-12-09T14:45:38.714299Z",
     "records": [
       {
         "region_id": "440106",

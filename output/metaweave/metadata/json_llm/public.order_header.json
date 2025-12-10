@@ -1,12 +1,12 @@
 {
   "metadata_version": "2.0",
-  "generated_at": "2025-12-09T08:08:03.987532Z",
+  "generated_at": "2025-12-09T14:45:39.037972Z",
   "table_info": {
     "schema_name": "public",
     "table_name": "order_header",
     "table_type": "table",
-    "comment": "",
-    "comment_source": "",
+    "comment": "记录订单的头部信息，包含订单编号、下单日期及客户名称等关键业务信息。",
+    "comment_source": "llm_generated",
     "total_rows": 0,
     "total_columns": 3
   },
@@ -20,8 +20,8 @@
       "numeric_scale": 0,
       "is_nullable": false,
       "column_default": null,
-      "comment": "",
-      "comment_source": "",
+      "comment": "订单唯一标识编号，用于区分每一笔订单",
+      "comment_source": "llm_generated",
       "statistics": {
         "sample_count": 10,
         "unique_count": 10,
@@ -67,8 +67,8 @@
       "numeric_scale": null,
       "is_nullable": false,
       "column_default": null,
-      "comment": "",
-      "comment_source": "",
+      "comment": "订单创建的日期，表示客户提交订单的时间",
+      "comment_source": "llm_generated",
       "statistics": {
         "sample_count": 10,
         "unique_count": 10,
@@ -116,8 +116,8 @@
       "numeric_scale": null,
       "is_nullable": true,
       "column_default": null,
-      "comment": "",
-      "comment_source": "",
+      "comment": "下单客户的姓名",
+      "comment_source": "llm_generated",
       "statistics": {
         "sample_count": 10,
         "unique_count": 10,
@@ -170,13 +170,13 @@
       "unique_constraints": [],
       "indexes": []
     },
-    "table_category": "unknown"
+    "table_category": "fact"
   },
   "sample_records": {
     "sample_method": "random",
     "sample_size": 5,
     "total_rows": 0,
-    "sampled_at": "2025-12-09T08:08:03.987532Z",
+    "sampled_at": "2025-12-09T14:45:39.037972Z",
     "records": [
       {
         "order_id": "5001",

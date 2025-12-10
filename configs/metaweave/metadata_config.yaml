@@ -208,7 +208,14 @@ comment_generation:
   enabled: true                 # 总开关
   generate_table_comment: true  # 调用LLM自动补充缺失的表注释
   generate_column_comment: true # 调用LLM自动补充缺失的字段注释
-  language: zh-CN  # 生成中文注释
+  language: zh  # 注释语言：zh / en / bilingual
+  max_columns_per_call: 120     # 单批处理的缺失字段上限
+  max_sample_rows: 3            # Prompt 样例数据行数上限
+  max_sample_cols: 20           # Prompt 样例数据列数上限
+  enable_batch_processing: true # 超过上限时自动分批
+  overwrite_existing: false     # 默认不覆盖已有注释
+  fallback_on_parse_error: true # 解析失败时使用降级策略
+  log_failed_responses: true    # 记录解析失败的原始响应（生产可关闭）
   
   # 缓存配置
   cache_enabled: true

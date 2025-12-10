@@ -1,12 +1,12 @@
 {
   "metadata_version": "2.0",
-  "generated_at": "2025-12-09T08:08:04.011562Z",
+  "generated_at": "2025-12-09T14:45:39.059971Z",
   "table_info": {
     "schema_name": "public",
     "table_name": "order_item",
     "table_type": "table",
-    "comment": "",
-    "comment_source": "",
+    "comment": "记录订单明细的事务性事实表，包含每个订单项的产品和数量信息",
+    "comment_source": "llm_generated",
     "total_rows": 0,
     "total_columns": 5
   },
@@ -20,8 +20,8 @@
       "numeric_scale": 0,
       "is_nullable": false,
       "column_default": "nextval('order_item_item_id_seq'::regclass)",
-      "comment": "",
-      "comment_source": "",
+      "comment": "订单项唯一标识符",
+      "comment_source": "llm_generated",
       "statistics": {
         "sample_count": 20,
         "unique_count": 20,
@@ -55,8 +55,8 @@
       "numeric_scale": 0,
       "is_nullable": false,
       "column_default": null,
-      "comment": "",
-      "comment_source": "",
+      "comment": "关联的订单编号",
+      "comment_source": "llm_generated",
       "statistics": {
         "sample_count": 20,
         "unique_count": 10,
@@ -102,8 +102,8 @@
       "numeric_scale": null,
       "is_nullable": false,
       "column_default": null,
-      "comment": "",
-      "comment_source": "",
+      "comment": "订单日期，与订单编号共同标识所属订单",
+      "comment_source": "llm_generated",
       "statistics": {
         "sample_count": 20,
         "unique_count": 10,
@@ -151,8 +151,8 @@
       "numeric_scale": null,
       "is_nullable": true,
       "column_default": null,
-      "comment": "",
-      "comment_source": "",
+      "comment": "商品名称",
+      "comment_source": "llm_generated",
       "statistics": {
         "sample_count": 20,
         "unique_count": 20,
@@ -188,8 +188,8 @@
       "numeric_scale": 0,
       "is_nullable": false,
       "column_default": null,
-      "comment": "",
-      "comment_source": "",
+      "comment": "商品数量",
+      "comment_source": "llm_generated",
       "statistics": {
         "sample_count": 20,
         "unique_count": 8,
@@ -259,7 +259,7 @@
     "sample_method": "random",
     "sample_size": 5,
     "total_rows": 0,
-    "sampled_at": "2025-12-09T08:08:04.011562Z",
+    "sampled_at": "2025-12-09T14:45:39.059971Z",
     "records": [
       {
         "item_id": "1",
