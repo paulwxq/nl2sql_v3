@@ -10,6 +10,7 @@ from typing import Optional
 
 from src.metaweave.cli.metadata_cli import metadata_command
 from src.metaweave.cli.loader_cli import load_command
+from src.metaweave.cli.dim_config_cli import dim_config_command
 from src.metaweave.utils.logger import setup_metaweave_logging
 
 
@@ -52,6 +53,7 @@ def cli(debug: bool, log_config: Optional[str]):
 # 注册子命令
 cli.add_command(metadata_command)
 cli.add_command(load_command)
+cli.add_command(dim_config_command)
 
 
 if __name__ == "__main__":

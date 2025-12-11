@@ -19,9 +19,9 @@ logger = logging.getLogger("metaweave.cli")
     "--type",
     "-t",
     "load_type",
-    type=click.Choice(["cql", "md", "dim", "sql"], case_sensitive=False),
+    type=click.Choice(["cql", "md", "dim", "dim_value", "sql"], case_sensitive=False),
     required=True,
-    help="加载类型：cql(Neo4j CQL) / md(Markdown) / dim(维表数据) / sql(样例SQL)"
+    help="加载类型：cql(Neo4j) / md(Markdown) / dim_value(维表值) / sql(样例SQL)"
 )
 @click.option(
     "--config",
@@ -114,13 +114,11 @@ def load_command(load_type: str, config: str, clean: bool, debug: bool):
         click.echo("=" * 60)
         click.echo("")
 
-        # 特殊处理 CQLLoader（支持 clean 参数）
-        if load_type == "cql":
-            # 直接调用 load() 方法，而不是 execute()
+        # 特殊处理支持 clean 参数的加载器
+        if load_type in {"cql", "dim", "dim_value"}:
             if not loader.validate():
                 click.echo("❌ 验证失败", err=True)
                 raise click.Abort()
-
             result = loader.load(clean=clean)
         else:
             result = loader.execute()

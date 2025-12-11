@@ -190,7 +190,7 @@ embedding:
   active: qwen                    # 可选值: qwen（预留扩展其他 provider）
 
   # 批量处理和重试配置
-  batch_size: 16                  # 预留：批量请求大小
+  batch_size: 10                  # Qwen API 限制：批量请求大小不能超过 10
   max_retries: 3                  # API 调用失败时的最大重试次数
   timeout: 30                     # 请求超时（秒）
 
@@ -202,6 +202,30 @@ embedding:
       api_key: ${DASHSCOPE_API_KEY}
       api_base: ${DASHSCOPE_BASE_URI}   # 复用系统已有 DashScope 地址
       dimensions: 1024                  # 模型输出维度（用于预分配与校验）
+
+# 向量数据库配置
+vector_database:
+  # 当前激活的向量数据库类型
+  active: milvus                    # 可选值: milvus | pgvector
+
+  # 各向量数据库提供商配置
+  providers:
+    # Milvus 配置
+    milvus:
+      host: ${MILVUS_HOST:localhost}
+      port: ${MILVUS_PORT:19530}
+      database: ${MILVUS_DATABASE:nl2sql}  # 等价于 PostgreSQL 的 schema
+      user: ${MILVUS_USER:}                # 可选，开源版通常无认证
+      password: ${MILVUS_PASSWORD:}        # 可选
+
+      # 连接选项
+      timeout: 30
+      pool_size: 10
+
+    # PgVector 配置（预留）
+    pgvector:
+      use_global_config: true   # 复用 database 配置
+      schema: vectors             # 向量数据存储的 schema
 
 # 注释生成配置
 comment_generation:

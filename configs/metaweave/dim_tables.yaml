@@ -1,0 +1,18 @@
+# 维度表加载配置
+# 说明：此文件由 dim_config --generate 自动生成维表列表，需人工填写 embedding_col
+
+tables:
+  public.department:
+    embedding_col: dept_name
+  public.dim_company:
+    embedding_col: company_name
+  public.dim_product_type:
+    embedding_col: product_type_name
+  public.dim_region:
+    embedding_col: [region_name, city_name, province_name]
+  public.dim_store:
+    embedding_col: store_name
+  public.employee:
+    embedding_col: emp_name
+  public.fault_catalog:
+    embedding_col: fault_name

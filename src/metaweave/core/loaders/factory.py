@@ -65,8 +65,12 @@ def _register_builtin_loaders():
     """注册内置的加载器类型"""
     # 延迟导入，避免循环依赖
     from src.metaweave.core.loaders.cql_loader import CQLLoader
+    from src.metaweave.core.loaders.dim_value_loader import DimValueLoader
 
     LoaderFactory.register("cql", CQLLoader)
+    # dim 与 dim_value 均指向维表值加载器
+    LoaderFactory.register("dim", DimValueLoader)
+    LoaderFactory.register("dim_value", DimValueLoader)
 
     # 未来扩展
     # from src.metaweave.core.loaders.md_loader import MDLoader
