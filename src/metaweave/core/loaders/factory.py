@@ -66,11 +66,13 @@ def _register_builtin_loaders():
     # 延迟导入，避免循环依赖
     from src.metaweave.core.loaders.cql_loader import CQLLoader
     from src.metaweave.core.loaders.dim_value_loader import DimValueLoader
+    from src.metaweave.core.loaders.table_schema_loader import TableSchemaLoader
 
     LoaderFactory.register("cql", CQLLoader)
     # dim 与 dim_value 均指向维表值加载器
     LoaderFactory.register("dim", DimValueLoader)
     LoaderFactory.register("dim_value", DimValueLoader)
+    LoaderFactory.register("table_schema", TableSchemaLoader)
 
     # 未来扩展
     # from src.metaweave.core.loaders.md_loader import MDLoader

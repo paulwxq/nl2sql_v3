@@ -67,6 +67,33 @@ embedding:
   cache_ttl: 3600                    # 缓存过期时间（秒）
 
 # ------------------------------------------------------------------------------
+# 向量数据库配置（用于 SQL 生成子图的向量检索）
+# ------------------------------------------------------------------------------
+vector_database:
+  # 当前激活的向量数据库类型
+  active: pgvector                   # 可选值: pgvector | milvus
+
+  # 提供商配置
+  providers:
+    # PgVector 配置（复用 database 配置）
+    pgvector:
+      use_global_config: true        # 使用全局 database 配置
+      schema: system                 # 向量数据存储的 schema
+
+    # Milvus 配置
+    milvus:
+      host: ${MILVUS_HOST:localhost}
+      port: ${MILVUS_PORT:19530}
+      database: ${MILVUS_DATABASE:nl2sql}  # Milvus database（等价于 PostgreSQL 的 schema）
+      user: ${MILVUS_USER:}          # 可选，开源版通常无认证
+      password: ${MILVUS_PASSWORD:}  # 可选
+      alias: default                 # 连接别名
+
+      # 连接选项
+      timeout: 30                    # 连接超时（秒）
+      shards_num: 2                  # Collection 分片数
+
+# ------------------------------------------------------------------------------
 # SQL 生成子图配置
 # ------------------------------------------------------------------------------
 sql_generation:

@@ -1,4 +1,4 @@
-# 58_table_schema_embedding 加载到向量数据库的概要设计
+# 58_table_schema_embeddings 加载到向量数据库的概要设计
 
 ## 1. 需求概述
 
@@ -8,7 +8,7 @@
 - 从 Markdown 文件读取表和字段的完整描述
 - 从 JSON_LLM 文件提取表分类和时间列信息
   - **时间列识别**：使用关键词匹配（大小写不敏感），覆盖主流数据库的所有时间类型变体（如 `timestamp without time zone`、`datetime2`、`smalldatetime` 等）
-- 将表和字段信息向量化后存储到 Milvus 的 `table_schema_embedding` Collection
+- 将表和字段信息向量化后存储到 Milvus 的 `table_schema_embeddings` Collection
 - 支持清空重建和增量更新两种模式（使用 upsert 避免重复数据）
 
 **与 57 号需求的关系：**
@@ -92,12 +92,12 @@ class TableSchemaLoader(BaseLoader):
     """表结构加载器
 
     从 Markdown 和 JSON_LLM 文件读取表结构信息，
-    调用 Embedding 模型向量化后，加载到 Milvus 的 table_schema_embedding Collection。
+    调用 Embedding 模型向量化后，加载到 Milvus 的 table_schema_embeddings Collection。
 
     配置策略：复用 metadata_config.yaml 的 vector_database 和 embedding 配置
     """
 
-    COLLECTION_NAME = "table_schema_embedding"
+    COLLECTION_NAME = "table_schema_embeddings"
 
     def __init__(self, config: Dict[str, Any]):
         """初始化加载器
@@ -636,7 +636,7 @@ def upsert_batch(
 
 ### 5.1 Milvus Collection Schema
 
-**Collection 名称：** `table_schema_embedding`
+**Collection 名称：** `table_schema_embeddings`
 
 **字段定义：**
 
@@ -899,7 +899,7 @@ INFO  | 开始加载表结构到 Milvus
 INFO  | 读取配置: md_directory=output/metaweave/metadata/md (13 个文件)
 INFO  | 读取配置: json_llm_directory=output/metaweave/metadata/json_llm
 INFO  | 连接 Milvus: localhost:19530/nl2sql
-INFO  | 确保 Collection 存在: table_schema_embedding
+INFO  | 确保 Collection 存在: table_schema_embeddings
 INFO  | [1/13] 加载表: public.dim_company
 INFO  |   - 读取 MD 文件: public.dim_company.md
 INFO  |   - 读取 JSON_LLM: public.dim_company.json
@@ -1065,7 +1065,7 @@ def test_table_schema_loader_clean_mode():
 | 维度 | 57 号（dim_value） | 58 号（table_schema） |
 |------|-------------------|---------------------|
 | **数据来源** | PostgreSQL 表数据 | MD + JSON_LLM 文件 |
-| **Collection** | `dim_value_embeddings` | `table_schema_embedding` |
+| **Collection** | `dim_value_embeddings` | `table_schema_embeddings` |
 | **对象类型** | 单一类型（维度值） | 两种类型（Table + Column） |
 | **主键设计** | auto_id=True（自增） | object_id 作为主键（支持 upsert） |
 | **向量化内容** | 维度值文本（如 "上海"） | 表描述或列注释 |

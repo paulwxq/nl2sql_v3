@@ -121,15 +121,43 @@ class MilvusClient(BaseVectorClient):
             return 0
 
         collection = Collection(collection_name, using=self.alias)
-        # 将字典列表转换为列式数据
-        fields = ["table_name", "col_name", "col_value", "embedding", "update_ts"]
-        columns: Dict[str, List[Any]] = {f: [] for f in fields}
+        # 按 schema 顺序构建列式数据，通用实现
+        field_names = [f.name for f in collection.schema.fields]
+        columns: Dict[str, List[Any]] = {f: [] for f in field_names}
         for row in data:
-            for f in fields:
-                columns[f].append(row[f])
+            for f in field_names:
+                columns[f].append(row.get(f))
 
-        entities = [columns[f] for f in fields]
+        entities = [columns[f] for f in field_names]
         mr = collection.insert(entities)
+        collection.flush()
+        return len(mr.primary_keys) if mr and getattr(mr, "primary_keys", None) else len(data)
+
+    def upsert_batch(
+        self,
+        collection_name: str,
+        data: List[Dict[str, Any]],
+    ) -> int:
+        """批量 Upsert 数据到 Milvus Collection。
+
+        适用于 object_id 作为主键、auto_id=False 的场景。
+        """
+        *_, Collection, _, _ = _lazy_import_milvus()
+        if not data:
+            return 0
+
+        collection = Collection(collection_name, using=self.alias)
+
+        # 按 Collection 的 schema 顺序构建列式数据，避免字段顺序不一致
+        field_names = [f.name for f in collection.schema.fields]
+        columns: Dict[str, List[Any]] = {f: [] for f in field_names}
+
+        for row in data:
+            for f in field_names:
+                columns[f].append(row.get(f))
+
+        entities = [columns[f] for f in field_names]
+        mr = collection.upsert(entities)
         collection.flush()
         return len(mr.primary_keys) if mr and getattr(mr, "primary_keys", None) else len(data)
 

@@ -87,6 +87,24 @@ dim_loader:
     # truncate_long_text: true    # 截断超长文本（默认 true）
     # max_text_length: 1024       # 最大文本长度（默认 1024）
 
+# ---------------------------------------------------------------------
+# Table Schema 加载器配置 (Step 7.x)
+# ---------------------------------------------------------------------
+# 功能：将表和字段的 Markdown/JSON_LLM 信息加载到 Milvus
+# ---------------------------------------------------------------------
+
+table_schema_loader:
+  # 输入目录（相对于项目根目录）
+  md_directory: "output/metaweave/metadata/md"
+  json_llm_directory: "output/metaweave/metadata/json_llm"
+
+  # 加载选项（可选，未配置时使用默认值）
+  options:
+    batch_size: 50
+    # max_tables: 0              # 0=不限制
+    # include_columns: true      # 是否加载列
+    # skip_empty_desc: true      # 跳过无描述对象
+
 
 # ---------------------------------------------------------------------
 # SQL 加载器配置 (Step 7.4) - 未来实现

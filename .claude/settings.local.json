@@ -27,7 +27,8 @@
       "Bash(wc:*)",
       "Bash(rm:*)",
       "Bash(grep:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(timeout 10 python:*)"
     ],
     "deny": [],
     "ask": []
