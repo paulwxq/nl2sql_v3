@@ -76,8 +76,10 @@
 - **Cosine distance = 1 - cosine similarity**（距离越小，相似度越高）
 - distance 理论范围：0 到 2（0 表示完全相同，2 表示完全相反）
 - 转换公式（原始相似度）：**`raw_similarity = 1.0 - distance`**（cosine similarity，理论范围 -1 到 1）
-- **工程约定（对外 score 范围）**：**`similarity = clamp(raw_similarity, 0.0, 1.0)`**，用于阈值过滤与展示（避免负值影响阈值语义/校验）
-- 阈值过滤：`similarity >= threshold`（threshold 约定为 0 到 1，与现有配置保持一致）
+- **阈值过滤顺序（重要）**：
+  1. **先用 raw_similarity 做阈值过滤**：`raw_similarity >= threshold`（保持与 PgVector 语义一致）
+  2. **再 clamp 用于返回值**：`similarity = clamp(raw_similarity, 0.0, 1.0)`（数值规范化）
+- 这样当 threshold=0 时，负相似度（如 -0.2）会被正确排除，而不是 clamp 成 0 后误通过
 
 ### 1.4 字段映射关系
 
@@ -99,7 +101,7 @@
 | `grain_hint` | ❌ (不存在) | **差异：Milvus 无此字段** |
 | `time_col_hint` | `time_col_hint` | 时间列提示 |
 | `table_category` | `table_category` | 表分类（fact/dimension/bridge） |
-| `embedding` | `embedding` | 1024维向量 |
+| `embedding` | `embedding` | 向量（维度取决于 embedding 模型，见下方约束） |
 | `updated_at` | `updated_at` | 更新时间戳 |
 | `lang` | ❌ | Milvus 不需要 |
 | `boost` | ❌ | Milvus 不需要 |
@@ -109,6 +111,7 @@
 - ✅ Milvus **缺少 `grain_hint`** 字段
 - ✅ 解决方案：在适配器中返回 `None`
 - ℹ️ **影响说明**：当前 SQL 生成子图虽然读取该字段，但实际未在提示词中使用，因此缺失不影响 SQL 生成质量
+- ℹ️ **设计说明**：虽然当前不使用 `grain_hint`，但为保持适配器接口一致性，`MilvusSearchAdapter` 仍在返回结构中包含此字段并统一返回 `None`。这样上层代码无需判断当前使用的是哪个适配器，简化了调用逻辑
 
 #### 维度值向量映射
 
@@ -152,9 +155,12 @@
 
 ### 2.1 新增配置：`src/configs/config.yaml`
 
-**重要：** SQL 生成子图模块的配置统一在 `src/configs/config.yaml` 中管理，不访问 `configs/metaweave/` 目录（那是数据加载模块的配置）。
+**重要：配置分层策略**
+- **连接配置**（host/port/database 等）：统一在 `src/configs/config.yaml` 的 `vector_database` 段管理
+- **检索参数**（metric_type/ef 等）：在 `sql_generation_subgraph.yaml` 的 `schema_retrieval.milvus_search_params` 管理
+- **运行时隔离**：NL2SQL 运行时不读取 `configs/metaweave/` 目录（索引由 Loader 创建/维护，当前实现固定 HNSW+COSINE，搜索参数需与其保持一致）
 
-在系统级配置文件 `src/configs/config.yaml` 中新增 `vector_database` 配置段（已添加）：
+在系统级配置文件 `src/configs/config.yaml` 中新增 `vector_database` 配置段：
 
 ```yaml
 # ==============================================================================
@@ -189,35 +195,9 @@ vector_database:
       timeout: 30                    # 连接超时（秒）
       shards_num: 2                  # Collection 分片数
 
-      # 检索参数（可选）
-      # - 本方案默认绑定 57/58 的索引：HNSW + COSINE（因此 params 使用 ef）
-      # - 若线上索引类型不是 HNSW，需要同步调整 loaders 与此处 params（例如 IVF 用 nprobe）
-      search_params:
-        metric_type: COSINE
-        params:
-          ef: 100                    # HNSW 搜索参数：越大召回越高，延迟越高（建议先配置化）
-
-# ------------------------------------------------------------------------------
-# Schema 检索配置（现有配置，需调整注释）
-# ------------------------------------------------------------------------------
-schema_retrieval:
-  # 向量检索配置
-  topk_tables: 10                    # 表向量检索 Top-K
-  topk_columns: 10                   # 列向量检索 Top-K
-  similarity_threshold: 0.45         # 相似度阈值（0.0-1.0）
-
-  # 维度值检索配置
-  dim_index_topk: 3                  # 维度值检索 Top-K
-  dim_value_min_score: 0.4           # 维度值匹配最小分数
-
-  # 历史 SQL 检索配置
-  sql_embedding_top_k: 3             # 历史 SQL 相似案例数量
-  sql_similarity_threshold: 0.6      # SQL 相似度阈值
-
-  # 注意：当使用 Milvus 时，暂不支持 sql_embedding 检索
-  # 系统会自动降级为空结果，不影响 SQL 生成
-
-  # ... 其他现有配置保持不变 ...
+      # ⚠️ 搜索参数（search_params）不在此处配置
+      # 搜索参数仅影响 SQL 生成子图，已移至 sql_generation_subgraph.yaml
+      # 见：schema_retrieval.milvus_search_params
 ```
 
 **向量数据源映射说明：**
@@ -244,8 +224,69 @@ schema_retrieval:
 - Milvus 配置独立，使用环境变量支持部署灵活性
 
 **配置文件位置：**
-- ✅ SQL 生成子图模块配置：`src/configs/config.yaml`（已添加）
+- ✅ 向量数据库连接配置：`src/configs/config.yaml`
+- ✅ 向量检索参数配置：`src/modules/sql_generation/config/sql_generation_subgraph.yaml`
 - ❌ **不要访问**：`configs/metaweave/metadata_config.yaml`（数据加载模块专用）
+
+### 2.1.1 子图配置：`sql_generation_subgraph.yaml`
+
+Milvus 向量检索参数配置在子图配置文件中（因为这些参数仅影响 SQL 生成子图的检索行为）：
+
+```yaml
+# src/modules/sql_generation/config/sql_generation_subgraph.yaml
+
+schema_retrieval:
+  # 现有配置...
+  topk_tables: 10                    # 表向量检索 Top-K
+  topk_columns: 10                   # 列向量检索 Top-K
+  similarity_threshold: 0.45         # 相似度阈值（0.0-1.0）
+
+  # 维度值检索配置
+  dim_index_topk: 3                  # 维度值检索 Top-K
+  dim_value_min_score: 0.4           # 维度值匹配最小分数
+
+  # 历史 SQL 检索配置
+  sql_embedding_top_k: 3             # 历史 SQL 相似案例数量
+  sql_similarity_threshold: 0.6      # SQL 相似度阈值
+  # 注意：当使用 Milvus 时，暂不支持 sql_embedding 检索
+  # 系统会自动降级为空结果，不影响 SQL 生成
+
+  # --------------------------------------------------------------------------
+  # Milvus 向量检索参数（仅当 vector_database.active=milvus 时生效）
+  # --------------------------------------------------------------------------
+  # 当前默认：HNSW + COSINE（与 MetaWeave Loader 创建的索引一致）
+  # - 索引由 Loader 创建，当前实现固定 HNSW + COSINE（见 57/58 文档或 Loader 代码）
+  # - 搜索参数必须与索引类型匹配，否则会检索失败
+  # - NL2SQL 运行时不读取 Loader 配置
+  # 
+  # 【未来扩展】如需支持 IVF 索引，需同时修改：
+  # - MetaWeave Loader 代码中的 index_params
+  # - 此处 params 改为 nprobe（IVF 参数）
+  # --------------------------------------------------------------------------
+  milvus_search_params:
+    metric_type: COSINE              # 必须与索引的 metric_type 一致
+    params:
+      ef: 100                        # HNSW 参数：越大召回越高，延迟越高
+```
+
+**配置分层说明：**
+
+| 配置项 | 配置文件 | 说明 |
+|-------|---------|------|
+| `vector_database.active` | `config.yaml` | 全局：选择使用哪个向量数据库 |
+| `vector_database.providers.milvus.*` | `config.yaml` | 全局：Milvus 连接参数（host/port/database 等） |
+| `schema_retrieval.milvus_search_params` | `sql_generation_subgraph.yaml` | 子图：Milvus 检索参数（metric_type/ef 等） |
+
+**命名约定：**
+- **配置键**：固定使用 `milvus_search_params`（在 yaml 文件中）
+- **代码变量**：可使用简称 `search_params`（在 Python 代码中）
+- 示例：`milvus_search_params = config.get("milvus_search_params")` → 变量名 `search_params`
+
+**📝 实施提醒：配置文件注释同步**
+
+实施时需要在实际配置文件 `sql_generation_subgraph.yaml` 中添加以下注释（方便运维人员理解）：
+- 在 `sql_embedding_top_k` 配置项下方添加：`# 注意：当使用 Milvus 时，暂不支持 sql_embedding 检索，系统会自动降级为空结果`
+- 新增 `milvus_search_params` 配置段及其说明注释
 
 **⚠️ 配置独立性说明：**
 - NL2SQL 模块和 MetaWeave 数据加载模块各自维护独立的 `vector_database` 配置
@@ -258,39 +299,27 @@ schema_retrieval:
 ### 2.2 配置读取逻辑
 
 ```python
-# ✅ 方案A：vector_database 由全局配置提供（src/configs/config.yaml）
-# SchemaRetriever 入参 config 仍然是子图配置（sql_generation_subgraph.yaml），仅用于读取 schema_retrieval 等子图参数。
+# ✅ 推荐方式：通过工厂函数创建适配器（统一入口）
+# SchemaRetriever 入参 config 是子图配置（sql_generation_subgraph.yaml）
 def __init__(self, config: Dict[str, Any] = None):
     self.config = config or {}
 
-    # 从全局配置读取向量数据库配置（不依赖子图配置传入）
-    from src.services.config_loader import get_config
-    vector_db_config = get_config().get("vector_database")
-
-    # ⚠️ 配置缺失检查：必须明确指定向量数据库类型
-    if not vector_db_config:
-        raise ValueError(
-            "缺少 vector_database 配置，请在 src/configs/config.yaml 中配置 "
-            "vector_database.active (pgvector 或 milvus)"
-        )
-
-    self.vector_db_type = vector_db_config.get("active")
-    if not self.vector_db_type:
-        raise ValueError(
-            "缺少 vector_database.active 配置，请明确指定使用 pgvector 或 milvus"
-        )
-
-    # 根据配置创建适配器
-    if self.vector_db_type == "milvus":
-        self.vector_client = MilvusAdapter(vector_db_config)
-    elif self.vector_db_type == "pgvector":
-        self.vector_client = PgVectorAdapter(vector_db_config)
-    else:
-        raise ValueError(
-            f"不支持的向量数据库类型: {self.vector_db_type}，"
-            f"仅支持 pgvector 或 milvus"
-        )
+    # 通过工厂函数创建向量检索适配器
+    # - 工厂函数内部读取全局 config.yaml 获取连接配置和 active 类型
+    # - 工厂函数从子图配置读取 milvus_search_params
+    # - 配置缺失时工厂函数会抛出明确的异常
+    from src.services.vector_adapter import create_vector_search_adapter
+    self.vector_client = create_vector_search_adapter(self.config)
 ```
+
+**⚠️ 重要：统一使用工厂函数**
+
+SchemaRetriever 必须通过 `create_vector_search_adapter()` 工厂函数创建适配器，**禁止直接实例化** `MilvusSearchAdapter` 或 `PgVectorSearchAdapter`。
+
+理由：
+- 工厂函数封装了适配器选择逻辑和配置读取
+- 保持单一入口，便于维护和测试
+- 配置校验逻辑集中管理
 
 **配置加载路径：**
 ```python
@@ -298,12 +327,14 @@ def __init__(self, config: Dict[str, Any] = None):
 from src.services.config_loader import load_subgraph_config
 
 def schema_retrieval_node(state: SQLGenerationState):
-    # 仅加载子图配置（sql_generation_subgraph.yaml），不包含全局 config.yaml
+    # 加载子图配置（sql_generation_subgraph.yaml）
+    # 注意：load_subgraph_config 内部会先读取全局 config.yaml 获取子图配置路径，
+    #       但返回的 dict 仅包含子图配置内容，不包含全局配置
     config = load_subgraph_config("sql_generation")
 
     # 初始化 SchemaRetriever：
     # - 子图参数：从 config（子图配置）读取
-    # - 向量数据库参数：SchemaRetriever 内部从全局 src/configs/config.yaml 读取 vector_database
+    # - 向量数据库连接：SchemaRetriever 内部单独调用 get_config() 读取全局 vector_database
     retriever = SchemaRetriever(config)
 
     # 后续所有向量数据库操作通过 retriever.vector_client 完成
@@ -314,6 +345,11 @@ def schema_retrieval_node(state: SQLGenerationState):
 
 改造后的 `SchemaRetriever` 类结构：
 ```python
+from src.services.db.pg_client import get_pg_client
+from src.services.db.neo4j_client import get_neo4j_client
+from src.services.vector_adapter import create_vector_search_adapter  # 新增
+
+
 class SchemaRetriever:
     def __init__(self, config: Dict[str, Any] = None):
         # 业务数据库客户端（仍然保留，用于执行生成的 SQL、验证结果等）
@@ -322,8 +358,9 @@ class SchemaRetriever:
         # 图数据库客户端（用于 JOIN 路径查询）
         self.neo4j_client = get_neo4j_client()
 
-        # 向量数据库客户端（通过适配器访问）
-        self.vector_client = create_vector_adapter(config)  # 新增
+        # 向量数据库客户端（通过工厂函数创建）
+        # config 是子图配置，包含 schema_retrieval.milvus_search_params
+        self.vector_client = create_vector_search_adapter(config)  # 新增
 
     def retrieve(self, query: str, ...):
         # ✅ 正确：通过适配器访问向量数据库（包括向量检索和精确查询）
@@ -391,7 +428,7 @@ class SchemaRetriever:
                │ 依赖
                ▼
 ┌──────────────────────────────────────────┐
-│     BaseVectorAdapter (抽象基类)         │
+│   BaseVectorSearchAdapter (抽象基类)     │
 │  - search_tables(embedding, top_k)       │
 │  - search_columns(embedding, top_k)      │
 │  - search_dim_values(query, top_k)       │
@@ -403,7 +440,7 @@ class SchemaRetriever:
       ▼                  ▼
 ┌────────────┐    ┌──────────────┐
 │ PgVector   │    │   Milvus     │
-│  Adapter   │    │   Adapter    │
+│SearchAdapter│   │SearchAdapter │
 └────────────┘    └──────────────┘
       │                  │
       ▼                  ▼
@@ -413,9 +450,19 @@ class SchemaRetriever:
 └────────────┘    └──────────────┘
 ```
 
+**命名约定说明：**
+- `BaseVectorSearchAdapter`：向量**检索**适配器基类（本方案新增，用于 NL2SQL 查询阶段）
+- `BaseVectorClient`：向量**加载**客户端基类（MetaWeave 已有，用于数据写入阶段）
+- 两者用途不同，互不冲突
+
 ### 3.2 统一返回格式
 
-所有适配器方法返回统一的数据格式：
+所有适配器方法返回统一的数据格式。
+
+**字段约定：**
+- **核心字段**：下方列出的字段为必有字段（除特别标注"可选"外）
+- **透传字段**：PgVector 适配器可能透传额外字段（如 `lang`），这些字段不参与提示词构建，下游代码应忽略
+- **设计原则**：适配器不做字段裁剪，但调用方只依赖核心字段
 
 #### `search_tables()` 返回格式
 
@@ -427,6 +474,7 @@ class SchemaRetriever:
         "time_col_hint": "order_date,created_at",
         "table_category": "事实表",
         "similarity": 0.85
+        # 注意：PgVector 可能透传 lang 等额外字段，下游代码应忽略
     },
     # ...
 ]
@@ -439,19 +487,24 @@ class SchemaRetriever:
     {
         "object_id": "public.fact_sales.amount",
         "parent_id": "public.fact_sales",
-        "table_category": "事实表",          # 列的父表分类
+        "table_category": "事实表",          # 列的父表分类（可选，允许为空）
         "similarity": 0.78
     },
     # ...
 ]
+
+# 注意：table_category 对 columns 允许为空字符串
+# - PgVector：通过 LEFT JOIN 从父表获取
+# - Milvus：column 记录本身可能不含此字段，返回空字符串
+# - 下游逻辑（SchemaRetriever）实际通过 parent_id 从 tables 结果查找分类，不依赖此字段
 ```
 
 #### `search_dim_values()` 返回格式
 
 ```python
+# 适配器返回格式（不含 query_value）
 [
     {
-        "query_value": "京东便利店",        # 用户查询的原始值
         "dim_table": "public.dim_store",    # 维表全名
         "dim_col": "store_name",            # 列名
         "matched_text": "京东便利店(西湖店)", # 匹配到的文本
@@ -459,6 +512,9 @@ class SchemaRetriever:
     },
     # ...
 ]
+
+# 注意：query_value 和 source_index 字段由 SchemaRetriever 
+# 通过 add_source_index_to_matches() 统一添加，适配器不负责
 ```
 
 #### `search_similar_sqls()` 返回格式
@@ -484,6 +540,28 @@ class SchemaRetriever:
 
 ### 4.1 文件变更清单
 
+**⚠️ 实施顺序（重要）：**
+
+由于 NL2SQL 代码不能直接依赖 `src/metaweave/` 下的实现（MetaWeave 模块未来会独立），必须按以下顺序实施：
+
+1. **先完成 MilvusClient 下沉（同一 PR 内完成，避免中间态不可运行）**：
+   - **复制**（非移动）`src/metaweave/services/vector_db/milvus_client.py` 到 `src/services/vector_db/milvus_client.py`
+   - **⚠️ 解耦关键**：下沉后的 `MilvusClient` 必须移除对 `BaseVectorClient`（位于 `src/metaweave/...`）的继承，否则会造成 shared 组件反向依赖 MetaWeave。解耦方式二选一：
+     - A) 不继承任何基类（推荐，NL2SQL 只需要连接能力，不需要 Loader 的写入接口）
+     - B) 同时下沉 `BaseVectorClient` 到 `src/services/vector_db/base.py`
+   - **保留旧路径兼容**：在 `src/metaweave/services/vector_db/milvus_client.py` 改为 re-export：
+     ```python
+     # 兼容 shim：保持 MetaWeave 侧引用不断
+     # ⚠️ 必须 re-export 所有被外部引用的符号
+     from src.services.vector_db.milvus_client import (  # noqa: F401
+         MilvusClient,
+         _lazy_import_milvus,
+     )
+     ```
+   - 这样 MetaWeave 侧现有 import（包括 `from ...milvus_client import MilvusClient, _lazy_import_milvus`）不会断
+2. **再开发向量检索适配器**：基于下沉后的公共 MilvusClient 开发 `MilvusSearchAdapter`
+3. **（可选）清理旧路径**：待 MetaWeave 独立后，移除兼容 shim
+
 **新增文件：**
 
 ```
@@ -491,12 +569,12 @@ src/
 └── services/
     ├── vector_db/                         # 新增：向量数据库公共客户端（NL2SQL/MetaWeave 共用）
     │   ├── __init__.py
-    │   └── milvus_client.py               # 新增：MilvusClient（从 metaweave 下沉）
-    └── vector_adapter/                    # 新增：向量适配器模块
+    │   └── milvus_client.py               # 从 metaweave 下沉（实施步骤 1）
+    └── vector_adapter/                    # 新增：向量检索适配器模块（实施步骤 2）
         ├── __init__.py                    # 新增：模块导出
-        ├── base.py                        # 新增：BaseVectorAdapter 抽象基类
-        ├── pgvector_adapter.py            # 新增：PgVector 适配器实现
-        ├── milvus_adapter.py              # 新增：Milvus 适配器实现
+        ├── base.py                        # 新增：BaseVectorSearchAdapter 抽象基类
+        ├── pgvector_adapter.py            # 新增：PgVectorSearchAdapter 实现
+        ├── milvus_adapter.py              # 新增：MilvusSearchAdapter 实现
         └── factory.py                     # 新增：适配器工厂函数
 ```
 
@@ -507,47 +585,53 @@ src/
 ├── configs/
 │   └── config.yaml                        # 修改：新增 vector_database 配置段
 │
-└── tools/
-    └── schema_retrieval/
-        └── retriever.py                   # 修改：使用适配器替换直接调用 PGClient
+├── modules/
+│   └── sql_generation/
+│       └── config/
+│           └── sql_generation_subgraph.yaml  # 修改：新增 milvus_search_params 配置段
+│
+├── tools/
+│   └── schema_retrieval/
+│       ├── retriever.py                   # 修改：使用适配器替换直接调用 PGClient（5 处）
+│       └── value_matcher.py               # 修改：无主键降级、去重键兼容、校验调整
+│
+└── metaweave/
+    └── services/
+        └── vector_db/
+            ├── __init__.py                # 修改：改为复用公共层或兼容 re-export
+            └── milvus_client.py           # 修改：改为复用公共层（原实现下沉）
 ```
 
-**受影响文件（按“必须改/必须评估/需要迁移/可能受影响”拆分）：**
-
-**必须修改（Milvus 模式不得再访问 PG 向量索引表）：**
-- `src/tools/schema_retrieval/retriever.py`（5 处写死：102、224、236、451、762；见 2.3.1）
-
-**必须修改（按本方案决策）：**
-- `src/tools/schema_retrieval/value_matcher.py`（实现无主键降级展示；Milvus dim_value 不返回 `key_col/key_value`）
+**受影响文件（需评估/可能受影响）：**
 
 **必须评估（可能无需改，但必须验证）：**
 - `src/modules/sql_generation/subgraph/nodes/sql_generation.py`（消费 `dim_value_hits` 的提示词展示效果与降级分支）
-
-**需要迁移/调整（模块解耦，方案 1）：**
-- `src/services/vector_db/milvus_client.py`（公共 MilvusClient：从 MetaWeave 下沉）
-- `src/metaweave/services/vector_db/__init__.py`（改为复用 `src/services/vector_db` 或保留兼容 re-export）
-- `src/metaweave/services/vector_db/milvus_client.py`（改为复用/兼容层；NL2SQL 不再直接依赖此路径）
 
 **可能受影响（本期不改；仅在未来补主键信息时才改）：**
 - `src/metaweave/core/loaders/dim_value_loader.py`（本方案不回填 `key_col/key_value`，保持现状）
 
 **说明：**
 - ⚠️ `vector_database` 选择与连接参数仅在 `src/configs/config.yaml` 中管理
-- ✅ `sql_generation_subgraph.yaml` 仅保留检索阈值/TopK 等参数，不包含 `vector_database`
-- ❌ **不要**在 `sql_generation_subgraph.yaml` 中添加 `vector_database` 配置
+- ✅ `sql_generation_subgraph.yaml` 包含检索阈值/TopK 等参数，以及 Milvus 搜索参数（`milvus_search_params`）
+- ❌ **不要**在 `sql_generation_subgraph.yaml` 中添加 `vector_database.active` 或连接参数
 
 ### 4.2 核心类设计
 
-#### 4.2.1 BaseVectorAdapter (base.py)
+#### 4.2.1 BaseVectorSearchAdapter (base.py)
 
 ```python
-"""向量数据库适配器基类"""
+"""向量数据库检索适配器基类
+
+命名说明：
+- BaseVectorSearchAdapter：向量检索适配器（本模块，用于 NL2SQL 查询阶段）
+- BaseVectorClient：向量加载客户端（MetaWeave 模块，用于数据写入阶段）
+"""
 
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List
 
 
-class BaseVectorAdapter(ABC):
+class BaseVectorSearchAdapter(ABC):
     """向量检索适配器基类
 
     统一 PgVector 和 Milvus 的检索接口
@@ -603,7 +687,7 @@ class BaseVectorAdapter(ABC):
             列信息列表，每个元素包含：
             - object_id: 列ID
             - parent_id: 父表ID
-            - table_category: 父表分类
+            - table_category: 父表分类（可选，允许为空字符串）
             - similarity: 相似度分数
         """
         pass
@@ -622,11 +706,14 @@ class BaseVectorAdapter(ABC):
 
         Returns:
             维度值匹配列表，每个元素包含：
-            - query_value: 查询值
             - dim_table: 维表名
             - dim_col: 列名
             - matched_text: 匹配到的文本
             - score: 相似度分数
+            
+        Note:
+            query_value 字段不由适配器返回，而是由 SchemaRetriever 
+            通过 add_source_index_to_matches() 统一添加（职责分离）。
         """
         pass
 
@@ -680,19 +767,19 @@ class BaseVectorAdapter(ABC):
         pass
 ```
 
-#### 4.2.2 PgVectorAdapter (pgvector_adapter.py)
+#### 4.2.2 PgVectorSearchAdapter (pgvector_adapter.py)
 
 ```python
-"""PgVector 适配器 - 封装现有 PGClient"""
+"""PgVector 检索适配器 - 封装现有 PGClient"""
 
 from typing import Any, Dict, List
 
 from src.services.db.pg_client import get_pg_client
-from src.services.vector_adapter.base import BaseVectorAdapter
+from src.services.vector_adapter.base import BaseVectorSearchAdapter
 
 
-class PgVectorAdapter(BaseVectorAdapter):
-    """PgVector 适配器
+class PgVectorSearchAdapter(BaseVectorSearchAdapter):
+    """PgVector 检索适配器
 
     封装现有 PGClient，保持接口一致性
     """
@@ -732,17 +819,15 @@ class PgVectorAdapter(BaseVectorAdapter):
         query_value: str,
         top_k: int = 5,
     ) -> List[Dict[str, Any]]:
-        """检索维度值（直接调用 PGClient）"""
-        results = self.pg_client.search_dim_values(
+        """检索维度值（直接调用 PGClient）
+        
+        注意：query_value 字段由 SchemaRetriever._retrieve_dim_value_hits() 
+        通过 add_source_index_to_matches() 统一添加，适配器不负责添加。
+        """
+        return self.pg_client.search_dim_values(
             query_value=query_value,
             top_k=top_k,
         )
-
-        # 添加 query_value 字段（统一格式）
-        for r in results:
-            r["query_value"] = query_value
-
-        return results
 
     def search_similar_sqls(
         self,
@@ -766,22 +851,25 @@ class PgVectorAdapter(BaseVectorAdapter):
         return self.pg_client.fetch_table_categories(table_names)
 ```
 
-#### 4.2.3 MilvusAdapter (milvus_adapter.py)
+#### 4.2.3 MilvusSearchAdapter (milvus_adapter.py)
 
 ```python
-"""Milvus 适配器 - 实现 Milvus 向量检索"""
+"""Milvus 检索适配器 - 实现 Milvus 向量检索"""
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
+# ⚠️ 注意：MilvusClient 已从 metaweave 下沉到公共层（见 4.1 节实施顺序）
+# 原路径：src/metaweave/services/vector_db/milvus_client.py
+# 新路径：src/services/vector_db/milvus_client.py
 from src.services.vector_db.milvus_client import MilvusClient, _lazy_import_milvus
-from src.services.vector_adapter.base import BaseVectorAdapter
+from src.services.vector_adapter.base import BaseVectorSearchAdapter
 from src.utils.logger import get_module_logger
 
-logger = get_module_logger("milvus_adapter")
+logger = get_module_logger("milvus_search_adapter")
 
 
-class MilvusAdapter(BaseVectorAdapter):
-    """Milvus 适配器
+class MilvusSearchAdapter(BaseVectorSearchAdapter):
+    """Milvus 检索适配器
 
     从 Milvus 的 nl2sql.table_schema_embeddings 和 nl2sql.dim_value_embeddings
     Collection 检索数据
@@ -798,11 +886,21 @@ class MilvusAdapter(BaseVectorAdapter):
     # 对应 PgVector: system.dim_value_index → Milvus: nl2sql.dim_value_embeddings
     COLLECTION_DIM_VALUE = "dim_value_embeddings"
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(
+        self,
+        config: Dict[str, Any],
+        search_params: Optional[Dict[str, Any]] = None,
+    ):
+        """初始化 Milvus 适配器
+
+        Args:
+            config: 向量数据库配置（来自 src/configs/config.yaml 的 vector_database）
+            search_params: Milvus 搜索参数（来自 sql_generation_subgraph.yaml 的
+                           schema_retrieval.milvus_search_params）
+        """
         super().__init__(config)
 
-        # 从 vector_database 配置中读取 Milvus 配置
-        # config 来自 src/configs/config.yaml 的 vector_database（包含 providers）
+        # 从 vector_database 配置中读取 Milvus 连接配置
         providers = config.get("providers", {})
         milvus_config = providers.get("milvus", {})
 
@@ -812,12 +910,30 @@ class MilvusAdapter(BaseVectorAdapter):
                 "vector_database.providers.milvus"
             )
 
-        # 保存为实例变量，供各方法复用
+        # 保存连接配置
         self.milvus_config = milvus_config
+
+        # 保存搜索参数（来自子图配置）
+        self.search_params = search_params
 
         # 初始化 Milvus 客户端
         self.milvus_client = MilvusClient(self.milvus_config)
         self.milvus_client.connect()
+
+        # 预加载 Collection 到内存（避免首次查询延迟）
+        _, _, _, _, Collection, _, _ = _lazy_import_milvus()
+        self._collection_table_schema = Collection(
+            self.COLLECTION_TABLE_SCHEMA, using=self.milvus_client.alias
+        )
+        self._collection_dim_value = Collection(
+            self.COLLECTION_DIM_VALUE, using=self.milvus_client.alias
+        )
+        # load() 将 collection 加载到内存，search/query 前必须调用
+        self._collection_table_schema.load()
+        self._collection_dim_value.load()
+
+        # ⚠️ 向量维度校验（确保 embedding 模型一致）
+        self._validate_embedding_dimension()
 
         logger.info(
             "Milvus 适配器初始化成功: %s:%s/%s",
@@ -826,9 +942,40 @@ class MilvusAdapter(BaseVectorAdapter):
             self.milvus_config.get("database"),
         )
 
+    def _validate_embedding_dimension(self):
+        """校验向量维度一致性（确保 embedding 模型与 Milvus 数据一致）。
+        
+        ⚠️ 风险应对：如果维度不匹配，检索会静默返回错误结果或直接报错。
+        """
+        from src.services.embedding.embedding_client import get_embedding_client
+        
+        embedding_client = get_embedding_client()
+        # 假设 embedding_client 有 get_dimensions() 方法，否则需要从配置读取
+        expected_dim = getattr(embedding_client, 'dimensions', None)
+        if expected_dim is None:
+            logger.warning("无法获取 embedding 维度，跳过维度校验")
+            return
+        
+        # 从 Milvus schema 读取实际维度
+        for field in self._collection_table_schema.schema.fields:
+            if field.name == "embedding":
+                actual_dim = field.params.get("dim")
+                if actual_dim and expected_dim != actual_dim:
+                    raise ValueError(
+                        f"向量维度不匹配: embedding_client={expected_dim}, "
+                        f"milvus={actual_dim}. 请检查 embedding 模型配置或重新加载数据"
+                    )
+                break
+        
+        logger.info("向量维度校验通过: %d 维", expected_dim)
+
     def _get_search_params(self) -> Dict[str, Any]:
-        """读取检索参数（默认绑定 HNSW + COSINE；支持配置覆盖）。"""
-        return self.milvus_config.get("search_params") or {
+        """读取检索参数（从子图配置传入，或使用默认值）。
+        
+        搜索参数来源：sql_generation_subgraph.yaml 的 schema_retrieval.milvus_search_params
+        默认值：HNSW + COSINE（ef=100）
+        """
+        return self.search_params or {
             "metric_type": "COSINE",
             "params": {"ef": 100},  # HNSW 搜索参数（IVF 等索引需用各自参数）
         }
@@ -839,14 +986,10 @@ class MilvusAdapter(BaseVectorAdapter):
         top_k: int = 10,
         similarity_threshold: float = 0.0,
     ) -> List[Dict[str, Any]]:
-        """从 Milvus 检索表"""
-        _, _, _, _, Collection, _, _ = _lazy_import_milvus()
-
-        collection = Collection(self.COLLECTION_TABLE_SCHEMA, using=self.milvus_client.alias)
-
+        """从 Milvus 检索表（使用预加载的 collection）"""
         search_params = self._get_search_params()
 
-        results = collection.search(
+        results = self._collection_table_schema.search(
             data=[embedding],
             anns_field="embedding",
             param=search_params,
@@ -865,14 +1008,16 @@ class MilvusAdapter(BaseVectorAdapter):
         tables = []
         for hit in results[0]:
             # ⚠️ 关键：Milvus COSINE distance 转换为 similarity
-            # raw_similarity = 1 - distance  (cosine similarity，理论范围 [-1, 1])
             distance = float(hit.distance)
-            raw_similarity = 1.0 - distance
-            similarity = max(0.0, min(1.0, raw_similarity))  # 工程约定：clamp 到 [0, 1]
+            raw_similarity = 1.0 - distance  # cosine similarity，理论范围 [-1, 1]
 
-            # 过滤：与 PgVector 一致，使用 >= threshold
-            if similarity < similarity_threshold:
+            # ⚠️ 先用 raw_similarity 做阈值过滤（保持与 PgVector 语义一致）
+            # 这样负相似度（如 -0.2）在 threshold=0 时会被正确排除
+            if raw_similarity < similarity_threshold:
                 continue
+
+            # 再 clamp 用于返回值（数值规范化）
+            similarity = max(0.0, min(1.0, raw_similarity))
 
             tables.append(
                 {
@@ -880,7 +1025,7 @@ class MilvusAdapter(BaseVectorAdapter):
                     "grain_hint": None,  # Milvus 无此字段
                     "time_col_hint": hit.entity.get("time_col_hint"),
                     "table_category": hit.entity.get("table_category", ""),
-                    "similarity": similarity,  # 返回相似度（0-1，clamp 后），与 PgVector 阈值语义一致
+                    "similarity": similarity,  # 返回 clamp 后的值（0-1）
                 }
             )
 
@@ -892,14 +1037,10 @@ class MilvusAdapter(BaseVectorAdapter):
         top_k: int = 10,
         similarity_threshold: float = 0.0,
     ) -> List[Dict[str, Any]]:
-        """从 Milvus 检索列"""
-        _, _, _, _, Collection, _, _ = _lazy_import_milvus()
-
-        collection = Collection(self.COLLECTION_TABLE_SCHEMA, using=self.milvus_client.alias)
-
+        """从 Milvus 检索列（使用预加载的 collection）"""
         search_params = self._get_search_params()
 
-        results = collection.search(
+        results = self._collection_table_schema.search(
             data=[embedding],
             anns_field="embedding",
             param=search_params,
@@ -918,17 +1059,22 @@ class MilvusAdapter(BaseVectorAdapter):
             # ⚠️ COSINE distance 转换为 similarity
             distance = float(hit.distance)
             raw_similarity = 1.0 - distance  # cosine similarity，理论范围 [-1, 1]
-            similarity = max(0.0, min(1.0, raw_similarity))  # 工程约定：clamp 到 [0, 1]
 
-            if similarity < similarity_threshold:
+            # ⚠️ 先用 raw_similarity 做阈值过滤（保持与 PgVector 语义一致）
+            if raw_similarity < similarity_threshold:
                 continue
+
+            # 再 clamp 用于返回值
+            similarity = max(0.0, min(1.0, raw_similarity))
 
             columns.append(
                 {
                     "object_id": hit.entity.get("object_id"),
                     "parent_id": hit.entity.get("parent_id"),
-                    "table_category": hit.entity.get("table_category", ""),
-                    "similarity": similarity,  # 返回相似度（0-1，clamp 后）
+                    # table_category 允许为空（column 记录可能不含此字段）
+                    # 下游 SchemaRetriever 通过 parent_id 从 tables 结果查找分类
+                    "table_category": hit.entity.get("table_category") or "",
+                    "similarity": similarity,  # 返回 clamp 后的值（0-1）
                 }
             )
 
@@ -939,20 +1085,16 @@ class MilvusAdapter(BaseVectorAdapter):
         query_value: str,
         top_k: int = 5,
     ) -> List[Dict[str, Any]]:
-        """从 Milvus 检索维度值（使用向量相似度）"""
+        """从 Milvus 检索维度值（使用预加载的 collection）"""
         # 先对查询值向量化
         from src.services.embedding.embedding_client import get_embedding_client
         embedding_client = get_embedding_client()
         query_embedding = embedding_client.embed_query(query_value)
 
-        _, _, _, _, Collection, _, _ = _lazy_import_milvus()
-
-        collection = Collection(self.COLLECTION_DIM_VALUE, using=self.milvus_client.alias)
-
         # 与表/列一致：默认绑定 HNSW + COSINE；建议通过配置覆盖
         search_params = self._get_search_params()
 
-        results = collection.search(
+        results = self._collection_dim_value.search(
             data=[query_embedding],
             anns_field="embedding",
             param=search_params,
@@ -970,15 +1112,16 @@ class MilvusAdapter(BaseVectorAdapter):
             # ⚠️ COSINE distance 转换为 score（相似度）
             distance = float(hit.distance)
             raw_score = 1.0 - distance  # cosine similarity，理论范围 [-1, 1]
-            score = max(0.0, min(1.0, raw_score))  # 工程约定：clamp 到 [0, 1]
+            # clamp 用于返回值规范化（dim_values 无阈值过滤，由下游处理）
+            score = max(0.0, min(1.0, raw_score))
 
             matches.append(
                 {
-                    "query_value": query_value,
+                    # 注意：query_value 不在此添加，由 SchemaRetriever 统一 enrichment
                     "dim_table": hit.entity.get("table_name"),
                     "dim_col": hit.entity.get("col_name"),
                     "matched_text": hit.entity.get("col_value"),
-                    "score": score,  # 相似度（0-1，clamp 后），与 PgVector 阈值语义一致
+                    "score": score,  # 返回 clamp 后的值（0-1）
                 }
             )
 
@@ -1068,22 +1211,95 @@ class MilvusAdapter(BaseVectorAdapter):
         return categories
 ```
 
+#### 4.2.4 适配器工厂函数 (factory.py)
+
+```python
+"""向量检索适配器工厂函数"""
+
+from typing import Any, Dict, Optional
+
+from src.services.vector_adapter.base import BaseVectorSearchAdapter
+from src.services.vector_adapter.pgvector_adapter import PgVectorSearchAdapter
+from src.services.vector_adapter.milvus_adapter import MilvusSearchAdapter
+
+
+def create_vector_search_adapter(
+    subgraph_config: Optional[Dict[str, Any]] = None,
+) -> BaseVectorSearchAdapter:
+    """
+    创建向量检索适配器（工厂函数）
+
+    根据全局配置中的 vector_database.active 自动选择适配器类型。
+
+    Args:
+        subgraph_config: 子图配置（sql_generation_subgraph.yaml），
+                         用于读取 schema_retrieval.milvus_search_params
+
+    Returns:
+        向量检索适配器实例（PgVectorSearchAdapter 或 MilvusSearchAdapter）
+
+    Raises:
+        ValueError: 配置缺失或向量数据库类型不支持时抛出
+
+    Example:
+        >>> from src.services.vector_adapter import create_vector_search_adapter
+        >>> adapter = create_vector_search_adapter(subgraph_config)
+        >>> tables = adapter.search_tables(embedding, top_k=10)
+    """
+    from src.services.config_loader import get_config
+
+    # 从全局配置读取向量数据库连接配置
+    vector_db_config = get_config().get("vector_database")
+
+    if not vector_db_config:
+        raise ValueError(
+            "缺少 vector_database 配置，请在 src/configs/config.yaml 中配置 "
+            "vector_database.active (pgvector 或 milvus)"
+        )
+
+    active_type = vector_db_config.get("active")
+    if not active_type:
+        raise ValueError(
+            "缺少 vector_database.active 配置，请明确指定使用 pgvector 或 milvus"
+        )
+
+    # 从子图配置读取 Milvus 搜索参数
+    subgraph_config = subgraph_config or {}
+    retrieval_config = subgraph_config.get("schema_retrieval", {})
+    milvus_search_params = retrieval_config.get("milvus_search_params")
+
+    # 根据类型创建对应适配器
+    if active_type == "milvus":
+        return MilvusSearchAdapter(
+            config=vector_db_config,
+            search_params=milvus_search_params,
+        )
+    elif active_type == "pgvector":
+        return PgVectorSearchAdapter(vector_db_config)
+    else:
+        raise ValueError(
+            f"不支持的向量数据库类型: {active_type}，仅支持 pgvector 或 milvus"
+        )
+```
+
 ---
 
 ## 5. 改造实施步骤
 
 ### 5.1 第一阶段：配置与适配器基础（优先级 P0）
 
-#### 任务 1.1：新增向量适配器模块
+#### 任务 1.1：新增向量检索适配器模块
 
 **文件：** `src/services/vector_adapter/`
 
-1. 创建 `base.py` - 定义 `BaseVectorAdapter` 抽象基类
-2. 创建 `pgvector_adapter.py` - 封装现有 PGClient
-3. 创建 `__init__.py` - 导出适配器类
+1. 创建 `base.py` - 定义 `BaseVectorSearchAdapter` 抽象基类
+2. 创建 `pgvector_adapter.py` - 实现 `PgVectorSearchAdapter`（封装现有 PGClient）
+3. 创建 `factory.py` - 实现 `create_vector_search_adapter()` 工厂函数
+4. 创建 `__init__.py` - 导出适配器类和工厂函数
 
 **验收标准：**
-- PgVectorAdapter 能够正常调用现有 PGClient 的所有方法
+- `PgVectorSearchAdapter` 能够正常调用现有 PGClient 的所有方法
+- `create_vector_search_adapter()` 能够根据配置正确创建适配器
 - 单元测试覆盖所有适配器方法
 
 #### 任务 1.2：配置文件扩展
@@ -1116,22 +1332,25 @@ class MilvusAdapter(BaseVectorAdapter):
 **⚠️ 重要：** 所有与向量数据库交互的方法都必须通过适配器调用，确保在 Milvus 模式下不会访问 PostgreSQL 的向量表。
 （现有 `retriever.py` 中表卡片/表类别/维度值/历史 SQL 仍使用 `pg_client`，需一并替换。）
 
+**⚠️ 日志/埋点规范：** 日志文本不要写死后端类型（如 "pgvector"），应使用 `self.vector_db_type` 或适配器名称动态输出，便于排查问题时区分当前使用的向量数据库。
+
 **验收标准：**
-- 使用 `active: pgvector` 配置时，能够正常调用 PgVectorAdapter
-- 使用 `active: milvus` 配置时，能够正常调用 MilvusAdapter
+- 使用 `active: pgvector` 配置时，能够正常调用 `PgVectorSearchAdapter`
+- 使用 `active: milvus` 配置时，能够正常调用 `MilvusSearchAdapter`
 - 配置缺失或无效时，抛出清晰的异常信息
 - Milvus 模式下不会访问 PostgreSQL 的 `system.sem_object_vec` 等表
+- 日志中不写死 "pgvector"，使用动态后端类型标识
 - 集成测试通过，SQL 生成结果正确
 
 ### 5.2 第二阶段：Milvus 适配器实现（优先级 P0）
 
-#### 任务 2.1：MilvusAdapter 实现
+#### 任务 2.1：MilvusSearchAdapter 实现
 
 **文件：** `src/services/vector_adapter/milvus_adapter.py`
 
 **实现方法清单：**
 
-1. 实现 `MilvusAdapter` 类，继承 `BaseVectorAdapter`
+1. 实现 `MilvusSearchAdapter` 类，继承 `BaseVectorSearchAdapter`
 2. 实现 `search_tables()` 方法 - 从 `nl2sql.table_schema_embeddings` 检索表
    - ⚠️ 必须包含 COSINE distance → similarity 转换
 3. 实现 `search_columns()` 方法 - 从 `nl2sql.table_schema_embeddings` 检索列
@@ -1146,7 +1365,7 @@ class MilvusAdapter(BaseVectorAdapter):
    - 当前版本暂不支持，预留接口供未来扩展
 
 **验收标准：**
-- 所有方法返回格式与 PgVectorAdapter 一致
+- 所有方法返回格式与 `PgVectorSearchAdapter` 一致
 - 字段缺失处理正确（`grain_hint` 返回 `None`）
 - COSINE distance 转换正确（`raw = 1.0 - distance`，并按约定 `similarity = clamp(raw, 0.0, 1.0)`）
 - 查询表达式安全（使用 `json.dumps`）
@@ -1155,17 +1374,24 @@ class MilvusAdapter(BaseVectorAdapter):
 #### 任务 2.2：字段兼容性处理
 
 **文件：**
-- `src/tools/schema_retrieval/join_planner.py`
-- `src/modules/sql_generation/subgraph/nodes/sql_generation.py`
 - `src/tools/schema_retrieval/value_matcher.py`
+- `src/modules/sql_generation/subgraph/nodes/sql_generation.py`
+
+**改造内容：**
 
 1. 提示词生成时，兼容 `grain_hint` 为 `None` 的情况
-2. 维度值匹配结果格式化：实现无主键降级展示（Milvus 不返回 `key_col/key_value`）
+2. `format_dim_value_matches_for_prompt()`：实现无主键降级展示
+3. `deduplicate_dim_hits()`：修改去重键，兼容 Milvus 无 `key_value`
+4. `validate_dim_value_match()`：移除 `key_col/key_value` 的必需校验
 
-**修改示例（无主键降级）：**
+---
+
+**修改示例 1：无主键降级展示（format_dim_value_matches_for_prompt）**
+
+**⚠️ 开发阶段说明：** 当前阶段不需要评估"降级后的提示词效果对 SQL 生成质量的影响"。降级展示仅影响提示词中维度值部分的格式，LLM 仍可根据表名/列名/匹配值生成正确的 SQL（可能使用 LIKE 匹配或直接使用匹配值）。质量影响评估待后续迭代进行。
 
 ```python
-# 原逻辑（src/tools/schema_retrieval/value_matcher.py）
+# 原逻辑（src/tools/schema_retrieval/value_matcher.py:115）
 suggested_condition = f"{m['dim_table']}.{m['key_col']}='{m['key_value']}'"
 lines.append(
     f"- '{m['query_value']}' → {suggested_condition} "
@@ -1186,9 +1412,68 @@ else:
     )
 ```
 
+---
+
+**修改示例 2：去重键兼容（deduplicate_dim_hits）**
+
+```python
+# 原逻辑（src/tools/schema_retrieval/value_matcher.py:260）
+# 问题：Milvus 不返回 key_value，导致去重键变成 (dim_table, dim_col, None)
+# 同一维表同一列的不同匹配值会被错误去重
+key = (hit.get("dim_table"), hit.get("dim_col"), hit.get("key_value"))
+
+# 修改后：优先用 key_value（PgVector），无则用 matched_text（Milvus）
+def deduplicate_dim_hits(hits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    对 dim_value_hits 进行去重与排序。
+
+    规则：
+    1) 按 (dim_table, dim_col, 去重标识) 分组，保留分数最高的元素
+       - 去重标识：优先使用 key_value（PgVector），无则用 matched_text（Milvus）
+    2) 最终按 score 降序排序
+    """
+    if not hits:
+        return []
+
+    best_by_key: Dict[tuple, Dict[str, Any]] = {}
+
+    for hit in hits:
+        # ⚠️ 兼容 PgVector 和 Milvus：优先用 key_value，无则用 matched_text
+        dedup_id = hit.get("key_value") or hit.get("matched_text")
+        key = (hit.get("dim_table"), hit.get("dim_col"), dedup_id)
+        
+        score = hit.get("score", 0.0)
+        current_best = best_by_key.get(key)
+        if current_best is None or score > current_best.get("score", 0.0):
+            best_by_key[key] = hit
+
+    # 按分数降序排序
+    deduped = list(best_by_key.values())
+    deduped.sort(key=lambda h: h.get("score", 0.0), reverse=True)
+    return deduped
+```
+
+---
+
+**修改示例 3：移除必需字段校验（validate_dim_value_match）**
+
+```python
+# 原逻辑（src/tools/schema_retrieval/value_matcher.py:229）
+# 问题：将 key_col/key_value 设为必需，与 Milvus 不返回这些字段的决策矛盾
+required_fields = ["dim_table", "dim_col", "key_col", "key_value", "matched_text", "score"]
+
+# 修改后：key_col/key_value 改为可选字段
+required_fields = ["dim_table", "dim_col", "matched_text", "score"]
+optional_fields = ["key_col", "key_value", "query_value", "source_index"]
+```
+
+---
+
 **验收标准：**
 - 使用 Milvus 时，提示词中不包含 `grain_hint`（或显示为空）
-- 维度值提示词格式正确
+- 维度值提示词格式正确（PgVector 显示主键条件，Milvus 显示降级格式）
+- 去重逻辑正确（PgVector 按 key_value 去重，Milvus 按 matched_text 去重）
+- 校验函数不再因缺少 key_col/key_value 而报错
 
 ### 5.3 第三阶段：测试与验证（优先级 P1）
 
@@ -1212,6 +1497,13 @@ else:
 1. 使用 PgVector 配置，验证 SQL 生成结果
 2. 使用 Milvus 配置，验证 SQL 生成结果
 3. ~~对比两种配置的结果差异~~（暂不实施，待 PgVector 改造完成后再进行对比）
+
+**Milvus 模式验证清单：**
+- [ ] 日志中不出现 `system.sem_object_vec` 等 PgVector 表名
+- [ ] 日志显示正确的 Milvus collection 名称（`nl2sql.table_schema_embeddings`、`nl2sql.dim_value_embeddings`）
+- [ ] 生成的 SQL 能够正确执行（与业务数据库交互正常）
+- [ ] 维度值降级提示词格式正确（无主键时显示"建议人工确认或使用 LIKE 匹配"）
+- [ ] `grain_hint` 为 `None` 不影响 SQL 生成
 
 #### 任务 3.3：端到端测试
 
@@ -1250,7 +1542,7 @@ else:
 |------|------|------|
 | **使用适配器模式** | 统一接口，易于扩展 | 增加一层抽象，但提高可维护性 |
 | **配置驱动切换** | 灵活性高，无需修改代码 | 运行时只使用一种向量数据库 |
-| **⚠️ COSINE 距离必须转换** | Milvus 返回 distance，需转换为 similarity | **关键**：`raw = 1.0 - distance`，并按约定 `similarity = clamp(raw, 0.0, 1.0)`，否则阈值过滤会错误 |
+| **⚠️ COSINE 距离必须转换** | Milvus 返回 distance，需转换为 similarity | **关键**：`raw = 1.0 - distance`；**阈值过滤必须用 raw**（`raw >= threshold`），再 clamp 用于返回值（`similarity = clamp(raw, 0.0, 1.0)`） |
 | **MilvusClient 下沉到公共层** | 与“模块可拆分”口径一致 | NL2SQL 不再直接依赖 `src/metaweave/`；MetaWeave/NL2SQL 共用 `src/services/vector_db` |
 | **grain_hint 返回 None** | Milvus 无此字段，兼容处理 | 提示词生成需兼容 |
 | **维度值不返回 key_col/key_value** | 降低加载侧耦合与成本 | 提示词侧必须实现无主键降级展示（不再拼接主键过滤条件） |
@@ -1263,7 +1555,7 @@ else:
 **原因：**
 - PgVector 使用 `1 - (embedding <=> vector)` 计算相似度（`<=>` 是 cosine 距离）
   - 结果：这是 cosine similarity（理论范围 -1 到 1）；工程上通常只关心 >=0 的部分
-  - 阈值过滤：`similarity >= threshold`
+  - 阈值过滤：`similarity >= threshold`（这里 similarity 指 raw cosine similarity，未经 clamp）
 
 - Milvus 使用 `metric_type: "COSINE"` 时：
   - `search()` 返回的是 **cosine distance**（距离，不是相似度）
@@ -1272,14 +1564,17 @@ else:
 
 **解决方案：**
 ```python
-# ✅ 正确的转换方式
+# ✅ 正确的转换方式（先过滤再 clamp）
 distance = float(hit.distance)
 raw_similarity = 1.0 - distance  # cosine similarity，理论范围 [-1, 1]
-similarity = max(0.0, min(1.0, raw_similarity))  # 工程约定：clamp 到 [0, 1]
 
-# 过滤：与 PgVector 保持一致
-if similarity >= similarity_threshold:
-    # 通过
+# ⚠️ 先用 raw_similarity 做阈值过滤（保持与 PgVector 语义一致）
+# 这样负相似度（如 -0.2）在 threshold=0 时会被正确排除
+if raw_similarity < similarity_threshold:
+    continue  # 不通过
+
+# 再 clamp 用于返回值（数值规范化）
+similarity = max(0.0, min(1.0, raw_similarity))
 ```
 
 **错误示例：**
@@ -1299,9 +1594,10 @@ if similarity >= threshold:  # 这会排除高相似度结果！
 
 | 风险 | 影响 | 应对措施 |
 |------|------|----------|
-| **⚠️ COSINE 距离转换错误** | **严重**：阈值过滤失效，检索结果错误 | **强制代码审查 + 自动化测试**：所有 Milvus 检索必须包含 `raw = 1.0 - distance` 且按约定 `similarity = clamp(raw, 0.0, 1.0)`，单元测试验证转换正确性 |
-| **维度值不返回 key_col/key_value** | 维度值提示词无法给出“主键过滤”建议 | 明确降级：提示词仅展示匹配到的维表/列/文本与分数，并在测试中覆盖该分支 |
-| **Milvus expr / search_params 兼容性** | 运行时查询失败或召回/延迟异常 | 1) 明确绑定 57/58 的索引（HNSW + COSINE）2) 将 `search_params` 配置化（HNSW 用 ef；其他索引用各自参数）3) expr 字符串字面量使用双引号，必要时做“无 expr + 结果后过滤”的降级 |
+| **⚠️ Embedding 模型/维度不一致** | **严重**：检索质量极差或直接报错（维度不匹配） | **强约束**：NL2SQL 运行时 `get_embedding_client()` 必须与 MetaWeave Loader 写入 Milvus 时使用**同一 embedding 模型**。建议：1) 通过环境变量（如 `EMBEDDING_MODEL`）统一配置 2) 在部署文档中明确约定模型名称和维度 3) 启动时校验向量维度是否匹配 |
+| **⚠️ COSINE 距离转换错误** | **严重**：阈值过滤失效，检索结果错误 | **强制代码审查 + 自动化测试**：所有 Milvus 检索必须包含 `raw = 1.0 - distance`，**阈值过滤用 raw**（`raw >= threshold`），再 clamp 用于返回值（`similarity = clamp(raw, 0.0, 1.0)`），单元测试验证转换正确性 |
+| **维度值不返回 key_col/key_value** | 维度值提示词无法给出"主键过滤"建议 | 明确降级：提示词仅展示匹配到的维表/列/文本与分数，并在测试中覆盖该分支 |
+| **Milvus expr / search_params 兼容性** | 运行时查询失败或召回/延迟异常 | 1) 明确绑定 57/58 的索引（HNSW + COSINE）2) 将 `search_params` 配置化（HNSW 用 ef；其他索引用各自参数）3) expr 字符串字面量使用双引号，必要时做"无 expr + 结果后过滤"的降级 |
 | **公共客户端迁移带来的引用调整** | MetaWeave / NL2SQL 引用路径不一致导致运行失败 | 1) 将 `MilvusClient` 下沉到 `src/services/vector_db` 2) MetaWeave 侧改为复用该实现或在原路径保留兼容 re-export（过渡期） |
 | **Milvus 连接不稳定** | 服务不可用 | 1) 连接重试机制 2) 明确失败提示 |
 
@@ -1356,6 +1652,31 @@ if similarity >= threshold:  # 这会排除高相似度结果！
 
 ---
 
-**文档版本：** v1.0
+**文档版本：** v1.2
 **编写日期：** 2025-12-11
+**更新日期：** 2025-12-13
 **编写人：** Claude (AI Assistant)
+
+**v1.2 更新内容（二轮审核）：**
+- 配置口径统一：明确"连接配置在全局、检索参数在子图"（2.1 节）
+- 修改文件清单：补充遗漏的必改文件（sql_generation_subgraph.yaml、value_matcher.py、metaweave/vector_db/*）
+- query_value 责任归属：统一"适配器不带，SchemaRetriever 统一添加"，修正三处冲突
+- 索引类型口径：明确 HNSW 为当前默认，IVF 为未来扩展（2.1.1 节）
+- 工厂函数命名统一：`create_vector_adapter` → `create_vector_search_adapter`
+- 配置加载链路说明：更精确描述 load_subgraph_config 的依赖关系
+- 运行时隔离表述：修正"禁止访问 metaweave"为"运行时不读取"
+- columns 的 table_category：明确允许为空（接口说明 + 统一返回格式）
+- 统一使用工厂函数：明确禁止直接实例化适配器（2.2 节）
+- 命名约定说明：配置键 `milvus_search_params` vs 代码变量 `search_params`
+- SchemaRetriever 类结构示例：补充完整 import 语句
+
+**v1.1 更新内容（首轮审核）：**
+- 【问题1】明确 MilvusClient 下沉实施顺序（4.1 节），代码示例添加路径注释（4.2.3 节）
+- 【问题2】将 Milvus 搜索参数从 config.yaml 移至 sql_generation_subgraph.yaml（2.1/2.1.1 节），更新适配器代码示例
+- 【问题3】补充 `deduplicate_dim_hits()` 去重键兼容改造（4.1/5.2 节）
+- 【问题4】补充 `validate_dim_value_match()` 移除必需字段校验（4.1/5.2 节）
+- 【问题5】补充 `factory.py` 工厂函数代码设计（4.2.4 节）
+- 【问题6】添加配置文件注释同步提醒（2.1.1 节）
+- 【问题7】补充 `grain_hint` 返回 None 的设计说明（1.4 节）
+- 【问题8】明确 `query_value` 由 SchemaRetriever 添加，适配器不负责（4.2.2 节）
+- 【问题9】类名重命名：`BaseVectorAdapter` → `BaseVectorSearchAdapter`，添加命名约定说明（3.1 节）
