@@ -183,11 +183,12 @@ class SQLGenerationAgent:
 你是 PostgreSQL SQL 生成专家。根据以下上下文生成 SQL。
 
 要求：
-1. 仅输出 SQL，不附加说明。
-2. 所有表必须包含 schema 前缀（例如 public.table）。
-3. 日期时间过滤使用指定列：同时具备 start 与 end 时使用 >= start AND < end；仅有 start 时使用 >= start；仅有 end 时使用 < end。
-4. JOIN 条件必须严格按照 ON 模板，用实际别名替换 SRC/DST。
-5. 以下提供的表结构、JOIN 计划和时间列为参考，你可以选择性使用它们，但不得使用未列出的字段。
+1.仅输出 SQL，不附加说明。
+2.所有表必须包含 schema 前缀（例如 public.table）。
+3.日期时间过滤使用指定列：同时具备 start 与 end 时使用 >= start AND < end；仅有 start 时使用 >= start；仅有 end 时使用 < end。
+4.JOIN 条件必须严格按照 ON 模板，用实际别名替换 SRC/DST。
+5.只允许使用“表结构”中列出的字段，禁止使用任何未列出的字段或推断字段。
+6.下方列出的表仅为“可能参与查询”的候选集合：请根据问题与维度/指标需求，自主选择最合适的表与字段组合；若某表或字段不需要，可以忽略，不必强行引用。
 
 ---
 

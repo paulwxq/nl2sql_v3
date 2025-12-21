@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from src.services.db.neo4j_client import get_neo4j_client
 from src.services.db.pg_client import get_pg_client
 from src.services.embedding.embedding_client import get_embedding_client
+from src.services.vector_adapter import create_vector_search_adapter
 from src.tools.schema_retrieval.join_planner import build_join_plans
 from src.tools.schema_retrieval.value_matcher import add_source_index_to_matches
 from src.utils.logger import get_module_logger, with_query_id
@@ -26,15 +27,19 @@ class SchemaRetriever:
         self.config = config or {}
 
         # 初始化客户端
-        self.pg_client = get_pg_client()
+        self.pg_client = get_pg_client()  # 保留，用于执行生成的 SQL
         self.neo4j_client = get_neo4j_client()
         self.embedding_client = get_embedding_client()
+
+        # ⭐ 新增：向量数据库客户端（通过工厂函数创建，支持 PgVector/Milvus 切换）
+        self.vector_client = create_vector_search_adapter(self.config)
 
         # 提取配置参数
         retrieval_config = self.config.get("schema_retrieval", {})
         self.topk_tables = retrieval_config.get("topk_tables", 10)
         self.topk_columns = retrieval_config.get("topk_columns", 10)
         self.dim_index_topk = retrieval_config.get("dim_index_topk", 5)
+        self.dim_value_min_score = retrieval_config.get("dim_value_min_score", 0.0)
         self.join_max_hops = retrieval_config.get("join_max_hops", 5)
         self.similarity_threshold = retrieval_config.get("similarity_threshold", 0.45)
 
@@ -77,14 +82,25 @@ class SchemaRetriever:
         Returns:
             Schema 上下文字典：
             {
-                "tables": List[str],              # 候选表列表
-                "columns": List[Dict],            # 候选列列表
-                "join_plans": List[Dict],         # JOIN 计划列表（多 Base）
-                "table_cards": Dict[str, Dict],   # 表卡片字典
+                "join_plans": List[Dict],         # JOIN 计划列表（基于图检索生成）
+                "table_cards": Dict[str, Dict],   # 表卡片字典（表的详细描述）
                 "similar_sqls": List[Dict],       # 历史成功 SQL 案例
-                "dim_value_matches": List[Dict],  # 维度值匹配结果
-                "metadata": Dict,                 # 元信息（耗时等）
+                "dim_value_hits": List[Dict],     # 维度值匹配结果（已去重）
+                "table_categories": Dict[str, str],  # 表分类字典（table_id -> category）
+                "metadata": Dict,                 # 元信息，包含：
+                    # - retrieval_time: 检索耗时（秒）
+                    # - table_count: 候选表数量
+                    # - column_count: 候选列数量
+                    # - join_plan_count: JOIN 计划数量
+                    # - dim_match_count: 维度值匹配数量
+                    # - candidate_fact_tables: 候选事实表列表（调试用）
+                    # - candidate_dim_tables: 候选维度表列表（调试用）
             }
+
+            注意：
+            - tables/columns 字段已在"瘦身优化"中移除，信息整合到 join_plans 和 table_cards 中
+            - dim_value_matches 已重命名为 dim_value_hits（与代码其他部分保持一致）
+            - table_categories 用于补全候选表的原始类型信息（用于提示词展示）
         """
         start_time = time.time()
 
@@ -99,12 +115,15 @@ class SchemaRetriever:
         qlog.debug(f"✓ 向量维度: {len(query_embedding)}")
 
         # 2) 向量检索：表和列
-        qlog.info("步骤2: 向量检索表和列（pgvector）")
+        # ⭐ 动态显示后端类型
+        from src.services.config_loader import get_config
+        active_type = get_config().get("vector_database", {}).get("active", "unknown")
+        qlog.info(f"步骤2: 向量检索表和列（{active_type}）")
         logger.debug(
             f"参数: topk_tables={self.topk_tables}, topk_columns={self.topk_columns}, threshold={self.similarity_threshold}"
         )
-        
-        semantic_tables = self.pg_client.search_semantic_tables(
+
+        semantic_tables = self.vector_client.search_tables(
             embedding=query_embedding,
             top_k=self.topk_tables,
             similarity_threshold=self.similarity_threshold,
@@ -128,7 +147,7 @@ class SchemaRetriever:
                     )
             qlog.debug("候选表详情: [" + "; ".join(table_lines) + "]")
 
-        semantic_columns = self.pg_client.search_semantic_columns(
+        semantic_columns = self.vector_client.search_columns(
             embedding=query_embedding,
             top_k=self.topk_columns,
             similarity_threshold=self.similarity_threshold,
@@ -221,7 +240,7 @@ class SchemaRetriever:
                 candidate_set["candidate_dim_tables"]
             )
         )
-        table_cards = self.pg_client.fetch_table_cards(all_table_ids)
+        table_cards = self.vector_client.fetch_table_cards(all_table_ids)
 
         table_names = self._collect_table_names(semantic_tables, semantic_columns)
 
@@ -233,7 +252,7 @@ class SchemaRetriever:
         
         similar_sqls = []
         try:
-            similar_sqls = self.pg_client.search_similar_sqls(
+            similar_sqls = self.vector_client.search_similar_sqls(
                 embedding=query_embedding,
                 top_k=sql_topk,
                 similarity_threshold=sql_threshold,
@@ -271,6 +290,9 @@ class SchemaRetriever:
                 "column_count": len(semantic_columns),
                 "join_plan_count": len(join_plans),
                 "dim_match_count": len(candidate_set["dim_value_hits"]),
+                # ✅ 候选表列表（调试用）
+                "candidate_fact_tables": candidate_set["candidate_fact_tables"],
+                "candidate_dim_tables": candidate_set["candidate_dim_tables"],
             },
         }
 
@@ -448,7 +470,7 @@ class SchemaRetriever:
         
         if missing_tables:
             # 批量查询缺失的表类型（原始 table_category 值）
-            missing_categories = self.pg_client.fetch_table_categories(missing_tables)
+            missing_categories = self.vector_client.fetch_table_categories(missing_tables)
             table_categories.update(missing_categories)
 
         return {
@@ -759,9 +781,10 @@ class SchemaRetriever:
         all_matches: List[Dict[str, Any]] = []
         for dv in parsed_dimensions:
             query_value = dv["text"]
-            matches = self.pg_client.search_dim_values(
+            matches = self.vector_client.search_dim_values(
                 query_value=query_value,
                 top_k=self.dim_index_topk,
+                min_score=self.dim_value_min_score,
             )
             enriched = add_source_index_to_matches(
                 matches=matches,
@@ -784,13 +807,20 @@ class SchemaRetriever:
         Returns:
             统计信息
         """
+        metadata = schema_context.get("metadata", {})
+
         return {
-            "table_count": len(schema_context.get("tables", [])),
-            "column_count": len(schema_context.get("columns", [])),
+            # ✅ 从 metadata 中读取预计算的统计值
+            "table_count": metadata.get("table_count", 0),
+            "column_count": metadata.get("column_count", 0),
+
+            # ✅ 从实际列表计算长度（兼容性考虑）
             "join_plan_count": len(schema_context.get("join_plans", [])),
             "similar_sql_count": len(schema_context.get("similar_sqls", [])),
             "dim_match_count": len(schema_context.get("dim_value_hits", [])),
-            "retrieval_time": schema_context.get("metadata", {}).get("retrieval_time", 0),
+
+            # ✅ 从 metadata 读取
+            "retrieval_time": metadata.get("retrieval_time", 0),
         }
 
 

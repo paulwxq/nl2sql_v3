@@ -71,7 +71,7 @@ embedding:
 # ------------------------------------------------------------------------------
 vector_database:
   # 当前激活的向量数据库类型
-  active: pgvector                   # 可选值: pgvector | milvus
+  active: milvus                   # 可选值: pgvector | milvus
 
   # 提供商配置
   providers:

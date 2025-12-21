@@ -97,7 +97,7 @@ def sample_schema_context():
                 "similarity": 0.85,
             }
         ],
-        "dim_value_matches": [],
+        "dim_value_hits": [],  # 维度值匹配结果（已去重）
         "metadata": {
             "retrieval_time": 0.1,
             "total_tables": 3,

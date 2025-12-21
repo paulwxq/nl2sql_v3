@@ -3,6 +3,7 @@
 import json
 from typing import Any, Dict, List, Optional, Tuple
 
+from src.services.config_loader import get_config
 from src.services.db.pg_connection import get_pg_manager
 
 
@@ -13,6 +14,17 @@ class PGClient:
         """初始化 PostgreSQL 客户端"""
         self.pg_manager = get_pg_manager()
 
+        # ✅ 读取 PgVector schema 配置
+        config = get_config()
+        vector_db_config = config.get("vector_database", {})
+        pgvector_config = vector_db_config.get("providers", {}).get("pgvector", {})
+        self.schema = pgvector_config.get("schema", "system")  # 默认 system
+
+        # ✅ 构建表名（避免每次查询都拼接）
+        self.table_sem_object_vec = f"{self.schema}.sem_object_vec"
+        self.table_sql_embedding = f"{self.schema}.sql_embedding"
+        self.table_dim_value_index = f"{self.schema}.dim_value_index"
+
     # ==================== 向量检索 ====================
 
     def search_semantic_tables(
@@ -22,7 +34,7 @@ class PGClient:
         similarity_threshold: float = 0.0,
     ) -> List[Dict[str, Any]]:
         """
-        检索语义相关的表（system.sem_object_vec, object_type='table'）
+        检索语义相关的表（从配置的 schema.sem_object_vec, object_type='table'）
 
         Args:
             embedding: 查询向量
@@ -38,7 +50,7 @@ class PGClient:
             - table_category: 表分类（fact/dim/bridge）
             - similarity: 相似度分数
         """
-        query = """
+        query = f"""
             SELECT
                 object_id,
                 lang,
@@ -46,7 +58,7 @@ class PGClient:
                 time_col_hint,
                 table_category,
                 1 - (embedding <=> %s::vector) AS similarity
-            FROM system.sem_object_vec
+            FROM {self.table_sem_object_vec}
             WHERE object_type = 'table'
               AND (1 - (embedding <=> %s::vector)) >= %s
             ORDER BY embedding <=> %s::vector
@@ -81,14 +93,14 @@ class PGClient:
             - table_category: 父表分类
             - similarity: 相似度分数
         """
-        query = """
+        query = f"""
             SELECT
                 col.object_id,
                 col.parent_id,
                 tbl.table_category,
                 1 - (col.embedding <=> %s::vector) AS similarity
-            FROM system.sem_object_vec AS col
-            LEFT JOIN system.sem_object_vec AS tbl
+            FROM {self.table_sem_object_vec} AS col
+            LEFT JOIN {self.table_sem_object_vec} AS tbl
               ON tbl.object_id = col.parent_id AND tbl.object_type = 'table'
             WHERE col.object_type = 'column'
               AND (1 - (col.embedding <=> %s::vector)) >= %s
@@ -118,13 +130,13 @@ class PGClient:
         if not table_names:
             return {}
 
-        query = """
+        query = f"""
             SELECT
                 object_id,
                 text_raw,
                 grain_hint,
                 time_col_hint
-            FROM system.sem_object_vec
+            FROM {self.table_sem_object_vec}
             WHERE object_type = 'table'
               AND object_id = ANY(%s)
         """
@@ -147,12 +159,12 @@ class PGClient:
     def fetch_table_categories(self, table_names: List[str]) -> Dict[str, str]:
         """
         批量查询表的 table_category 字段
-        
+
         用于补全候选表的原始类型信息（用于提示词展示）
-        
+
         Args:
             table_names: 表名列表
-            
+
         Returns:
             {table_id: table_category} 字典，例如：
             {
@@ -164,11 +176,11 @@ class PGClient:
         if not table_names:
             return {}
 
-        query = """
+        query = f"""
             SELECT
                 object_id,
                 table_category
-            FROM system.sem_object_vec
+            FROM {self.table_sem_object_vec}
             WHERE object_type = 'table'
               AND object_id = ANY(%s)
         """
@@ -195,7 +207,7 @@ class PGClient:
         similarity_threshold: float = 0.0,
     ) -> List[Dict[str, Any]]:
         """
-        从 system.sql_embedding 检索历史相似 SQL
+        从配置的 schema.sql_embedding 检索历史相似 SQL
 
         从 document 字段解析 JSON 获取 question/sql
 
@@ -210,11 +222,11 @@ class PGClient:
             - sql: SQL 语句
             - similarity: 相似度分数
         """
-        query = """
+        query = f"""
             SELECT
                 document,
                 1 - (embedding <=> %s::vector) AS similarity
-            FROM system.sql_embedding
+            FROM {self.table_sql_embedding}
             WHERE type = 'sql'
               AND (1 - (embedding <=> %s::vector)) >= %s
             ORDER BY embedding <=> %s::vector
@@ -259,7 +271,7 @@ class PGClient:
         top_k: int = 5,
     ) -> List[Dict[str, Any]]:
         """
-        从 system.dim_value_index 检索维度值匹配
+        从配置的 schema.dim_value_index 检索维度值匹配
 
         使用 pg_trgm + norm_zh() 函数进行模糊匹配
 
@@ -277,7 +289,7 @@ class PGClient:
             - score: 相似度分数
         """
         # 注意：这里假设数据库已经创建了 norm_zh() 函数和 pg_trgm 扩展
-        query = """
+        query = f"""
             SELECT
                 dim_table,
                 dim_col,
@@ -285,7 +297,7 @@ class PGClient:
                 key_value,
                 value_text AS matched_text,
                 word_similarity(value_norm, norm_zh(%s)) AS score
-            FROM system.dim_value_index
+            FROM {self.table_dim_value_index}
             WHERE value_norm %% norm_zh(%s)
             ORDER BY score DESC
             LIMIT %s
@@ -315,7 +327,7 @@ class PGClient:
         Returns:
             维度值匹配列表
         """
-        query = """
+        query = f"""
             SELECT
                 dim_table,
                 dim_col,
@@ -323,7 +335,7 @@ class PGClient:
                 key_value,
                 value_text AS matched_text,
                 similarity(value_norm, lower(%s)) AS score
-            FROM system.dim_value_index
+            FROM {self.table_dim_value_index}
             WHERE value_norm %% lower(%s)
             ORDER BY score DESC
             LIMIT %s

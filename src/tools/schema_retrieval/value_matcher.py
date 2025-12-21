@@ -111,20 +111,27 @@ def format_dim_value_matches_for_prompt(
 
     lines = []
     for m in filtered_matches:
-        # 构建建议的 WHERE 条件
-        suggested_condition = f"{m['dim_table']}.{m['key_col']}='{m['key_value']}'"
-
-        # 格式化输出
-        lines.append(
-            f"- '{m['query_value']}' → {suggested_condition} "
-            f"(匹配: {m['matched_text']}, 相似度: {m['score']:.2f})"
-        )
+        # ⭐ 添加主键字段存在性检查（兼容 PgVector 和 Milvus）
+        if m.get("key_col") and m.get("key_value"):
+            # PgVector 模式：有主键，生成 SQL 条件
+            suggested_condition = f"{m['dim_table']}.{m['key_col']}='{m['key_value']}'"
+            lines.append(
+                f"- '{m['query_value']}' → {suggested_condition} "
+                f"(匹配: {m['matched_text']}, 相似度: {m['score']:.2f})"
+            )
+        else:
+            # Milvus 模式：无主键，降级展示
+            lines.append(
+                f"- '{m.get('query_value', '')}' → {m.get('dim_table', '')}.{m.get('dim_col', '')} "
+                f"(匹配值: {m.get('matched_text', '')}, 相似度: {m.get('score', 0.0):.2f}, "
+                f"建议人工确认或使用 LIKE 匹配)"
+            )
 
     lines.append("")
     lines.append("**使用建议**：")
     lines.append("- 优先使用主键过滤（如 store_id = '12345'）而非文本匹配")
     lines.append("- 如果相似度 >= 0.8，直接使用主键条件")
-    lines.append("- 如果相似度 < 0.8，可考虑使用 LIKE 模糊匹配或让用户确认")
+    lines.append("- 如果相似度 < 0.8 或无主键信息，可考虑使用 LIKE 模糊匹配")
 
     return "\n".join(lines)
 
@@ -226,7 +233,9 @@ def validate_dim_value_match(match: Dict[str, Any]) -> List[str]:
     """
     errors = []
 
-    required_fields = ["dim_table", "dim_col", "key_col", "key_value", "matched_text", "score"]
+    # ⭐ key_col/key_value 改为可选字段（兼容 Milvus 模式）
+    required_fields = ["dim_table", "dim_col", "matched_text", "score"]
+    optional_fields = ["key_col", "key_value", "query_value", "source_index"]
 
     for field in required_fields:
         if field not in match or match[field] is None:
@@ -246,7 +255,8 @@ def deduplicate_dim_hits(hits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     对 dim_value_hits 进行去重与排序。
 
     规则：
-    1) 按 (dim_table, dim_col, key_value) 分组，保留分数最高的元素；分数相等保留先出现者
+    1) 按 (dim_table, dim_col, 去重标识) 分组，保留分数最高的元素
+       - 去重标识：优先使用 key_value（PgVector），无则用 matched_text（Milvus）
     2) 最终按 score 降序排序
 
     注意：保留原对象的全部字段，不做裁剪
@@ -257,7 +267,10 @@ def deduplicate_dim_hits(hits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     best_by_key: Dict[tuple, Dict[str, Any]] = {}
 
     for hit in hits:
-        key = (hit.get("dim_table"), hit.get("dim_col"), hit.get("key_value"))
+        # ⭐ 兼容 PgVector 和 Milvus：优先用 key_value，无则用 matched_text
+        dedup_id = hit.get("key_value") or hit.get("matched_text")
+        key = (hit.get("dim_table"), hit.get("dim_col"), dedup_id)
+
         score = hit.get("score", 0.0)
         current_best = best_by_key.get(key)
         if current_best is None or score > current_best.get("score", 0.0):

@@ -1,0 +1,88 @@
+{
+  "query": "请问广州全家天河店的销售额是多少",
+  "similarities": [
+    {
+      "object_id": "public.fact_store_sales_day",
+      "similarity": 0.4955354840916628,
+      "table_category": "fact",
+      "object_desc": "# public.fact_store_sales_day（店铺销售日流水事实表（按天、店铺、商品类型汇总））\n## 字段列表：\n- store_id (integer(32)) - 店铺ID（外键） [示例: 101, 101]\n- date_day (date) - 交易日期（日粒度） [示例: 2025-08-01, 2025-08-01]\n- product_type_id (integer(32)) - 商品类型ID（外键） [示例: 1, 2]\n- amount (numeric(18,2)) - 销售金额（当日） [示例: 206.0, 211.0]\n## 字段补充说明：\n- amount 使用numeric(18,2)存储，精确到小数点后2位"
+    },
+    {
+      "object_id": "public.fact_store_sales_month",
+      "similarity": 0.46643240440827655,
+      "table_category": "fact",
+      "object_desc": "# public.fact_store_sales_month（店铺销售月汇总事实表（按月、店铺、商品类型汇总））\n## 字段列表：\n- store_id (integer(32)) - 店铺ID（外键） [示例: 203, 303]\n- date_month (date) - 月份（建议为当月第一天） [示例: 2025-09-01, 2025-09-01]\n- product_type_id (integer(32)) - 商品类型ID（外键） [示例: 1, 2]\n- amount (numeric(18,2)) - 销售金额（当月累计值） [示例: 656.0, 866.0]\n## 字段补充说明：\n- amount 使用numeric(18,2)存储，精确到小数点后2位"
+    },
+    {
+      "object_id": "public.dim_store",
+      "similarity": 0.4286774388917564,
+      "table_category": "dim",
+      "object_desc": "# public.dim_store（店铺维表）\n## 字段列表：\n- store_id (integer(32)) - 店铺ID（主键） [示例: 101, 103]\n- store_name (character varying(200)) - 店铺名称（同一公司下唯一） [示例: 京东便利天河岗顶店, 京东便利南京新街口店]\n- company_id (integer(32)) - 所属公司ID（外键） [示例: 1, 1]\n- region_id (integer(32)) - 所属区（县）ID（外键） [示例: 440106, 320106]"
+    },
+    {
+      "object_id": "public.order_item",
+      "similarity": 0.36849992330589104,
+      "table_category": "fact",
+      "object_desc": "# public.order_item（订单商品明细，记录每个订单中的商品及数量信息）\n## 字段列表：\n- item_id (integer(32)) - 订单商品唯一标识ID [示例: 1, 2]\n- order_id (integer(32)) - 订单编号 [示例: 5001, 5001]\n- order_date (date) - 订单创建日期 [示例: 2024-01-01, 2024-01-01]\n- product (character varying(100)) - 商品名称 [示例: 苹果, 香蕉]\n- quantity (integer(32)) - 商品数量 [示例: 3, 2]\n## 字段补充说明：\n- 主键约束 order_item_pkey: item_id\n- order_date, order_id 关联 public.order_header.order_date, order_id"
+    },
+    {
+      "object_id": "public.employee",
+      "similarity": 0.35561320237553096,
+      "table_category": "dim",
+      "object_desc": "# public.employee（员工基本信息及雇佣信息表）\n## 字段列表：\n- emp_id (integer(32)) - 员工唯一标识ID [示例: 1, 2]\n- emp_no (character varying(20)) - 员工编号 [示例: E0001, E0002]\n- emp_name (character varying(100)) - 员工姓名 [示例: 张伟, 李娜]\n- gender (character(1)) - 员工性别（M-男，F-女） [示例: M, F]\n- hire_date (date) - 入职日期 [示例: 2020-03-15, 2019-07-01]\n- salary (numeric(10,2)) - 员工薪资 [示例: 12000.0, 15000.0]\n- dept_id (integer(32)) - 所属部门ID [示例: 1, 3]\n## 字段补充说明：\n- 主键约束 employee_pkey: emp_id\n- dept_id 关联 public.department.dept_id\n- 唯一约束 employee_emp_no_key: emp_no\n- salary 使用numeric(10,2)存储，精确到小数点后2位"
+    },
+    {
+      "object_id": "public.dim_company",
+      "similarity": 0.3537166067108235,
+      "table_category": "dim",
+      "object_desc": "# public.dim_company（公司维表）\n## 字段列表：\n- company_id (integer(32)) - 公司ID（主键） [示例: 1, 2]\n- company_name (character varying(200)) - 公司名称，唯一 [示例: 京东便利, 喜士多]"
+    },
+    {
+      "object_id": "public.dim_product_type",
+      "similarity": 0.33782466911889597,
+      "table_category": "dim",
+      "object_desc": "# public.dim_product_type（商品类型维表）\n## 字段列表：\n- product_type_id (integer(32)) - 商品类型ID（主键） [示例: 1, 2]\n- product_type_name (character varying(100)) - 商品类型名称，唯一 [示例: 饮料, 零食]"
+    },
+    {
+      "object_id": "public.order_header",
+      "similarity": 0.33755831196342945,
+      "table_category": "fact",
+      "object_desc": "# public.order_header（订单信息表，存储订单的基本信息和客户信息）\n## 字段列表：\n- order_id (integer(32)) - 订单唯一标识ID [示例: 5001, 5002]\n- order_date (date) - 订单创建日期 [示例: 2024-01-01, 2024-01-02]\n- customer (character varying(100)) - 订单客户姓名 [示例: 张三, 李四]\n## 字段补充说明：\n- 主键约束 order_header_pkey: order_id, order_date"
+    },
+    {
+      "object_id": "public.maintenance_work_order",
+      "similarity": 0.3286625265846346,
+      "table_category": "fact",
+      "object_desc": "# public.maintenance_work_order（维修工单事实表：粒度为“工单-行/条目”，记录设备故障发生时间、故障码上下文、以及停机与成本等关键指标。）\n## 字段列表：\n- wo_id (integer(32)) - 工单ID [示例: 20000, 20000]\n- wo_line_no (smallint(16)) - 工单行号/条目序号 [示例: 1, 2]\n- fault_ts (timestamp without time zone) - 故障发生时间 [示例: 2025-11-01 08:00:00, 2025-11-01 08:30:00]\n- equipment_id (integer(32)) - 设备ID（资产编号） [示例: 1001, 1002]\n- config_version (character varying(64)) - 设备配置版本/改造批次（与设备配置表形成2列关联） [示例: cfg-1.0, cfg-2.0]\n- product_line_code (character varying(32)) - 产线/产品线编码（与故障码字典形成3列关联之一） [示例: LINE_A, LINE_B]\n- subsystem_code (character varying(32)) - 子系统编码（与故障码字典形成3列关联之一） [示例: CTRL, ELEC]\n- fault_code (character varying(32)) - 故障码（与故障码字典形成3列关联之一） [示例: E101, E102]\n- downtime_minutes (integer(32)) - 停机时长（分钟） [示例: 23, 36]\n- spare_part_cost (numeric(14,2)) - 备件费用（金额） [示例: 1.37, 2.74]\n## 字段补充说明：\n- spare_part_cost 使用numeric(14,2)存储，精确到小数点后2位"
+    },
+    {
+      "object_id": "public.equipment_config",
+      "similarity": 0.32249190796507154,
+      "table_category": "dim",
+      "object_desc": "# public.equipment_config（设备配置维度表：描述设备在某个配置版本下的关键配置属性，用于按“设备ID + 配置版本”关联到工单事实。）\n## 字段列表：\n- equipment_id (integer(32)) - 设备ID（资产编号） [示例: 1001, 1001]\n- config_version (character varying(64)) - 配置版本/改造批次（可为语义化版本或批次号） [示例: cfg-1.0, cfg-2.0]\n- controller_model (character varying(64)) - 控制器型号 [示例: PLC-X1, PLC-X2]\n- firmware_version (character varying(64)) - 固件版本号（语义化版本等） [示例: fw-1.2.3, fw-2.0.1]"
+    },
+    {
+      "object_id": "public.fault_catalog",
+      "similarity": 0.31182373365247634,
+      "table_category": "dim",
+      "object_desc": "# public.fault_catalog（故障码字典维度表：按“产线/产品线 + 子系统 + 故障码”定义故障含义与处理建议，避免同码异义。）\n## 字段列表：\n- product_line_code (character varying(32)) - 产线/产品线编码 [示例: LINE_A, LINE_A]\n- subsystem_code (character varying(32)) - 子系统编码 [示例: ELEC, CTRL]\n- fault_code (character varying(32)) - 故障码 [示例: E101, E101]\n- fault_name (character varying(128)) - 故障名称（标准名） [示例: 欠压告警（电源侧）, 欠压告警（控制侧）]\n- recommended_action (text) - 建议处理措施/排查步骤（长文本） [示例: 检查输入电源/UPS；测量直流输出；紧固端子，排除接触不良。, 检查控制器供电模块与背板供电；查看控制器日志与重启记录。]"
+    },
+    {
+      "object_id": "public.dim_region",
+      "similarity": 0.3117124090587584,
+      "table_category": "dim",
+      "object_desc": "# public.dim_region（地区维表：省/市/区（含各级名称与ID））\n## 字段列表：\n- region_id (integer(32)) - 区（县）ID（主键） [示例: 440106, 440104]\n- region_name (character varying(100)) - 区（县）名称 [示例: 天河区, 越秀区]\n- city_id (integer(32)) - 城市ID [示例: 4401, 4401]\n- city_name (character varying(100)) - 城市名称 [示例: 广州市, 广州市]\n- province_id (integer(32)) - 省份ID [示例: 44, 44]\n- province_name (character varying(100)) - 省份名称 [示例: 广东省, 广东省]"
+    },
+    {
+      "object_id": "public.department",
+      "similarity": 0.27040623849845247,
+      "table_category": "dim",
+      "object_desc": "# public.department（部门信息表，存储各部门的编号、代码、名称及所在位置）\n## 字段列表：\n- dept_id (integer(32)) - 部门唯一标识ID [示例: 1, 2]\n- dept_code (character varying(20)) - 部门编码（如HR、FIN） [示例: HR, FIN]\n- dept_name (character varying(100)) - 部门名称（如人力资源部） [示例: 人力资源部, 财务部]\n- location (character varying(100)) - 部门所在城市（如北京、上海） [示例: 北京, 北京]\n## 字段补充说明：\n- 主键约束 department_pkey: dept_id\n- 唯一约束 department_dept_code_key: dept_code"
+    }
+  ],
+  "config": {
+    "host": "localhost",
+    "port": "19530",
+    "database": "nl2sql"
+  }
+}

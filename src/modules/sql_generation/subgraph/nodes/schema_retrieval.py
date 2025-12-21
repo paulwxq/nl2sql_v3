@@ -47,9 +47,10 @@ def schema_retrieval_node(state: SQLGenerationState) -> Dict[str, Any]:
         
         # 详细记录检索结果
         query_id = state['query_id']
+        metadata = schema_context.get("metadata", {})
         logger.debug("========== Schema检索详情 ==========")
-        logger.debug(f"候选事实表: {schema_context.get('candidate_fact_tables', [])}")
-        logger.debug(f"候选维度表: {schema_context.get('candidate_dim_tables', [])}")
+        logger.debug(f"候选事实表: {metadata.get('candidate_fact_tables', [])}")
+        logger.debug(f"候选维度表: {metadata.get('candidate_dim_tables', [])}")
         logger.debug(f"维度值匹配: {len(schema_context.get('dim_value_hits', []))} 个")
         if schema_context.get('dim_value_hits'):
             for hit in schema_context['dim_value_hits'][:3]:  # 只显示前3个

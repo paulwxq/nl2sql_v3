@@ -27,19 +27,24 @@ class SQLGenerationState(MessagesState):
 
     # ========== Schema检索阶段 ==========
     schema_context: Optional[Dict[str, Any]] = None
-    # schema_context 结构：
+    # schema_context 结构（经过"瘦身优化"后的最终结构）：
     # {
-    #   "tables": [...],           # 相关表列表（向量检索）
-    #   "columns": [...],          # 相关列列表（向量检索）
-    #   "join_plans": [...],       # JOIN计划（多 Base，图检索）
-    #   "table_cards": {...},      # 表卡片字典
-    #   "similar_sqls": [...],     # 历史成功SQL案例（兼容旧字段）
-    #   "dim_value_matches": [...] # 维度值匹配结果（兼容旧字段）
-    #   "candidate_fact_tables": [...],
-    #   "candidate_dim_tables": [...],
-    #   "table_similarities": {...},
-    #   "dim_value_hits": [...],
+    #   "join_plans": [...],       # JOIN计划列表（基于图检索生成）
+    #   "table_cards": {...},      # 表卡片字典（表的详细描述）
+    #   "similar_sqls": [...],     # 历史成功SQL案例
+    #   "dim_value_hits": [...],   # 维度值匹配结果（已去重）
+    #   "table_categories": {...}, # 表分类字典（table_id -> category）
+    #   "metadata": {              # 元信息
+    #       "retrieval_time": ...,
+    #       "table_count": ...,
+    #       "column_count": ...,
+    #       "join_plan_count": ...,
+    #       "dim_match_count": ...,
+    #       "candidate_fact_tables": [...],  # 调试用
+    #       "candidate_dim_tables": [...],   # 调试用
+    #   }
     # }
+    # 注：tables/columns 字段已移除，信息整合到 join_plans 和 table_cards 中
 
     # ========== SQL生成阶段 ==========
     generated_sql: Optional[str] = None  # 当前生成的SQL

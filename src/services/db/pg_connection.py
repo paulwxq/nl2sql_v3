@@ -67,11 +67,25 @@ class PGConnectionManager:
             },
         )
 
-        # 注册 pgvector 扩展
-        with self._pool.connection() as conn:
-            register_vector(conn)
+        # ✅ 条件注册 pgvector 扩展（仅 PgVector 模式需要）
+        main_config = get_config()
+        vector_db_config = main_config.get("vector_database", {})
+        active_vector_db = vector_db_config.get("active")
 
-        print(f"✅ PostgreSQL 连接池已初始化: {self.config['host']}:{self.config['port']}/{self.config['database']}")
+        # ⚠️ 配置缺失时明确失败（与工厂函数保持一致）
+        if not active_vector_db:
+            raise ValueError(
+                "缺少 vector_database.active 配置。\n"
+                "请在 config.yaml 中设置 vector_database.active 为 'pgvector' 或 'milvus'。\n"
+                "这是必需配置，不提供默认值以避免掩盖配置错误。"
+            )
+
+        if active_vector_db == "pgvector":
+            with self._pool.connection() as conn:
+                register_vector(conn)
+            print(f"✅ PostgreSQL 连接池已初始化（已注册 pgvector 扩展）: {self.config['host']}:{self.config['port']}/{self.config['database']}")
+        else:
+            print(f"✅ PostgreSQL 连接池已初始化（{active_vector_db} 模式，跳过 pgvector 注册）: {self.config['host']}:{self.config['port']}/{self.config['database']}")
 
     def close(self) -> None:
         """关闭连接池"""

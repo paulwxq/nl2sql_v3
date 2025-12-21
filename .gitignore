@@ -9,6 +9,7 @@ wheels/
 # Virtual environments
 .venv
 .venv-wsl
+.venv-win
 
 # Environment variables (contains sensitive information)
 .env
