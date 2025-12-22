@@ -5,13 +5,15 @@
 2. 条件边函数（路由逻辑）
 3. 父图编译（组装所有节点）
 4. 便捷函数（对外接口）
+5. LangGraph 持久化接入（Checkpoint + Store）
 """
 
 import time
 import uuid
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from langgraph.graph import END, START, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 
 from src.modules.nl2sql_father.nodes.router import router_node
 from src.modules.nl2sql_father.nodes.simple_planner import simple_planner_node
@@ -29,6 +31,13 @@ from src.modules.nl2sql_father.state import (
 from src.utils.logger import get_module_logger, with_query_id
 
 logger = get_module_logger("nl2sql_father")
+
+# ==============================================================================
+# 编译图缓存（单例）
+# ==============================================================================
+
+_compiled_graph: Optional[CompiledStateGraph] = None
+_compiled_graph_with_checkpoint: bool = False  # 记录当前缓存的图是否带 checkpointer
 
 
 # ==================== SQL 生成子图 Wrapper ====================
@@ -94,6 +103,9 @@ def sql_gen_wrapper(state: NL2SQLFatherState) -> Dict[str, Any]:
             user_query=state["user_query"],  # 原始用户问题
             dependencies_results={},  # Fast Path 无依赖
             parse_hints=None,
+            # 【新增】checkpoint 相关参数
+            sub_query_id=current_sub_query_id,
+            thread_id=state.get("thread_id"),
         )
 
         # 更新当前子查询的状态
@@ -180,6 +192,9 @@ def sql_gen_batch_wrapper(state: NL2SQLFatherState) -> Dict[str, Any]:
                 user_query=state["user_query"],
                 dependencies_results=sub_query.get("dependencies_results", {}),
                 parse_hints=None,
+                # 【新增】checkpoint 相关参数
+                sub_query_id=sub_query_id,
+                thread_id=state.get("thread_id"),
             )
 
             # 更新子查询状态
@@ -302,7 +317,7 @@ def route_after_planner(state: NL2SQLFatherState) -> str:
 # ==================== 父图编译 ====================
 
 
-def create_nl2sql_father_graph():
+def create_nl2sql_father_graph(checkpointer=None) -> CompiledStateGraph:
     """创建 NL2SQL 父图（Phase 1 + Phase 2）
 
     拓扑（统一图，包含 Fast Path 和 Complex Path）：
@@ -320,6 +335,9 @@ def create_nl2sql_father_graph():
     4. Check Completion 判定未完成 → 循环回 inject_params
     5. Check Completion 判定完成 → 进入 Summarizer
     6. 所有路径统一经过 Summarizer 节点，确保返回格式一致
+
+    Args:
+        checkpointer: 可选的 checkpointer（PostgresSaver 或 SafeCheckpointer）
 
     Returns:
         编译后的父图（可执行）
@@ -405,26 +423,100 @@ def create_nl2sql_father_graph():
     graph.add_edge("summarizer", END)
 
     # ========== 编译 ==========
-    app = graph.compile()
+    if checkpointer is not None:
+        app = graph.compile(checkpointer=checkpointer)
+        logger.info("NL2SQL 父图编译完成（Fast Path + Complex Path，已启用 Checkpoint）")
+    else:
+        app = graph.compile()
+        logger.info("NL2SQL 父图编译完成（Fast Path + Complex Path）")
 
-    logger.info("NL2SQL 父图编译完成（Fast Path + Complex Path）")
     return app
+
+
+def get_compiled_father_graph() -> CompiledStateGraph:
+    """获取编译后的父图（带缓存）
+
+    根据 checkpoint 开关状态决定是否传入 checkpointer。
+    使用模块级缓存避免每次请求都重新编译。
+
+    缓存策略：
+        - 按"配置意图"缓存，而非"实际是否有 checkpointer"
+        - 如果 checkpoint 启用但 saver 创建失败，会缓存无 checkpointer 的图
+        - DB 恢复后不会自动重试，需要调用 reset_father_graph_cache() 或重启应用
+
+    Returns:
+        编译后的父图
+    """
+    global _compiled_graph, _compiled_graph_with_checkpoint
+
+    from src.services.langgraph_persistence.postgres import (
+        get_postgres_saver,
+        is_checkpoint_enabled,
+    )
+    from src.services.langgraph_persistence.safe_checkpointer import SafeCheckpointer
+
+    # 检查当前 checkpoint 开关状态（配置意图）
+    checkpoint_enabled = is_checkpoint_enabled()
+
+    # 如果缓存存在且配置意图一致，直接返回（避免重复编译）
+    # 注意：即使 saver 创建失败，只要配置意图不变就复用缓存
+    if _compiled_graph is not None and _compiled_graph_with_checkpoint == checkpoint_enabled:
+        return _compiled_graph
+
+    # 需要重新编译
+    checkpointer = None
+    if checkpoint_enabled:
+        real_checkpointer = get_postgres_saver("father")
+        if real_checkpointer is not None:
+            # 使用 SafeCheckpointer 包装，实现 fail-open
+            checkpointer = SafeCheckpointer(real_checkpointer, enabled=True)
+            logger.info("父图使用 SafeCheckpointer（fail-open 模式）")
+        else:
+            logger.warning("Checkpoint 已启用但 PostgresSaver 创建失败，父图将不使用 checkpointer")
+
+    _compiled_graph = create_nl2sql_father_graph(checkpointer=checkpointer)
+    # 记录"配置意图"，用于缓存判断（避免 saver 创建失败时每次重新编译）
+    _compiled_graph_with_checkpoint = checkpoint_enabled
+
+    return _compiled_graph
+
+
+def reset_father_graph_cache():
+    """重置父图编译缓存
+
+    使用场景：
+        1. 单元测试：在 setup/teardown 中调用，确保测试隔离
+        2. DB 恢复重试：如果 checkpoint 启用但 saver 创建失败，
+           DB 恢复后调用此函数可触发重新编译挂载 checkpointer
+    """
+    global _compiled_graph, _compiled_graph_with_checkpoint
+    _compiled_graph = None
+    _compiled_graph_with_checkpoint = False
 
 
 # ==================== 便捷函数 ====================
 
 
-def run_nl2sql_query(query: str, query_id: str = None) -> Dict[str, Any]:
+def run_nl2sql_query(
+    query: str,
+    query_id: str = None,
+    thread_id: str = None,
+    user_id: str = None,
+) -> Dict[str, Any]:
     """执行 NL2SQL 查询（便捷函数）
 
     Args:
         query: 用户问题
         query_id: 查询ID（可选，不提供则自动生成）
+        thread_id: 会话ID（可选，多轮对话时复用）
+        user_id: 用户标识（可选，未登录时为 "guest"）
 
     Returns:
         查询结果字典，包含：
         - user_query: 用户原始问题
         - query_id: 查询ID
+        - thread_id: 会话ID
+        - user_id: 用户标识
         - complexity: "simple" | "complex" | None
         - path_taken: "fast" | "complex" | None
         - summary: 自然语言总结
@@ -434,22 +526,55 @@ def run_nl2sql_query(query: str, query_id: str = None) -> Dict[str, Any]:
         - execution_results: 完整执行结果
         - metadata: 元数据（执行时间等）
     """
-    # 创建父图
+    from src.services.langgraph_persistence.postgres import (
+        get_checkpoint_namespace,
+        is_checkpoint_enabled,
+        is_store_enabled,
+    )
+    from src.services.langgraph_persistence.chat_history_writer import append_turn
+
     start_time = time.time()
-    app = create_nl2sql_father_graph()
 
-    # 创建初始 State（query_id 由 create_initial_state 自动生成）
-    initial_state = create_initial_state(user_query=query, query_id=query_id)
+    # 获取编译后的图（带缓存，自动处理 checkpoint）
+    app = get_compiled_father_graph()
 
-    # 获取实际的 query_id（可能是自动生成的）
+    # 创建初始 State（thread_id/user_id 由 create_initial_state 自动处理）
+    initial_state = create_initial_state(
+        user_query=query,
+        query_id=query_id,
+        thread_id=thread_id,
+        user_id=user_id,
+    )
+
+    # 获取实际的标识（可能是自动生成的）
     actual_query_id = initial_state["query_id"]
+    actual_thread_id = initial_state["thread_id"]
+    actual_user_id = initial_state["user_id"]
 
     # 日志
     query_logger = with_query_id(logger, actual_query_id)
     query_logger.info(f"开始执行 NL2SQL 查询: {query[:50]}...")
+    query_logger.debug(f"thread_id={actual_thread_id}, user_id={actual_user_id}")
 
-    # 执行父图
-    final_state = app.invoke(initial_state)
+    # 构建 invoke 配置（checkpoint 需要 thread_id 和 checkpoint_ns）
+    # 注意：这里按"配置意图"而非"实际挂载状态"判断
+    # 如果 saver 创建失败导致图没有 checkpointer，传递这些参数是无害的，LangGraph 会忽略
+    invoke_config = None
+    if is_checkpoint_enabled():
+        father_namespace = get_checkpoint_namespace("father")
+        invoke_config = {
+            "configurable": {
+                "thread_id": actual_thread_id,
+                "checkpoint_ns": father_namespace,
+            }
+        }
+        query_logger.debug(f"Checkpoint 已启用: namespace={father_namespace}")
+
+    # 执行父图（invoke_config 为 None 时不传 config 参数，使用默认值）
+    if invoke_config is not None:
+        final_state = app.invoke(initial_state, config=invoke_config)
+    else:
+        final_state = app.invoke(initial_state)
 
     # 记录总耗时
     total_time_ms = (time.time() - start_time) * 1000
@@ -457,6 +582,26 @@ def run_nl2sql_query(query: str, query_id: str = None) -> Dict[str, Any]:
 
     # 提取结果
     result = extract_final_result(final_state)
+
+    # 写入历史对话（仅写入，失败不影响主流程）
+    if is_store_enabled():
+        try:
+            append_turn(
+                thread_id=actual_thread_id,
+                query_id=actual_query_id,
+                user_text=query,
+                assistant_text=result.get("summary") or "",
+                user_id=actual_user_id,
+                metadata={
+                    "complexity": result.get("complexity"),
+                    "path_taken": result.get("path_taken"),
+                    "total_execution_time_ms": total_time_ms,
+                    "sub_query_count": len(result.get("sub_queries", [])),
+                },
+            )
+            query_logger.debug("历史对话写入成功")
+        except Exception as e:
+            query_logger.warning(f"历史对话写入失败（已跳过）: {e}")
 
     query_logger.info(
         f"NL2SQL 查询完成: complexity={result.get('complexity')}, "

@@ -7,7 +7,16 @@ from src.modules.nl2sql_father.graph import (
     route_by_complexity,
     route_after_sql_gen,
     sql_gen_wrapper,
+    reset_father_graph_cache,
 )
+
+
+@pytest.fixture(autouse=True)
+def reset_graph_cache():
+    """每个测试前后重置父图缓存，避免测试间相互影响"""
+    reset_father_graph_cache()
+    yield
+    reset_father_graph_cache()
 
 
 class TestConditionalEdges:
@@ -119,13 +128,15 @@ class TestSQLGenWrapper:
             # 执行 Wrapper
             result = sql_gen_wrapper(base_state)
 
-            # 验证调用参数
+            # 验证调用参数（注意：新增了 sub_query_id 和 thread_id 参数）
             mock_subgraph.assert_called_once_with(
                 query="查询销售额",
                 query_id="test-001",
                 user_query="查询销售额",
                 dependencies_results={},
                 parse_hints=None,
+                sub_query_id="test-001_sq1",
+                thread_id=None,
             )
 
             # 验证返回结果
@@ -313,8 +324,8 @@ class TestRunNL2SQLQuery:
         """测试自动生成 query_id"""
         from src.modules.nl2sql_father.graph import run_nl2sql_query
 
-        # Mock 图执行
-        with patch("src.modules.nl2sql_father.graph.create_nl2sql_father_graph") as mock_create:
+        # Mock 图执行（注意：mock get_compiled_father_graph 而非 create_nl2sql_father_graph）
+        with patch("src.modules.nl2sql_father.graph.get_compiled_father_graph") as mock_get:
             mock_app = MagicMock()
             mock_app.invoke.return_value = {
                 "user_query": "测试",
@@ -322,7 +333,7 @@ class TestRunNL2SQLQuery:
                 "complexity": "simple",
                 "summary": "查询成功",
             }
-            mock_create.return_value = mock_app
+            mock_get.return_value = mock_app
 
             # 不提供 query_id
             result = run_nl2sql_query("测试问题")
@@ -336,7 +347,7 @@ class TestRunNL2SQLQuery:
         from src.modules.nl2sql_father.graph import run_nl2sql_query
 
         # Mock 图执行
-        with patch("src.modules.nl2sql_father.graph.create_nl2sql_father_graph") as mock_create:
+        with patch("src.modules.nl2sql_father.graph.get_compiled_father_graph") as mock_get:
             mock_app = MagicMock()
             mock_app.invoke.return_value = {
                 "user_query": "测试",
@@ -344,7 +355,7 @@ class TestRunNL2SQLQuery:
                 "complexity": "simple",
                 "summary": "查询成功",
             }
-            mock_create.return_value = mock_app
+            mock_get.return_value = mock_app
 
             # 提供自定义 query_id
             result = run_nl2sql_query("测试问题", query_id="custom-id")
@@ -357,14 +368,14 @@ class TestRunNL2SQLQuery:
         from src.modules.nl2sql_father.graph import run_nl2sql_query
 
         # Mock 图执行
-        with patch("src.modules.nl2sql_father.graph.create_nl2sql_father_graph") as mock_create:
+        with patch("src.modules.nl2sql_father.graph.get_compiled_father_graph") as mock_get:
             mock_app = MagicMock()
             mock_app.invoke.return_value = {
                 "user_query": "测试",
                 "query_id": "test-001",
                 "summary": "完成",
             }
-            mock_create.return_value = mock_app
+            mock_get.return_value = mock_app
 
             # 执行查询
             result = run_nl2sql_query("测试")

@@ -52,6 +52,10 @@ def print_result(result: Dict[str, Any]):
 
     # 基本信息
     print(f"\n🆔 Query ID: {result['query_id']}")
+    if result.get('thread_id'):
+        print(f"🔗 Thread ID: {result['thread_id']}")
+    if result.get('user_id'):
+        print(f"👤 User ID: {result['user_id']}")
     print(f"❓ 用户问题: {result['user_query']}")
     print(f"🏷️  复杂度: {result.get('complexity', 'N/A')}")
     print(f"🛤️  执行路径: {result.get('path_taken', 'N/A')}")
@@ -127,28 +131,47 @@ def print_result(result: Dict[str, Any]):
     print()
 
 
-def run_single_query(question: str, query_id: str = None):
+def run_single_query(
+    question: str,
+    query_id: str = None,
+    thread_id: str = None,
+    user_id: str = None,
+):
     """
     运行单个查询
 
     Args:
         question: 用户问题
         query_id: 查询ID（可选）
+        thread_id: 会话ID（可选，多轮对话时复用）
+        user_id: 用户标识（可选，默认 guest）
     """
     print(f"\n🔄 正在处理您的问题...")
     print(f"问题: {question}")
     if query_id:
         print(f"Query ID: {query_id}")
+    if thread_id:
+        print(f"Thread ID: {thread_id}")
+    if user_id:
+        print(f"User ID: {user_id}")
     print()
 
     logger.info(f"开始执行查询: {question}")
 
     try:
-        result = run_nl2sql_query(query=question, query_id=query_id)
+        result = run_nl2sql_query(
+            query=question,
+            query_id=query_id,
+            thread_id=thread_id,
+            user_id=user_id,
+        )
 
         logger.info(f"查询完成: query_id={result['query_id']}, complexity={result.get('complexity')}")
 
         print_result(result)
+
+        # 返回 result 供交互模式使用（获取 thread_id）
+        return result
 
     except Exception as e:
         logger.error(f"查询执行异常: {e}", exc_info=True)
@@ -159,10 +182,18 @@ def run_single_query(question: str, query_id: str = None):
         print(f"\n错误: {str(e)}")
         print(f"\n💡 请查看日志了解详情")
         print()
+        return None
 
 
-def interactive_mode():
-    """交互对话模式"""
+def interactive_mode(thread_id: str = None, user_id: str = None):
+    """交互对话模式
+
+    Args:
+        thread_id: 初始会话ID（可选，不传则自动生成）
+        user_id: 用户标识（可选，默认 guest）
+    """
+    from datetime import datetime, timezone
+
     print_separator()
     print("🤖 NL2SQL 父图测试工具 - 交互模式")
     print_separator()
@@ -171,11 +202,23 @@ def interactive_mode():
     print("\n💡 提示:")
     print("  - 直接输入问题，按回车提交")
     print("  - 输入 'exit' 或 'quit' 退出")
-    print("  - 按 Ctrl+C 也可以退出\n")
+    print("  - 按 Ctrl+C 也可以退出")
+
+    # 用户标识（默认 guest）
+    actual_user_id = user_id or "guest"
+
+    # 启动时生成一次 thread_id（固定整个交互会话）
+    if thread_id is None:
+        now = datetime.now(timezone.utc)
+        timestamp = now.strftime("%Y%m%dT%H%M%S") + f"{now.microsecond // 1000:03d}Z"
+        thread_id = f"{actual_user_id}:{timestamp}"
+
+    print(f"\n🆔 会话 ID: {thread_id}")
+    print(f"👤 用户: {actual_user_id}\n")
     print_separator()
     print()
 
-    logger.info("进入交互模式")
+    logger.info(f"进入交互模式: thread_id={thread_id}, user_id={actual_user_id}")
 
     conversation_count = 0
 
@@ -197,8 +240,13 @@ def interactive_mode():
 
             conversation_count += 1
 
-            # 执行查询
-            run_single_query(question)
+            # 执行查询（每轮使用同一 thread_id，query_id 自动生成）
+            run_single_query(
+                question,
+                query_id=None,  # 每轮自动生成
+                thread_id=thread_id,  # 固定（整个交互会话共享）
+                user_id=actual_user_id,
+            )
 
             # 询问是否继续
             print("💬 您可以继续提问，或输入 'exit' 退出\n")
@@ -229,6 +277,12 @@ def main():
   # 带自定义 query_id
   python scripts/nl2sql_father_cli.py --query-id "test-001" "查询销售额"
 
+  # 指定用户（多轮对话）
+  python scripts/nl2sql_father_cli.py --user-id "alice" "查询销售额"
+
+  # 继续某个会话（多轮对话）
+  python scripts/nl2sql_father_cli.py --thread-id "alice:20251221T120000000Z" "追加条件"
+
   # 查看详细日志
   python scripts/nl2sql_father_cli.py "查询销售额" --verbose
         """
@@ -244,6 +298,18 @@ def main():
         "--query-id",
         "-q",
         help="自定义查询ID"
+    )
+
+    parser.add_argument(
+        "--thread-id",
+        "-t",
+        help="会话ID（多轮对话时复用同一 thread_id）"
+    )
+
+    parser.add_argument(
+        "--user-id",
+        "-u",
+        help="用户标识（默认 guest）"
     )
 
     parser.add_argument(
@@ -278,7 +344,12 @@ def main():
         if args.json:
             # JSON 输出模式
             try:
-                result = run_nl2sql_query(query=question, query_id=args.query_id)
+                result = run_nl2sql_query(
+                    query=question,
+                    query_id=args.query_id,
+                    thread_id=args.thread_id,
+                    user_id=args.user_id,
+                )
                 print(json.dumps(result, indent=2, ensure_ascii=False))
             except Exception as e:
                 error_result = {
@@ -290,10 +361,15 @@ def main():
                 sys.exit(1)
         else:
             # 友好输出模式
-            run_single_query(question, query_id=args.query_id)
+            run_single_query(
+                question,
+                query_id=args.query_id,
+                thread_id=args.thread_id,
+                user_id=args.user_id,
+            )
     else:
         # 交互模式
-        interactive_mode()
+        interactive_mode(thread_id=args.thread_id, user_id=args.user_id)
 
 
 if __name__ == "__main__":

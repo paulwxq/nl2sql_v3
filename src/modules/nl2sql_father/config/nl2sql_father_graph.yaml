@@ -97,4 +97,6 @@ summarizer:
 observability:
   enable_tracing: true  # 是否启用 tracing
   log_state_transitions: true  # 是否记录 State 变更
-  save_checkpoints: false  # 是否保存检查点（调试用）
+  # [已弃用] save_checkpoints 不再生效，checkpoint 统一由 config.yaml 的
+  # langgraph_persistence.checkpoint.enabled 控制
+  save_checkpoints: false  # 已弃用，保留仅为向后兼容

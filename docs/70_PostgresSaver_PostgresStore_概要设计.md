@@ -345,29 +345,17 @@ from langgraph.checkpoint.postgres import PostgresSaver
 
 > **未来优化**：如遇 state 体积过大导致 checkpoint 表膨胀或写入延迟问题，可考虑引入 `ShallowPostgresSaver`（浅层 checkpoint，仅保存 metadata），届时需另行评估并更新设计。
 
-### 4.2 图级开关（保持现有配置习惯）
+### 4.2 开关生效条件（统一到系统级配置）
 
-父图目前已存在：`nl2sql_father_graph.yaml -> observability.save_checkpoints`。
-
-建议：
-- 保留现有字段作为"图级开关"，最终生效条件为：系统级与图级同时启用。
-- 子图配置（`sql_generation_subgraph.yaml`）可新增类似字段（如 `observability.save_checkpoints` 或 `observability.persist_messages`），用于控制是否对子图启用 checkpointer。
+> **设计决策**：原计划保留图级开关（如 `nl2sql_father_graph.yaml -> observability.save_checkpoints`），但为简化配置管理，**已决定统一到系统级配置**。图级开关字段保留但标记为弃用。
 
 **开关生效条件公式**：
 
 ```python
-# Checkpoint 生效条件（父图）
-father_checkpoint_enabled = (
+# Checkpoint 生效条件（父图 + 子图共用）
+checkpoint_enabled = (
     langgraph_persistence.enabled                     # 系统总开关
     and langgraph_persistence.checkpoint.enabled      # checkpoint 组件开关
-    and nl2sql_father_graph.observability.save_checkpoints  # 图级开关
-)
-
-# Checkpoint 生效条件（子图）
-subgraph_checkpoint_enabled = (
-    langgraph_persistence.enabled
-    and langgraph_persistence.checkpoint.enabled
-    and sql_generation_subgraph.observability.save_checkpoints  # 子图级开关（新增）
 )
 
 # Store 生效条件
@@ -377,7 +365,11 @@ store_enabled = (
 )
 ```
 
-> **注意**：实现时需统一使用上述公式，避免各模块对开关判断逻辑不一致。
+**弃用说明**：
+- `nl2sql_father_graph.yaml -> observability.save_checkpoints`：已弃用，字段保留仅为向后兼容，不影响 checkpoint 行为
+- 如需关闭 checkpoint，请修改 `config.yaml` 中的 `langgraph_persistence.checkpoint.enabled`
+
+> **注意**：所有模块统一使用 `is_checkpoint_enabled()` 和 `is_store_enabled()` 函数判断开关状态。
 
 ---
 
@@ -1319,36 +1311,72 @@ def init_langgraph_persistence():
 -- 独立 schema（<schema> 替换为配置值，如 langgraph）
 CREATE SCHEMA IF NOT EXISTS <schema>;
 
--- Checkpoint 表（示例：用于 PostgresSaver）
--- 注意：真实实现可能拆分为 checkpoints / blobs / writes 等多表，或主键结构不同。
+-- ============================================================
+-- Checkpoint 相关表（由 PostgresSaver.setup() 自动创建）
+-- ============================================================
+
+-- 主表：存储 checkpoint 元数据
 CREATE TABLE IF NOT EXISTS <schema>.checkpoints (
     thread_id TEXT NOT NULL,
-    checkpoint_ns TEXT NOT NULL DEFAULT '',
+    checkpoint_ns TEXT NOT NULL,
     checkpoint_id TEXT NOT NULL,
     parent_checkpoint_id TEXT,
+    type TEXT,
     checkpoint JSONB NOT NULL,
-    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    metadata JSONB NOT NULL,
     PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id)
 );
 
--- Store 表（示例：用于 PostgresStore）
--- 注意：真实实现可能包含 value 的序列化字段、版本号、TTL/过期字段等。
-CREATE TABLE IF NOT EXISTS <schema>.store (
-    namespace TEXT NOT NULL,
-    key TEXT NOT NULL,
-    value JSONB NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (namespace, key)
+-- Blob 表：存储 checkpoint 的二进制数据（如 channel 状态）
+CREATE TABLE IF NOT EXISTS <schema>.checkpoint_blobs (
+    thread_id TEXT NOT NULL,
+    checkpoint_ns TEXT NOT NULL,
+    channel TEXT NOT NULL,
+    version TEXT NOT NULL,
+    type TEXT NOT NULL,
+    blob BYTEA,
+    PRIMARY KEY (thread_id, checkpoint_ns, channel, version)
 );
 
--- 索引（示例：按写入时间检索/清理）
-CREATE INDEX IF NOT EXISTS idx_<schema>_checkpoints_created_at
-    ON <schema>.checkpoints (created_at);
+-- Writes 表：存储 checkpoint 写入记录
+CREATE TABLE IF NOT EXISTS <schema>.checkpoint_writes (
+    thread_id TEXT NOT NULL,
+    checkpoint_ns TEXT NOT NULL,
+    checkpoint_id TEXT NOT NULL,
+    task_id TEXT NOT NULL,
+    idx INTEGER NOT NULL,
+    channel TEXT NOT NULL,
+    type TEXT,
+    blob BYTEA NOT NULL,
+    task_path TEXT NOT NULL,
+    PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id, task_id, idx)
+);
 
-CREATE INDEX IF NOT EXISTS idx_<schema>_store_created_at
+-- ============================================================
+-- Store 表（由 PostgresStore.setup() 自动创建）
+-- ============================================================
+
+-- 注意：字段名为 prefix（非 namespace），用于存储 namespace 元组
+CREATE TABLE IF NOT EXISTS <schema>.store (
+    prefix TEXT NOT NULL,        -- namespace 元组的字符串形式（如 "chat_history"）
+    key TEXT NOT NULL,           -- 数据 key（如 "{thread_id}#{query_id}"）
+    value JSONB NOT NULL,        -- 数据内容
+    created_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ,
+    expires_at TIMESTAMPTZ,      -- TTL 过期时间（可选）
+    ttl_minutes INTEGER,         -- TTL 分钟数（可选）
+    PRIMARY KEY (prefix, key)
+);
+
+-- 索引（示例）
+-- 注意：checkpoints 表没有 created_at 字段，索引基于主键组合
+
+-- Store 表索引（按时间检索/清理）
+CREATE INDEX IF NOT EXISTS idx_store_created_at
     ON <schema>.store (created_at);
+
+CREATE INDEX IF NOT EXISTS idx_store_prefix
+    ON <schema>.store (prefix);
 ```
 
 手动迁移执行方式（示例）：
@@ -1370,30 +1398,50 @@ checkpoint 与对话历史都会增长，建议预留：
 **清理过期 checkpoint**：
 
 > **占位符说明**：`<schema>` 替换为 `langgraph_persistence.database.schema` 配置值（默认 `langgraph`）。**请勿直接复制执行**。
+>
+> **注意**：`checkpoints` 表没有 `created_at` 字段。可基于 `thread_id` 中的时间戳进行清理（格式：`{user_id}:{timestamp}`），或使用 UUID v7 的 `checkpoint_id` 解析时间。
 
 ```sql
--- 清理 7 天前的 checkpoint
+-- 方案 1：按 thread_id 中的时间戳前缀清理（需替换日期）
+-- 例如清理 2025-12-14 之前的记录（thread_id 格式：user:YYYYMMDDTHHMMSSFFFZ）
 DELETE FROM <schema>.checkpoints
-WHERE created_at < NOW() - INTERVAL '7 days';
+WHERE thread_id < (
+    SELECT MIN(thread_id) 
+    FROM <schema>.checkpoints 
+    WHERE thread_id LIKE '%:20251214T%'
+);
 
--- 可选：先查询待清理数量
-SELECT COUNT(*) AS to_delete
+-- 方案 2：按 thread_id 列表批量删除（推荐用于精确清理）
+DELETE FROM <schema>.checkpoints
+WHERE thread_id IN (
+    SELECT DISTINCT thread_id 
+    FROM <schema>.checkpoints 
+    WHERE thread_id LIKE '%:202512%'  -- 示例：清理 2025 年 12 月的数据
+    LIMIT 1000
+);
+
+-- 查询各 thread 的记录数
+SELECT thread_id, COUNT(*) AS checkpoint_count
 FROM <schema>.checkpoints
-WHERE created_at < NOW() - INTERVAL '7 days';
+GROUP BY thread_id
+ORDER BY thread_id DESC
+LIMIT 10;
 ```
 
 **清理过期对话历史**：
 
 > **占位符说明**：
 > - `<schema>` 替换为 `langgraph_persistence.database.schema` 配置值（默认 `langgraph`）
-> - `<store_namespace>` 替换为 `langgraph_persistence.store.namespace` 配置值（默认 `chat_history`）
+> - `<store_prefix>` 替换为 `langgraph_persistence.store.namespace` 配置值（默认 `chat_history`）
+>
+> **注意**：Store 表使用 `prefix` 字段存储 namespace，而非 `namespace` 字段。
 >
 > **请勿直接复制执行**。
 
 ```sql
 -- 清理 90 天前的对话历史
 DELETE FROM <schema>.store
-WHERE namespace = '<store_namespace>'
+WHERE prefix = '<store_prefix>'
   AND created_at < NOW() - INTERVAL '90 days';
 
 -- 可选：按 thread_id 清理（保留最近 N 轮）
@@ -1488,16 +1536,18 @@ ORDER BY table_name;
 2. 查询 checkpoint 记录（以下以 9.2.1 的示例表为例；如实际表不同请替换）：
 
 > **占位符说明**：`<schema>` 替换为 `langgraph_persistence.database.schema` 配置值（默认 `langgraph`）。**请勿直接复制执行**。
+>
+> **注意**：`checkpoints` 表没有 `created_at` 字段，按 `thread_id` 排序（包含时间戳）。
 
 ```sql
-SELECT thread_id, checkpoint_ns, checkpoint_id, created_at
+SELECT thread_id, checkpoint_ns, checkpoint_id, metadata
 FROM <schema>.checkpoints
-ORDER BY created_at DESC
+ORDER BY thread_id DESC
 LIMIT 5;
 ```
 
 3. 预期：
-- 至少看到 1 条父图记录，`checkpoint_ns` 值为配置的 `father_namespace`（默认 `'nl2sql_father'`）
+- 至少看到 1 条父图记录，`checkpoint_ns` 值为配置的 `father_namespace`（默认 `'nl2sql_father'`，但测试发现空字符串也可能出现）
 - Complex Path 下可看到多个子图 namespace，格式为 `{subgraph_namespace}:{sub_query_id}`（默认前缀 `'sql_generation'`）
 
 > 注：`father_namespace` 和 `subgraph_namespace` 取自配置 `langgraph_persistence.checkpoint.*`，验收时需以实际配置值为准。
@@ -1509,19 +1559,21 @@ LIMIT 5;
 
 > **占位符说明**：
 > - `<schema>` 替换为 `langgraph_persistence.database.schema` 配置值（默认 `langgraph`）
-> - `<store_namespace>` 替换为 `langgraph_persistence.store.namespace` 配置值（默认 `chat_history`）
+> - `<store_prefix>` 替换为 `langgraph_persistence.store.namespace` 配置值（默认 `chat_history`）
+>
+> **注意**：Store 表使用 `prefix` 字段（非 `namespace`）存储命名空间。
 >
 > **请勿直接复制执行**。
 
 ```sql
 SELECT
-  namespace,
+  prefix,
   key,
   value->'user'->>'content'      AS user_content,
   value->'assistant'->>'content' AS assistant_content,
   created_at
 FROM <schema>.store
-WHERE namespace = '<store_namespace>'
+WHERE prefix = '<store_prefix>'
 ORDER BY created_at DESC
 LIMIT 5;
 ```

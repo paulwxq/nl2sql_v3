@@ -3,9 +3,12 @@
 定义父图的状态类型和辅助函数。
 """
 
+import logging
 import uuid
 from typing import Annotated, Any, Dict, List, Literal, Optional, TypedDict
 from operator import add
+
+logger = logging.getLogger(__name__)
 
 
 class SubQueryInfo(TypedDict):
@@ -51,6 +54,8 @@ class NL2SQLFatherState(TypedDict):
     # ========== 输入与标识 ==========
     user_query: str  # 用户原始问题
     query_id: str  # 会话级查询ID
+    thread_id: str  # 会话 ID（格式：{user_id}:{timestamp}）
+    user_id: str  # 用户标识（未登录时为 "guest"）
 
     # ========== 子查询管理（支持拆分） ==========
     sub_queries: Annotated[List[SubQueryInfo], add]  # 子查询列表（使用 reducer）
@@ -90,24 +95,63 @@ class NL2SQLFatherState(TypedDict):
 def create_initial_state(
     user_query: str,
     query_id: Optional[str] = None,
+    thread_id: Optional[str] = None,
+    user_id: Optional[str] = None,
 ) -> NL2SQLFatherState:
     """创建初始 State
 
     Args:
         user_query: 用户原始问题
         query_id: 查询ID（可选，不提供则自动生成）
+        thread_id: 会话ID（可选，格式：{user_id}:{timestamp}）
+        user_id: 用户标识（可选，未登录时为 "guest"）
 
     Returns:
         初始化的父图 State
+
+    thread_id 与 user_id 一致性规则：
+        - 只传 thread_id → 从 thread_id 反推 user_id
+        - 只传 user_id → 自动生成 thread_id
+        - 都传入且一致 → 直接使用
+        - 都传入但不一致 → 以 thread_id 为准，记录 warning
+        - 都不传 → user_id=guest，自动生成 thread_id
     """
+    from src.services.langgraph_persistence.identifiers import (
+        get_or_generate_thread_id,
+        get_user_id_from_thread_id,
+        sanitize_user_id,
+        validate_thread_id,
+    )
+
     # 自动生成 query_id（如果未提供）
     if query_id is None:
         query_id = f"q_{uuid.uuid4().hex[:8]}"
+
+    # thread_id 和 user_id 一致性处理
+    if thread_id and validate_thread_id(thread_id):
+        # 传入了合法 thread_id → 从中反推 user_id
+        actual_thread_id = thread_id
+        thread_user_id = get_user_id_from_thread_id(thread_id)
+
+        if user_id and user_id != thread_user_id:
+            # 两者都传入但不一致 → 以 thread_id 为准，记录 warning
+            logger.warning(
+                f"user_id '{user_id}' != thread_id prefix '{thread_user_id}', "
+                f"using '{thread_user_id}' from thread_id"
+            )
+        actual_user_id = thread_user_id
+    else:
+        # 未传入 thread_id 或格式非法 → 自动生成
+        # 传入原始 thread_id，让 get_or_generate_thread_id 内部记录 warning（如果非法）
+        actual_user_id = sanitize_user_id(user_id)  # 校验 user_id，不合法则回退为 guest
+        actual_thread_id = get_or_generate_thread_id(thread_id, actual_user_id)
 
     return NL2SQLFatherState(
         # 输入
         user_query=user_query,
         query_id=query_id,
+        thread_id=actual_thread_id,
+        user_id=actual_user_id,
         # 子查询管理
         sub_queries=[],
         current_sub_query_id=None,
@@ -159,6 +203,8 @@ def extract_final_result(state: NL2SQLFatherState) -> Dict[str, Any]:
         # ========== Phase 1 + Phase 2 通用字段 ==========
         "user_query": state["user_query"],
         "query_id": state["query_id"],
+        "thread_id": state.get("thread_id"),  # 会话 ID
+        "user_id": state.get("user_id"),  # 用户标识
         "complexity": state.get("complexity"),  # "simple" | "complex" | None
         "path_taken": state.get("path_taken"),  # "fast" | "complex" | None
         "summary": state.get("summary"),

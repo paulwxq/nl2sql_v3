@@ -197,6 +197,34 @@ performance:
   query_timeout: 300                 # 查询超时（秒）
 
 # ------------------------------------------------------------------------------
+# LangGraph 持久化配置（Checkpoint + Store）
+# ------------------------------------------------------------------------------
+langgraph_persistence:
+  enabled: true                      # 总开关（当前已启用）
+
+  # 数据库连接（复用 database.* 或独立配置）
+  database:
+    use_global_config: true          # true: 从 database.* 组装 URI；false: 使用 db_uri
+    db_uri: ${LANGGRAPH_DB_URI:}     # 仅当 use_global_config=false 时生效（URI 格式）
+    schema: langgraph                # 独立 schema，避免与业务表混用
+    sslmode: disable                 # 可选：disable/require/verify-ca 等
+    connect_timeout: 5               # 连接超时（秒），防止连接阶段卡死
+    statement_timeout_ms: 5000       # SQL 执行超时（毫秒），防止写入卡死
+
+  # Checkpoint 配置
+  checkpoint:
+    enabled: true                    # checkpoint 组件开关（当前已启用）
+    father_namespace: nl2sql_father  # 父图 checkpoint_ns
+    subgraph_namespace: sql_generation  # 子图 checkpoint_ns 前缀
+
+  # Store 配置（本阶段仅写入历史对话，不规划读取）
+  store:
+    enabled: true                    # store 组件开关（当前已启用）
+    namespace: chat_history          # 历史对话 namespace
+    retention_days: 90               # 预留：后续清理策略
+    write_timeout: 2                 # 写入超时（秒）
+
+# ------------------------------------------------------------------------------
 # 开发/调试配置
 # ------------------------------------------------------------------------------
 development:
