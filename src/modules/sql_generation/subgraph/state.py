@@ -17,13 +17,16 @@ class SQLGenerationState(MessagesState):
     # ========== 输入字段 ==========
     query: str  # 子查询文本
     query_id: str  # 查询ID
+    thread_id: Optional[str]  # 会话 ID（从父图透传，可选）
     dependencies_results: Dict[str, Any]  # 依赖查询的结果（可能是列表、字典、数值等）
     user_query: str  # 用户原始查询
     parse_hints: Optional[Dict[str, Any]]  # 解析提示
+    conversation_history: Optional[List[Dict[str, str]]]  # 对话历史（旧→新，仅 Q/A）
 
     # ========== 解析阶段 ==========
     parse_result: Optional[Dict[str, Any]] = None  # 内部解析或外部传入的结构化结果
     parsing_source: Optional[str] = None  # "external" | "llm" | "disabled" | "fallback"
+    rewritten_query: Optional[str] = None  # 指代消解后的独立问题（用于检索与生成）
 
     # ========== Schema检索阶段 ==========
     schema_context: Optional[Dict[str, Any]] = None
@@ -83,6 +86,9 @@ def create_initial_state(
     user_query: str,
     dependencies_results: Optional[Dict[str, Any]] = None,
     parse_hints: Optional[Dict[str, Any]] = None,
+    *,
+    thread_id: Optional[str] = None,
+    conversation_history: Optional[List[Dict[str, str]]] = None,
 ) -> SQLGenerationState:
     """
     创建初始 State
@@ -101,9 +107,11 @@ def create_initial_state(
         messages=[],  # MessagesState 必需的字段
         query=query,
         query_id=query_id,
+        thread_id=thread_id,
         user_query=user_query,
         dependencies_results=dependencies_results or {},
         parse_hints=parse_hints,
+        conversation_history=conversation_history,
         iteration_count=0,
         validation_history=[],
         execution_time=0.0,

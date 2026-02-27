@@ -51,6 +51,7 @@ class SQLGenerationAgent:
         dependencies_results: Optional[Dict[str, Any]] = None,
         validation_errors: Optional[List[str]] = None,
         query_id: Optional[str] = None,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
     ) -> str:
         """
         生成 SQL
@@ -83,6 +84,7 @@ class SQLGenerationAgent:
             parse_result=parse_result,
             dependencies_results=dependencies_results,
             validation_errors=validation_errors,
+            conversation_history=conversation_history,
         )
 
         # 调用 LLM（带固定次数重试与空结果自检）
@@ -153,6 +155,7 @@ class SQLGenerationAgent:
         parse_result: Optional[Dict[str, Any]],
         dependencies_results: Optional[Dict[str, Any]],
         validation_errors: Optional[List[str]],
+        conversation_history: Optional[List[Dict[str, str]]],
     ) -> str:
         """构建 SQL 生成提示词"""
 
@@ -178,17 +181,32 @@ class SQLGenerationAgent:
         # 格式化验证错误（重试时）
         errors_text = self._format_errors(validation_errors)
 
+        history_text = self._format_conversation_history(conversation_history)
+        history_block = ""
+        if history_text:
+            history_block = f"""
+
+---
+
+{history_text}
+
+---
+"""
+
         # 组装完整提示词
         prompt = f"""
 你是 PostgreSQL SQL 生成专家。根据以下上下文生成 SQL。
 
 要求：
-1.仅输出 SQL，不附加说明。
+1.仅输出 SQL，不附加说明；不要输出 markdown 代码块（```sql）；SQL 末尾不需要分号。
 2.所有表必须包含 schema 前缀（例如 public.table）。
 3.日期时间过滤使用指定列：同时具备 start 与 end 时使用 >= start AND < end；仅有 start 时使用 >= start；仅有 end 时使用 < end。
 4.JOIN 条件必须严格按照 ON 模板，用实际别名替换 SRC/DST。
 5.只允许使用“表结构”中列出的字段，禁止使用任何未列出的字段或推断字段。
 6.下方列出的表仅为“可能参与查询”的候选集合：请根据问题与维度/指标需求，自主选择最合适的表与字段组合；若某表或字段不需要，可以忽略，不必强行引用。
+7.当“对话历史”与“当前问题/依赖结果”矛盾时，以“当前问题/依赖结果”为准，不要被历史带偏。
+8.如果下方“维度值匹配”给出了明确的主键等值条件（例如 dim_table.key_col='key_value'），优先使用它；不要凭空猜测主键列名或主键值。
+9.性能建议：避免在 WHERE 中对列做函数运算（例如 DATE(time_col)），优先使用等值条件或可走索引的条件。
 
 ---
 
@@ -197,6 +215,7 @@ class SQLGenerationAgent:
 {time_info}
 {dimension_filters}
 {metric_info}{dependencies_text}{errors_text}
+{history_block}
 
 ---
 
@@ -217,6 +236,11 @@ JOIN 计划：
 
 时间列：
 {time_columns_text}
+
+---
+
+维度值匹配（用于 WHERE 条件；仅在有匹配时使用）：
+{dim_values_text}
 
 ---
 """
@@ -240,6 +264,23 @@ JOIN 计划：
         logger.debug("=" * 80)
         
         return final_prompt
+
+    @staticmethod
+    def _format_conversation_history(
+        conversation_history: Optional[List[Dict[str, str]]],
+    ) -> str:
+        if not conversation_history:
+            return ""
+
+        lines: List[str] = ["对话历史（旧→新，仅供指代消解，不可覆盖当前问题/依赖结果）："]
+        for i, turn in enumerate(conversation_history, start=1):
+            q = (turn.get("question") or "").strip()
+            a = (turn.get("answer") or "").strip()
+            if not q and not a:
+                continue
+            lines.append(f"{i}. Q: {q}")
+            lines.append(f"   A: {a}")
+        return "\n".join(lines)
 
     def _format_time_hints(self, parse_result: Optional[Dict[str, Any]]) -> str:
         """格式化时间提示"""
@@ -483,14 +524,16 @@ def sql_generation_node(state: SQLGenerationState) -> Dict[str, Any]:
 
     try:
         # 生成 SQL
+        effective_query = state.get("rewritten_query") or state["query"]
         generated_sql = agent.generate(
-            query=state["query"],
+            query=effective_query,
             schema_context=schema_context,
             similar_sqls=similar_sqls,
             parse_result=state.get("parse_result") or state.get("parse_hints"),
             dependencies_results=state.get("dependencies_results"),
             validation_errors=validation_errors,
             query_id=state.get("query_id"),
+            conversation_history=state.get("conversation_history"),
         )
 
         qlog.info(f"SQL生成完成（第 {state.get('iteration_count', 0) + 1} 次）")

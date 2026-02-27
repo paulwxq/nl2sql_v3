@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from langchain_community.chat_models import ChatTongyi
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -12,6 +12,24 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from src.modules.sql_generation.subgraph.state import SQLGenerationState
 from src.services.config_loader import load_subgraph_config
 from src.utils.logger import get_module_logger, with_query_id
+
+
+def _format_conversation_history(
+    conversation_history: Optional[list[dict[str, str]]],
+) -> str:
+    if not conversation_history:
+        return ""
+
+    lines = ["Conversation history (old -> new, for reference only):"]
+    for i, turn in enumerate(conversation_history, start=1):
+        q = (turn.get("question") or "").strip()
+        a = (turn.get("answer") or "").strip()
+        if not q and not a:
+            continue
+        lines.append(f"{i}. Q: {q}")
+        lines.append(f"   A: {a}")
+    lines.append("")
+    return "\n".join(lines)
 
 
 class QuestionParsingAgent:
@@ -27,14 +45,28 @@ class QuestionParsingAgent:
             timeout=config.get("timeout", 20),
         )
 
-    def parse(self, query: str, current_date: Optional[str] = None) -> Dict[str, Any]:
+    def parse_with_rewrite(
+        self,
+        query: str,
+        *,
+        current_date: Optional[str] = None,
+        conversation_history: Optional[list[dict[str, str]]] = None,
+        query_id: Optional[str] = None,
+    ) -> Tuple[str, Dict[str, Any]]:
         if not query:
             raise ValueError("问题内容为空，无法解析")
 
         if current_date is None:
             current_date = datetime.now().strftime("%Y-%m-%d")
 
-        system_prompt = """You are a Chinese business intelligence analyst who extracts structured intents from natural language questions.
+        system_prompt = """You are a Chinese business intelligence analyst.
+
+You will be given (optional) conversation history and the current user question.
+Your job is to:
+1) Rewrite the current question into a fully self-contained question in Chinese by resolving pronouns/ellipsis using the conversation history.
+   - If the current question is already self-contained, the rewritten question MUST be identical to the original question (do not add new constraints).
+2) Extract a structured intent object (QueryParseResult) from the rewritten question.
+
 Follow these rules strictly:
 1. IMPORTANT: Time field handling:
    - If the question does NOT explicitly mention any date/time constraint, the "time" field MUST be null.
@@ -57,32 +89,44 @@ Follow these rules strictly:
 4. Supported intent.task values: plain_agg, topn, rank, compare_yoy, compare_mom.
 """
 
+        history_text = _format_conversation_history(conversation_history)
         user_prompt = (
             "Today's date is: {current_date} (Asia/Shanghai timezone)\n\n"
-            "Please analyze the question below and return a strict JSON output.\n"
-            "Question: {query}\n\n"
-            "JSON schema:\n{{\n"
-            "  \"keywords\": [str],\n"
-            "  \"time\": {{\n"
-            "    \"start\": \"YYYY-MM-DD\" or \"YYYY-MM-DD HH:MM:SS\",\n"
-            "    \"end\":   \"YYYY-MM-DD\" or \"YYYY-MM-DD HH:MM:SS\",\n"
-            "    \"grain_inferred\": \"year|quarter|month|week|day|hour\",\n"
-            "    \"is_full_period\": bool\n"
-            "  }} | null,\n"
-            "  \"metric\": {{\"text\": str, \"is_aggregate_candidate\": bool}},\n"
-            "  \"dimensions\": [{{\"text\": str, \"role\": \"column|value\", \"evidence\": str}}],\n"
-            "  \"intent\": {{\"task\": \"plain_agg|topn|rank|compare_yoy|compare_mom\", \"topn\": int|null}},\n"
-            "  \"signals\": [str]\n"
+            "{history_text}\n"
+            "Current question: {query}\n\n"
+            "Output JSON schema (strict):\n{{\n"
+            "  \"rewritten_query\": str,\n"
+            "  \"parse_result\": {{\n"
+            "    \"keywords\": [str],\n"
+            "    \"time\": {{\n"
+            "      \"start\": \"YYYY-MM-DD\" or \"YYYY-MM-DD HH:MM:SS\",\n"
+            "      \"end\":   \"YYYY-MM-DD\" or \"YYYY-MM-DD HH:MM:SS\",\n"
+            "      \"grain_inferred\": \"year|quarter|month|week|day|hour\",\n"
+            "      \"is_full_period\": bool\n"
+            "    }} | null,\n"
+            "    \"metric\": {{\"text\": str, \"is_aggregate_candidate\": bool}},\n"
+            "    \"dimensions\": [{{\"text\": str, \"role\": \"column|value\", \"evidence\": str}}],\n"
+            "    \"intent\": {{\"task\": \"plain_agg|topn|rank|compare_yoy|compare_mom\", \"topn\": int|null}},\n"
+            "    \"signals\": [str]\n"
+            "  }}\n"
             "}}\n"
             "Notes:\n"
-            "- Populate \"time\" ONLY when the question explicitly mentions a date/time constraint; otherwise \"time\" MUST be null.\n"
-            "- Choose grain_inferred as the SMALLEST grain implied by the wording (e.g., time-of-day → hour; date with no time → day; month wording → month; quarter wording → quarter; year wording → year).\n"
-            "- Set is_full_period=true ONLY for explicit full-period phrases (e.g., \"this month\", \"September\", \"this week\", \"Q1\", \"this year\", \"today/whole day\"); otherwise false.\n"
-            "- Single-sided constraints: \"since X\" → only time.start (is_full_period=false); \"until Y\" → only time.end (is_full_period=false).\n"
-            "- Week semantics follow ISO-8601 (week starts on Monday). Do NOT compute calendar boundaries here.\n"
-            "- Timezone context: Asia/Shanghai. Do NOT convert or normalize; do NOT add missing parts.\n"
-            "Output requirement: Return JSON only, without any extra explanations."
-        ).format(current_date=current_date, query=query)
+            "- rewritten_query MUST be a self-contained question in Chinese; if already self-contained, keep it identical.\n"
+            "- Populate time ONLY when explicitly mentioned; otherwise time MUST be null.\n"
+            "- Return JSON only, without any extra explanations."
+        ).format(current_date=current_date, query=query, history_text=history_text)
+
+        if query_id:
+            qlog = with_query_id(get_module_logger("sql_subgraph"), query_id)
+            qlog.debug("=" * 80)
+            qlog.debug("完整 LLM 提示词（question_parsing）: [System]")
+            qlog.debug("=" * 80)
+            qlog.debug(system_prompt)
+            qlog.debug("=" * 80)
+            qlog.debug("完整 LLM 提示词（question_parsing）: [User]")
+            qlog.debug("=" * 80)
+            qlog.debug(user_prompt)
+            qlog.debug("=" * 80)
 
         response = self._llm.invoke(
             [
@@ -96,11 +140,23 @@ Follow these rules strictly:
             raise ValueError("LLM 返回空响应")
 
         try:
-            return json.loads(raw_content)
+            payload = json.loads(raw_content)
         except json.JSONDecodeError as exc:
             snippet = raw_content[:200]
             raise ValueError(f"解析 LLM 响应失败: {exc}; snippet={snippet}") from exc
 
+        rewritten_query = (payload.get("rewritten_query") or "").strip()
+        parse_result = payload.get("parse_result")
+        if not rewritten_query:
+            rewritten_query = query
+        if not isinstance(parse_result, dict):
+            raise ValueError("LLM 输出不符合 schema：parse_result 不是对象")
+
+        return rewritten_query, parse_result
+
+    def parse(self, query: str, current_date: Optional[str] = None) -> Dict[str, Any]:
+        _, parse_result = self.parse_with_rewrite(query, current_date=current_date)
+        return parse_result
 
 def question_parsing_node(state: SQLGenerationState) -> Dict[str, Any]:
     """子图中的问题解析节点"""
@@ -115,6 +171,7 @@ def question_parsing_node(state: SQLGenerationState) -> Dict[str, Any]:
         return {
             "parse_result": state["parse_hints"],
             "parsing_source": "external",
+            "rewritten_query": query,
         }
 
     # 2. 加载配置，判断是否启用内部解析
@@ -126,13 +183,18 @@ def question_parsing_node(state: SQLGenerationState) -> Dict[str, Any]:
         return {
             "parse_result": {},
             "parsing_source": "disabled",
+            "rewritten_query": query,
         }
 
     agent = QuestionParsingAgent(parsing_config)
 
     try:
         qlog.info("开始执行问题解析")
-        parse_result = agent.parse(query=query)
+        rewritten_query, parse_result = agent.parse_with_rewrite(
+            query=query,
+            conversation_history=state.get("conversation_history"),
+            query_id=query_id,
+        )
         qlog.info("问题解析完成")
         
         # 详细记录解析结果
@@ -144,6 +206,7 @@ def question_parsing_node(state: SQLGenerationState) -> Dict[str, Any]:
         return {
             "parse_result": parse_result,
             "parsing_source": "llm",
+            "rewritten_query": rewritten_query,
         }
     except Exception as exc:
         qlog.error(f"问题解析失败: {exc}", exc_info=True)
@@ -153,10 +216,12 @@ def question_parsing_node(state: SQLGenerationState) -> Dict[str, Any]:
                 "parse_result": {},
                 "parsing_source": "fallback",
                 "parsing_error": str(exc),
+                "rewritten_query": query,
             }
         return {
             "parse_result": None,
             "parsing_source": "llm",
             "error": f"问题解析失败: {exc}",
             "error_type": "parsing_failed",
+            "rewritten_query": query,
         }

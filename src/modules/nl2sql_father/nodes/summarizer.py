@@ -77,6 +77,7 @@ def summarizer_node(state: NL2SQLFatherState) -> Dict[str, Any]:
     timeout = config["timeout"]
     max_rows_in_prompt = config["max_rows_in_prompt"]
     use_template = config["use_template"]
+    history_block = _format_conversation_history(state.get("conversation_history"))
 
     # ========== 场景1：SQL生成失败（从子图直接跳转过来，跳过了SQL执行） ==========
     if not execution_results and error:
@@ -142,6 +143,10 @@ def summarizer_node(state: NL2SQLFatherState) -> Dict[str, Any]:
             # 单SQL结果提示词
             prompt = f"""你是一个数据分析助手。用户提出了一个问题，系统执行了SQL查询并获得了结果。请用自然语言总结结果。
 
+{history_block}
+
+规则：当“对话历史”与“当前问题/本次查询结果”矛盾时，以“当前问题/本次查询结果”为准，不要被历史带偏。
+
 用户问题：{user_query}
 
 {context_info}
@@ -150,6 +155,10 @@ def summarizer_node(state: NL2SQLFatherState) -> Dict[str, Any]:
         else:
             # 多SQL结果提示词（Phase 2）
             prompt = f"""你是一个数据分析助手。用户提出了一个问题，系统分步执行了多个SQL查询并获得了结果。请综合所有结果，用自然语言回答用户的问题。
+
+{history_block}
+
+规则：当“对话历史”与“当前问题/本次查询结果”矛盾时，以“当前问题/本次查询结果”为准，不要被历史带偏。
 
 用户问题：{user_query}
 
@@ -164,6 +173,13 @@ def summarizer_node(state: NL2SQLFatherState) -> Dict[str, Any]:
         )
 
         try:
+            # DEBUG: 打印完整提示词（由日志级别控制是否可见）
+            query_logger.debug("=" * 80)
+            query_logger.debug("完整 LLM 提示词（summarizer）:")
+            query_logger.debug("=" * 80)
+            query_logger.debug(prompt)
+            query_logger.debug("=" * 80)
+
             response = llm.invoke(prompt)
             summary = response.content.strip()
             query_logger.info("LLM 生成总结成功")
@@ -182,6 +198,23 @@ def summarizer_node(state: NL2SQLFatherState) -> Dict[str, Any]:
     return {
         "summary": summary,
     }
+
+
+def _format_conversation_history(conversation_history: Any) -> str:
+    if not conversation_history:
+        return ""
+
+    lines: List[str] = ["对话历史（旧→新，仅供指代消解）："]
+    for i, turn in enumerate(conversation_history, start=1):
+        if not isinstance(turn, dict):
+            continue
+        q = (turn.get("question") or "").strip()
+        a = (turn.get("answer") or "").strip()
+        if not q and not a:
+            continue
+        lines.append(f"{i}. Q: {q}")
+        lines.append(f"   A: {a}")
+    return "\n".join(lines)
 
 
 def _build_error_summary(error: str, error_type: str, user_query: str) -> str:

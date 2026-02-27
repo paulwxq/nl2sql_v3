@@ -17,7 +17,7 @@ wheels/
 # Logs
 logs/
 *.log
-
+CLAUDE.md
 # IDE
 .vscode/
 .idea/

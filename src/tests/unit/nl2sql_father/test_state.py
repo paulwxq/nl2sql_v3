@@ -54,6 +54,9 @@ class TestCreateInitialState:
         required_fields = [
             "user_query",
             "query_id",
+            "thread_id",
+            "user_id",
+            "conversation_history",
             "sub_queries",
             "current_sub_query_id",
             "complexity",
@@ -89,6 +92,7 @@ class TestCreateInitialState:
             "summary",
             "path_taken",
             "metadata",
+            "conversation_history",
         ]
 
         for field in none_fields:

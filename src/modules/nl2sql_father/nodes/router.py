@@ -85,12 +85,19 @@ def router_node(state: NL2SQLFatherState) -> Dict[str, Any]:
 
 用户问题：{user_query}
 
-请只输出一个词：simple 或 complex"""
+    请只输出一个词：simple 或 complex"""
 
     # 调用 LLM
     start_time = time.time()
 
     try:
+        # DEBUG: 打印完整提示词（由日志级别控制是否可见）
+        query_logger.debug("=" * 80)
+        query_logger.debug("完整 LLM 提示词（router）:")
+        query_logger.debug("=" * 80)
+        query_logger.debug(prompt)
+        query_logger.debug("=" * 80)
+
         llm = ChatTongyi(
             model=model_name,
             temperature=temperature,

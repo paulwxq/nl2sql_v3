@@ -34,12 +34,15 @@ class TestQuestionParsingAgent:
         # Mock LLM 响应
         mock_response = MagicMock()
         mock_response.content = """{
-            "keywords": ["销售额", "2024年"],
-            "time": {"start": "2024-01-01", "end": "2024-12-31", "grain_inferred": "year", "is_full_period": true},
-            "metric": {"text": "销售额", "is_aggregate_candidate": true},
-            "dimensions": [{"text": "2024年", "role": "value", "evidence": "时间维度"}],
-            "intent": {"task": "plain_agg", "topn": null},
-            "signals": []
+            "rewritten_query": "查询2024年的销售额",
+            "parse_result": {
+                "keywords": ["销售额", "2024年"],
+                "time": {"start": "2024-01-01", "end": "2024-12-31", "grain_inferred": "year", "is_full_period": true},
+                "metric": {"text": "销售额", "is_aggregate_candidate": true},
+                "dimensions": [{"text": "2024年", "role": "value", "evidence": "时间维度"}],
+                "intent": {"task": "plain_agg", "topn": null},
+                "signals": []
+            }
         }"""
         agent._llm.invoke = MagicMock(return_value=mock_response)
 
@@ -71,12 +74,15 @@ class TestQuestionParsingAgent:
         """测试无时间约束的查询"""
         mock_response = MagicMock()
         mock_response.content = """{
-            "keywords": ["销售额"],
-            "time": null,
-            "metric": {"text": "销售额", "is_aggregate_candidate": true},
-            "dimensions": [],
-            "intent": {"task": "plain_agg", "topn": null},
-            "signals": []
+            "rewritten_query": "查询销售额",
+            "parse_result": {
+                "keywords": ["销售额"],
+                "time": null,
+                "metric": {"text": "销售额", "is_aggregate_candidate": true},
+                "dimensions": [],
+                "intent": {"task": "plain_agg", "topn": null},
+                "signals": []
+            }
         }"""
         agent._llm.invoke = MagicMock(return_value=mock_response)
 
@@ -120,6 +126,7 @@ class TestQuestionParsingNode:
 
         assert result["parse_result"] == state["parse_hints"]
         assert result["parsing_source"] == "external"
+        assert result["rewritten_query"] == state["query"]
 
     def test_internal_parsing_success(self, mock_config):
         """测试内部解析成功"""
@@ -131,20 +138,24 @@ class TestQuestionParsingNode:
         # Mock Agent
         with patch("src.modules.sql_generation.subgraph.nodes.question_parsing.QuestionParsingAgent") as mock_agent:
             mock_agent_instance = MagicMock()
-            mock_agent_instance.parse.return_value = {
-                "keywords": ["销售额"],
-                "time": None,
-                "metric": {"text": "销售额"},
-                "dimensions": [],
-                "intent": {"task": "plain_agg"},
-                "signals": [],
-            }
+            mock_agent_instance.parse_with_rewrite.return_value = (
+                "查询销售额",
+                {
+                    "keywords": ["销售额"],
+                    "time": None,
+                    "metric": {"text": "销售额"},
+                    "dimensions": [],
+                    "intent": {"task": "plain_agg"},
+                    "signals": [],
+                },
+            )
             mock_agent.return_value = mock_agent_instance
 
             result = question_parsing_node(state)
 
             assert result["parse_result"]["keywords"] == ["销售额"]
             assert result["parsing_source"] == "llm"
+            assert result["rewritten_query"] == "查询销售额"
 
     def test_internal_parser_disabled(self, mock_config):
         """测试禁用内部解析"""
@@ -164,6 +175,7 @@ class TestQuestionParsingNode:
 
         assert result["parse_result"] == {}
         assert result["parsing_source"] == "disabled"
+        assert result["rewritten_query"] == state["query"]
 
     def test_parsing_failure_with_fallback(self, mock_config):
         """测试解析失败时回退到空结构"""
@@ -175,7 +187,7 @@ class TestQuestionParsingNode:
         # Mock Agent 抛出异常
         with patch("src.modules.sql_generation.subgraph.nodes.question_parsing.QuestionParsingAgent") as mock_agent:
             mock_agent_instance = MagicMock()
-            mock_agent_instance.parse.side_effect = Exception("LLM 调用失败")
+            mock_agent_instance.parse_with_rewrite.side_effect = Exception("LLM 调用失败")
             mock_agent.return_value = mock_agent_instance
 
             result = question_parsing_node(state)
@@ -183,6 +195,7 @@ class TestQuestionParsingNode:
             assert result["parse_result"] == {}
             assert result["parsing_source"] == "fallback"
             assert "parsing_error" in result
+            assert result["rewritten_query"] == state["query"]
 
     def test_parsing_failure_without_fallback(self, mock_config):
         """测试解析失败时不回退（严格模式）"""
@@ -204,7 +217,7 @@ class TestQuestionParsingNode:
         # Mock Agent 抛出异常
         with patch("src.modules.sql_generation.subgraph.nodes.question_parsing.QuestionParsingAgent") as mock_agent:
             mock_agent_instance = MagicMock()
-            mock_agent_instance.parse.side_effect = Exception("LLM 调用失败")
+            mock_agent_instance.parse_with_rewrite.side_effect = Exception("LLM 调用失败")
             mock_agent.return_value = mock_agent_instance
 
             result = question_parsing_node(state)
@@ -212,6 +225,7 @@ class TestQuestionParsingNode:
             assert result["parse_result"] is None
             assert "error" in result
             assert result["error_type"] == "parsing_failed"
+            assert result["rewritten_query"] == state["query"]
 
 
 class TestDimensionTableOptimization:
@@ -317,4 +331,3 @@ class TestDimensionTableOptimization:
 
             # 应该选择连通性更好的 dim_store
             assert result == ["public.dim_store"]
-

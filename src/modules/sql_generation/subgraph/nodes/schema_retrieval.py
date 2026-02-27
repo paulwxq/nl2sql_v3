@@ -31,8 +31,9 @@ def schema_retrieval_node(state: SQLGenerationState) -> Dict[str, Any]:
 
     # 执行检索
     try:
+        effective_query = state.get("rewritten_query") or state["query"]
         schema_context = retriever.retrieve(
-            query=state["query"],
+            query=effective_query,
             parse_result=state.get("parse_result"),
             parse_hints=state.get("parse_hints"),
             query_id=state.get("query_id"),

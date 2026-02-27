@@ -242,6 +242,7 @@ def run_sql_generation_subgraph(
     *,
     sub_query_id: str | None = None,
     thread_id: str | None = None,
+    conversation_history: list[dict[str, str]] | None = None,
 ) -> dict:
     """
     运行 SQL 生成子图（便捷函数）
@@ -271,9 +272,11 @@ def run_sql_generation_subgraph(
         "messages": [],
         "query": query,
         "query_id": query_id,
+        "thread_id": thread_id,
         "user_query": user_query,
         "dependencies_results": dependencies_results or {},
         "parse_hints": parse_hints,
+        "conversation_history": conversation_history,
         "iteration_count": 0,
         "validation_history": [],
     }

@@ -56,6 +56,7 @@ class NL2SQLFatherState(TypedDict):
     query_id: str  # 会话级查询ID
     thread_id: str  # 会话 ID（格式：{user_id}:{timestamp}）
     user_id: str  # 用户标识（未登录时为 "guest"）
+    conversation_history: Optional[List[Dict[str, str]]]  # 对话历史（旧→新，仅 Q/A）
 
     # ========== 子查询管理（支持拆分） ==========
     sub_queries: Annotated[List[SubQueryInfo], add]  # 子查询列表（使用 reducer）
@@ -152,6 +153,7 @@ def create_initial_state(
         query_id=query_id,
         thread_id=actual_thread_id,
         user_id=actual_user_id,
+        conversation_history=None,
         # 子查询管理
         sub_queries=[],
         current_sub_query_id=None,

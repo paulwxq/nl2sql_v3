@@ -29,6 +29,10 @@ from src.services.langgraph_persistence.chat_history_writer import (
     reset_write_health,
     shutdown_write_executor,
 )
+from src.services.langgraph_persistence.chat_history_reader import (
+    get_recent_turns,
+    shutdown_read_executor,
+)
 
 __all__ = [
     # identifiers
@@ -54,5 +58,7 @@ __all__ = [
     "append_turn",
     "reset_write_health",
     "shutdown_write_executor",
+    # chat_history_reader
+    "get_recent_turns",
+    "shutdown_read_executor",
 ]
-

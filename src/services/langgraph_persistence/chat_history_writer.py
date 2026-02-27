@@ -77,6 +77,7 @@ def append_turn(
     *,
     user_id: Optional[str] = None,
     metadata: Optional[Dict[str, Any]] = None,
+    success: Optional[bool] = None,
 ) -> bool:
     """追加一轮对话记录到 PostgresStore
 
@@ -124,8 +125,8 @@ def append_turn(
         logger.warning("PostgresStore 实例获取失败，跳过对话历史写入")
         return False
 
-    # 构建 key：{thread_id}#{query_id}
-    key = f"{thread_id}#{query_id}"
+    # key 仅使用 query_id（thread_id 已下钻到 namespace/prefix）
+    key = query_id
 
     # 从 thread_id 解析 user_id（如果未传入）
     if user_id is None:
@@ -139,6 +140,7 @@ def append_turn(
         "thread_id": thread_id,
         "user_id": user_id,
         "query_id": query_id,
+        "success": success,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "user": {"role": "user", "content": _truncate_text(user_text, 10000)},
         "assistant": {"role": "assistant", "content": _truncate_text(assistant_text, 10000)},
@@ -151,7 +153,7 @@ def append_turn(
 
     def _do_write():
         """实际写入操作（在线程池中执行）"""
-        store.put(namespace=(namespace,), key=key, value=value)
+        store.put(namespace=(namespace, thread_id), key=key, value=value)
 
     try:
         # 使用线程池实现超时控制
@@ -209,4 +211,3 @@ def _truncate_text(text: str, max_length: int) -> str:
     if len(text) <= max_length:
         return text
     return text[: max_length - 3] + "..."
-

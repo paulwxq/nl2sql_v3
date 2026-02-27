@@ -92,6 +92,15 @@ summarizer:
   enable_chart_suggestion: false  # Phase 2: 是否生成图表建议
 
 # ------------------------------------------------------------------------------
+# 对话历史配置（Phase 1 + Phase 2 共享）
+# ------------------------------------------------------------------------------
+conversation_history:
+  enabled: true
+  history_max_turns: 3  # 注入最近 N 轮（Q/A 为一轮）
+  max_history_content_length: 200  # 仅约束 history 文本（每条 question/answer 最大字符数）
+  read_timeout_seconds: 10  # 读取超时（秒），超时/异常 fail-open 返回空 history
+
+# ------------------------------------------------------------------------------
 # 可观测性配置（Phase 1 + Phase 2 共享）
 # ------------------------------------------------------------------------------
 observability:

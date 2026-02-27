@@ -19,12 +19,22 @@ from src.modules.sql_generation.subgraph.state import (
 def mock_all_dependencies():
     """Mock 所有外部依赖"""
     with patch("src.modules.sql_generation.subgraph.nodes.schema_retrieval.SchemaRetriever") as mock_retriever, \
+         patch("src.modules.sql_generation.subgraph.nodes.question_parsing.ChatTongyi") as mock_parser_llm, \
          patch("src.modules.sql_generation.subgraph.nodes.sql_generation.ChatTongyi") as mock_llm, \
          patch("src.modules.sql_generation.subgraph.nodes.validation.SQLValidationTool") as mock_validation, \
          patch("src.services.config_loader.load_subgraph_config") as mock_config:
 
         # Mock config
         mock_config.return_value = {
+            "question_parsing": {
+                "enable_internal_parser": True,
+                "parser_model": "qwen-plus",
+                "api_key": "test-key",
+                "temperature": 0,
+                "max_tokens": 1500,
+                "timeout": 20,
+                "fallback_to_empty": True,
+            },
             "schema_retrieval": {
                 "topk_tables": 10,
                 "topk_columns": 10,
@@ -44,6 +54,23 @@ def mock_all_dependencies():
                 "max_iterations": 3,
             },
         }
+
+        # Mock question parsing LLM
+        mock_parser_llm_instance = MagicMock()
+        mock_parser_resp = MagicMock()
+        mock_parser_resp.content = """{
+            "rewritten_query": "查询2024年1月的订单",
+            "parse_result": {
+                "keywords": ["订单", "2024年1月"],
+                "time": {"start": "2024-01-01", "end": "2024-02-01", "grain_inferred": "month", "is_full_period": true},
+                "metric": {"text": "订单", "is_aggregate_candidate": false},
+                "dimensions": [],
+                "intent": {"task": "plain_agg", "topn": null},
+                "signals": []
+            }
+        }"""
+        mock_parser_llm_instance.invoke.return_value = mock_parser_resp
+        mock_parser_llm.return_value = mock_parser_llm_instance
 
         # Mock retriever
         mock_retriever_instance = MagicMock()
@@ -97,6 +124,7 @@ def mock_all_dependencies():
 
         yield {
             "retriever": mock_retriever,
+            "parser_llm": mock_parser_llm,
             "llm": mock_llm,
             "validation": mock_validation,
             "config": mock_config,

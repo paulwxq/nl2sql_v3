@@ -28,7 +28,8 @@
       "Bash(rm:*)",
       "Bash(grep:*)",
       "Bash(python3:*)",
-      "Bash(timeout 10 python:*)"
+      "Bash(timeout 10 python:*)",
+      "Bash(mcp list:*)"
     ],
     "deny": [],
     "ask": []

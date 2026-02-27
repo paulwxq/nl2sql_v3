@@ -32,6 +32,18 @@ from src.utils.logger import get_module_logger, with_query_id
 
 logger = get_module_logger("nl2sql_father")
 
+_father_graph_config_cache: dict | None = None
+
+
+def _get_father_graph_config() -> dict:
+    global _father_graph_config_cache
+    if _father_graph_config_cache is None:
+        from src.services.config_loader import load_config
+
+        config_path = "src/modules/nl2sql_father/config/nl2sql_father_graph.yaml"
+        _father_graph_config_cache = load_config(config_path)
+    return _father_graph_config_cache
+
 # ==============================================================================
 # 编译图缓存（单例）
 # ==============================================================================
@@ -106,6 +118,7 @@ def sql_gen_wrapper(state: NL2SQLFatherState) -> Dict[str, Any]:
             # 【新增】checkpoint 相关参数
             sub_query_id=current_sub_query_id,
             thread_id=state.get("thread_id"),
+            conversation_history=state.get("conversation_history"),
         )
 
         # 更新当前子查询的状态
@@ -195,6 +208,7 @@ def sql_gen_batch_wrapper(state: NL2SQLFatherState) -> Dict[str, Any]:
                 # 【新增】checkpoint 相关参数
                 sub_query_id=sub_query_id,
                 thread_id=state.get("thread_id"),
+                conversation_history=state.get("conversation_history"),
             )
 
             # 更新子查询状态
@@ -532,6 +546,7 @@ def run_nl2sql_query(
         is_store_enabled,
     )
     from src.services.langgraph_persistence.chat_history_writer import append_turn
+    from src.services.langgraph_persistence.chat_history_reader import get_recent_turns
 
     start_time = time.time()
 
@@ -555,6 +570,24 @@ def run_nl2sql_query(
     query_logger = with_query_id(logger, actual_query_id)
     query_logger.info(f"开始执行 NL2SQL 查询: {query[:50]}...")
     query_logger.debug(f"thread_id={actual_thread_id}, user_id={actual_user_id}")
+
+    # 读取对话历史（fail-open；仅一次读取并透传到子图/父图节点）
+    conversation_history = []
+    try:
+        cfg = _get_father_graph_config().get("conversation_history", {}) or {}
+        if cfg.get("enabled", False) and is_store_enabled():
+            conversation_history = get_recent_turns(
+                thread_id=actual_thread_id,
+                history_max_turns=int(cfg.get("history_max_turns", 3)),
+                max_history_content_length=int(cfg.get("max_history_content_length", 200)),
+                exclude_query_id=actual_query_id,
+                timeout_seconds=float(cfg.get("read_timeout_seconds", 10)),
+            )
+            query_logger.debug(f"读取到对话历史 {len(conversation_history)} 轮")
+    except Exception as e:
+        query_logger.warning(f"读取对话历史失败（已忽略，继续执行）: {e}")
+
+    initial_state["conversation_history"] = conversation_history
 
     # 构建 invoke 配置（checkpoint 需要 thread_id 和 checkpoint_ns）
     # 注意：这里按"配置意图"而非"实际挂载状态"判断
@@ -586,6 +619,9 @@ def run_nl2sql_query(
     # 写入历史对话（仅写入，失败不影响主流程）
     if is_store_enabled():
         try:
+            success = any(
+                isinstance(r, dict) and r.get("success") for r in result.get("execution_results", [])
+            )
             append_turn(
                 thread_id=actual_thread_id,
                 query_id=actual_query_id,
@@ -598,6 +634,7 @@ def run_nl2sql_query(
                     "total_execution_time_ms": total_time_ms,
                     "sub_query_count": len(result.get("sub_queries", [])),
                 },
+                success=success,
             )
             query_logger.debug("历史对话写入成功")
         except Exception as e:

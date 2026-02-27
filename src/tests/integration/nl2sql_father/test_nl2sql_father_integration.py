@@ -236,6 +236,18 @@ class TestRunNL2SQLQueryIntegration:
         mock_summarizer_class.return_value = mock_summarizer_llm
         patches.append(summarizer_patch)
 
+        # 禁用 store 读写与 history 读取（避免测试环境访问数据库/加载配置）
+        store_enabled_patch = patch("src.services.langgraph_persistence.postgres.is_store_enabled", return_value=False)
+        store_enabled_patch.start()
+        patches.append(store_enabled_patch)
+
+        cfg_patch = patch(
+            "src.modules.nl2sql_father.graph._get_father_graph_config",
+            return_value={"conversation_history": {"enabled": False}},
+        )
+        cfg_patch.start()
+        patches.append(cfg_patch)
+
         yield
 
         for p in patches:

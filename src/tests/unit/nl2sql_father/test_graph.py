@@ -137,6 +137,7 @@ class TestSQLGenWrapper:
                 parse_hints=None,
                 sub_query_id="test-001_sq1",
                 thread_id=None,
+                conversation_history=None,
             )
 
             # 验证返回结果
@@ -325,7 +326,12 @@ class TestRunNL2SQLQuery:
         from src.modules.nl2sql_father.graph import run_nl2sql_query
 
         # Mock 图执行（注意：mock get_compiled_father_graph 而非 create_nl2sql_father_graph）
-        with patch("src.modules.nl2sql_father.graph.get_compiled_father_graph") as mock_get:
+        with (
+            patch("src.modules.nl2sql_father.graph.get_compiled_father_graph") as mock_get,
+            patch("src.modules.nl2sql_father.graph._get_father_graph_config") as mock_cfg,
+            patch("src.services.langgraph_persistence.postgres.is_store_enabled", return_value=False),
+        ):
+            mock_cfg.return_value = {"conversation_history": {"enabled": False}}
             mock_app = MagicMock()
             mock_app.invoke.return_value = {
                 "user_query": "测试",
@@ -347,7 +353,12 @@ class TestRunNL2SQLQuery:
         from src.modules.nl2sql_father.graph import run_nl2sql_query
 
         # Mock 图执行
-        with patch("src.modules.nl2sql_father.graph.get_compiled_father_graph") as mock_get:
+        with (
+            patch("src.modules.nl2sql_father.graph.get_compiled_father_graph") as mock_get,
+            patch("src.modules.nl2sql_father.graph._get_father_graph_config") as mock_cfg,
+            patch("src.services.langgraph_persistence.postgres.is_store_enabled", return_value=False),
+        ):
+            mock_cfg.return_value = {"conversation_history": {"enabled": False}}
             mock_app = MagicMock()
             mock_app.invoke.return_value = {
                 "user_query": "测试",
@@ -368,7 +379,12 @@ class TestRunNL2SQLQuery:
         from src.modules.nl2sql_father.graph import run_nl2sql_query
 
         # Mock 图执行
-        with patch("src.modules.nl2sql_father.graph.get_compiled_father_graph") as mock_get:
+        with (
+            patch("src.modules.nl2sql_father.graph.get_compiled_father_graph") as mock_get,
+            patch("src.modules.nl2sql_father.graph._get_father_graph_config") as mock_cfg,
+            patch("src.services.langgraph_persistence.postgres.is_store_enabled", return_value=False),
+        ):
+            mock_cfg.return_value = {"conversation_history": {"enabled": False}}
             mock_app = MagicMock()
             mock_app.invoke.return_value = {
                 "user_query": "测试",

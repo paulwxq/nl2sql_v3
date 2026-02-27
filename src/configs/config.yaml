@@ -106,7 +106,7 @@ sql_generation:
   # 超时配置
   timeout: 60                        # 子图总超时（秒）
 
-  # 提示词路径
+  # 提示词路径（当前不使用模板渲染，仅预留；实际提示词由代码拼接生成）
   prompt_path: src/prompts/sql_generation/generator_prompt.txt
 
 # ------------------------------------------------------------------------------
