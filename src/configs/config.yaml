@@ -204,7 +204,7 @@ langgraph_persistence:
 
   # 数据库连接（复用 database.* 或独立配置）
   database:
-    use_global_config: true          # true: 从 database.* 组装 URI；false: 使用 db_uri
+    use_global_config: false          # true: 从 database.* 组装 URI；false: 使用 db_uri
     db_uri: ${LANGGRAPH_DB_URI:}     # 仅当 use_global_config=false 时生效（URI 格式）
     schema: langgraph                # 独立 schema，避免与业务表混用
     sslmode: disable                 # 可选：disable/require/verify-ca 等
@@ -213,8 +213,10 @@ langgraph_persistence:
 
   # Checkpoint 配置
   checkpoint:
-    enabled: true                    # checkpoint 组件开关（当前已启用）
-    father_namespace: nl2sql_father  # 父图 checkpoint_ns
+    father_enabled: true             # 父图 checkpoint 开关（默认开启）
+    subgraph_enabled: false          # 子图 checkpoint 开关（默认关闭）
+    # 注意：受限于当前库版本，父图作为根节点，实际在 DB 中仍使用空字符串作为 namespace
+    # father_namespace: nl2sql_father  # 父图 checkpoint_ns
     subgraph_namespace: sql_generation  # 子图 checkpoint_ns 前缀
 
   # Store 配置（本阶段仅写入历史对话，不规划读取）

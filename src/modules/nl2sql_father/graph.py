@@ -465,12 +465,12 @@ def get_compiled_father_graph() -> CompiledStateGraph:
 
     from src.services.langgraph_persistence.postgres import (
         get_postgres_saver,
-        is_checkpoint_enabled,
+        is_father_checkpoint_enabled,
     )
     from src.services.langgraph_persistence.safe_checkpointer import SafeCheckpointer
 
     # 检查当前 checkpoint 开关状态（配置意图）
-    checkpoint_enabled = is_checkpoint_enabled()
+    checkpoint_enabled = is_father_checkpoint_enabled()
 
     # 如果缓存存在且配置意图一致，直接返回（避免重复编译）
     # 注意：即使 saver 创建失败，只要配置意图不变就复用缓存
@@ -542,7 +542,7 @@ def run_nl2sql_query(
     """
     from src.services.langgraph_persistence.postgres import (
         get_checkpoint_namespace,
-        is_checkpoint_enabled,
+        is_father_checkpoint_enabled,
         is_store_enabled,
     )
     from src.services.langgraph_persistence.chat_history_writer import append_turn
@@ -593,7 +593,7 @@ def run_nl2sql_query(
     # 注意：这里按"配置意图"而非"实际挂载状态"判断
     # 如果 saver 创建失败导致图没有 checkpointer，传递这些参数是无害的，LangGraph 会忽略
     invoke_config = None
-    if is_checkpoint_enabled():
+    if is_father_checkpoint_enabled():
         father_namespace = get_checkpoint_namespace("father")
         invoke_config = {
             "configurable": {

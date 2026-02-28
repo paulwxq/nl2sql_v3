@@ -40,13 +40,33 @@ def is_persistence_enabled() -> bool:
     return _get_persistence_config().get("enabled", False)
 
 
-def is_checkpoint_enabled() -> bool:
-    """检查 checkpoint 是否启用（总开关 + checkpoint 开关）"""
+def is_checkpoint_enabled(kind: str = "father") -> bool:
+    """检查 checkpoint 是否启用（总开关 + 指定 kind 的 checkpoint 开关）
+
+    Args:
+        kind: "father" 或 "subgraph"
+    """
     persistence_config = _get_persistence_config()
-    return (
-        persistence_config.get("enabled", False)
-        and persistence_config.get("checkpoint", {}).get("enabled", False)
-    )
+    checkpoint_config = persistence_config.get("checkpoint", {})
+    
+    # 总开关必须开启
+    if not persistence_config.get("enabled", False):
+        return False
+        
+    if kind == "father":
+        return checkpoint_config.get("father_enabled", False)
+    else:
+        return checkpoint_config.get("subgraph_enabled", False)
+
+
+def is_father_checkpoint_enabled() -> bool:
+    """检查父图 checkpoint 是否启用"""
+    return is_checkpoint_enabled("father")
+
+
+def is_subgraph_checkpoint_enabled() -> bool:
+    """检查子图 checkpoint 是否启用"""
+    return is_checkpoint_enabled("subgraph")
 
 
 def is_store_enabled() -> bool:
@@ -173,7 +193,7 @@ def get_postgres_saver(kind: str = "father") -> Optional["PostgresSaver"]:
     """
     global _postgres_saver_father, _postgres_saver_subgraph, _context_managers
 
-    if not is_checkpoint_enabled():
+    if not is_checkpoint_enabled(kind):
         return None
 
     # 检查缓存
@@ -301,12 +321,22 @@ def setup_persistence() -> bool:
     
     try:
         # 通过获取单例来触发创建和 setup（单例创建时自动调用 setup）
-        if is_checkpoint_enabled():
+        # 初始化父图 saver
+        if is_checkpoint_enabled("father"):
             saver = get_postgres_saver("father")
             if saver:
-                logger.info("PostgresSaver 实例创建成功")
+                logger.info("PostgresSaver (father) 实例创建成功")
             else:
-                logger.error("PostgresSaver 实例创建失败")
+                logger.error("PostgresSaver (father) 实例创建失败")
+                success = False
+
+        # 初始化子图 saver
+        if is_checkpoint_enabled("subgraph"):
+            saver = get_postgres_saver("subgraph")
+            if saver:
+                logger.info("PostgresSaver (subgraph) 实例创建成功")
+            else:
+                logger.error("PostgresSaver (subgraph) 实例创建失败")
                 success = False
 
         if is_store_enabled():

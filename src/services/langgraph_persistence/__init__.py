@@ -22,6 +22,8 @@ from src.services.langgraph_persistence.postgres import (
     setup_persistence,
     close_persistence,
     is_checkpoint_enabled,
+    is_father_checkpoint_enabled,
+    is_subgraph_checkpoint_enabled,
     is_store_enabled,
 )
 from src.services.langgraph_persistence.chat_history_writer import (
@@ -53,6 +55,8 @@ __all__ = [
     "setup_persistence",
     "close_persistence",
     "is_checkpoint_enabled",
+    "is_father_checkpoint_enabled",
+    "is_subgraph_checkpoint_enabled",
     "is_store_enabled",
     # chat_history_writer
     "append_turn",

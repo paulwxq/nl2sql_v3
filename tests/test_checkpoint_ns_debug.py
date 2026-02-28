@@ -39,11 +39,13 @@ def test_config_loading():
     persistence_config = config.get("langgraph_persistence", {})
     
     print(f"langgraph_persistence.enabled: {persistence_config.get('enabled')}")
-    print(f"langgraph_persistence.checkpoint.enabled: {persistence_config.get('checkpoint', {}).get('enabled')}")
+    print(f"langgraph_persistence.checkpoint.father_enabled: {persistence_config.get('checkpoint', {}).get('father_enabled')}")
+    print(f"langgraph_persistence.checkpoint.subgraph_enabled: {persistence_config.get('checkpoint', {}).get('subgraph_enabled')}")
     print(f"langgraph_persistence.checkpoint.father_namespace: {persistence_config.get('checkpoint', {}).get('father_namespace')}")
     print(f"langgraph_persistence.checkpoint.subgraph_namespace: {persistence_config.get('checkpoint', {}).get('subgraph_namespace')}")
     
-    print(f"\nis_checkpoint_enabled(): {is_checkpoint_enabled()}")
+    print(f"\nis_checkpoint_enabled('father'): {is_checkpoint_enabled('father')}")
+    print(f"is_checkpoint_enabled('subgraph'): {is_checkpoint_enabled('subgraph')}")
     print(f"get_checkpoint_namespace('father'): {get_checkpoint_namespace('father')}")
     print(f"get_checkpoint_namespace('subgraph'): {get_checkpoint_namespace('subgraph')}")
     print()
@@ -90,7 +92,7 @@ def test_invoke_config_construction():
     test_sub_query_id = "sub-query-789"
     
     # 父图 config
-    if is_checkpoint_enabled():
+    if is_checkpoint_enabled("father"):
         father_namespace = get_checkpoint_namespace("father")
         father_config = {
             "configurable": {
@@ -103,7 +105,8 @@ def test_invoke_config_construction():
         print(f"  checkpoint_ns: {father_config['configurable']['checkpoint_ns']}")
         print()
         
-        # 子图 config
+    # 子图 config
+    if is_checkpoint_enabled("subgraph"):
         subgraph_namespace = get_checkpoint_namespace("subgraph")
         checkpoint_ns = f"{subgraph_namespace}:{test_sub_query_id}"
         subgraph_config = {
@@ -117,7 +120,7 @@ def test_invoke_config_construction():
         print(f"  checkpoint_ns: {subgraph_config['configurable']['checkpoint_ns']}")
         print()
     else:
-        print("Checkpoint 未启用")
+        print("子图 Checkpoint 未启用")
         print()
 
 
@@ -127,8 +130,8 @@ def test_direct_postgres_write():
     print("4. PostgresSaver 直接写入测试")
     print("=" * 80)
     
-    if not is_checkpoint_enabled():
-        print("Checkpoint 未启用，跳过测试")
+    if not is_checkpoint_enabled("father"):
+        print("Checkpoint (father) 未启用，跳过测试")
         return
     
     try:
