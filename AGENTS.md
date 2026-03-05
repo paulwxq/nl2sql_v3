@@ -26,11 +26,8 @@ uv run pytest tests/unit/ -v
 # Run all tests in a specific directory
 uv run pytest src/tests/unit/nl2sql_father/ -v
 
-# Run a single test file
-uv run pytest tests/unit/metaweave/test_profiler.py -v
-
 # Run a single test function
-uv run pytest tests/unit/metaweave/test_profiler.py::test_profiler_generates_column_and_table_profiles -v
+uv run pytest tests/unit/nl2sql_father/test_graph.py::test_graph_compilation -v
 
 # Run tests by marker
 uv run pytest -m unit -v        # unit tests only
@@ -79,7 +76,7 @@ uv run mypy src/
 ### Naming Conventions
 
 - **Modules/Files**: `snake_case.py` (e.g., `table_schema_loader.py`)
-- **Classes**: `PascalCase` (e.g., `MetadataProfiler`, `ColumnInfo`)
+- **Classes**: `PascalCase` (e.g., `SQLGenerationState`, `ColumnInfo`)
 - **Functions/Variables**: `snake_case` (e.g., `get_column_statistics`, `table_name`)
 - **Constants**: `UPPER_SNAKE_CASE` (e.g., `DEFAULT_TIMEOUT`, `MAX_RETRIES`)
 - **Private methods/attributes**: `_leading_underscore` (e.g., `_build_metadata`)
@@ -96,11 +93,10 @@ import logging
 from pathlib import Path
 from typing import Dict, List, Optional
 
-import pandas as pd
 import yaml
 
-from src.metaweave.core.metadata.models import ColumnInfo, TableMetadata
-from src.metaweave.utils.data_utils import get_column_statistics
+from src.modules.nl2sql_father.state import NL2SQLFatherState
+from src.utils.logger import get_module_logger
 ```
 
 ### Type Annotations
@@ -109,11 +105,11 @@ Use full type annotations for function signatures:
 
 ```python
 # Good
-def profile(metadata: TableMetadata, df: pd.DataFrame) -> ProfilingResult:
+def process_query(query: str, thread_id: str) -> dict[str, Any]:
     ...
 
 # Good - using modern Python 3.12+ syntax where appropriate
-def process(items: list[str]) -> dict[str, int]: ...
+def get_items(ids: list[str]) -> dict[str, int]: ...
 ```
 
 ### Data Classes
@@ -145,8 +141,8 @@ if not config_file.exists():
     raise FileNotFoundError(f"配置文件不存在: {config_path}")
 
 # Good - using custom exceptions
-class MetadataGenerationError(Exception):
-    """元数据生成失败"""
+class SQLGenerationError(Exception):
+    """SQL 生成失败"""
     pass
 ```
 
@@ -155,11 +151,11 @@ class MetadataGenerationError(Exception):
 Use the project's logging utilities:
 
 ```python
-from src.metaweave.utils.logger import get_metaweave_logger
+from src.utils.logger import get_module_logger
 
-logger = get_metaweave_logger("metadata")
-logger.info("开始生成元数据")
-logger.debug(f"Processing table: {table_name}")
+logger = get_module_logger("sql_generation")
+logger.info("开始生成 SQL")
+logger.debug(f"Processing query: {query_text}")
 ```
 
 ### Testing
@@ -171,39 +167,27 @@ logger.debug(f"Processing table: {table_name}")
 - Use descriptive test names
 
 ```python
-def test_profiler_generates_column_and_table_profiles():
-    """测试profiler生成列和表画像"""
-    metadata = _build_metadata()
-    df = pd.DataFrame({...})
-    
-    profiler = MetadataProfiler()
-    result = profiler.profile(metadata, df)
-    
-    assert "store_id" in result.column_profiles
+def test_graph_compilation_succeeds():
+    """测试图编译成功"""
+    from src.modules.nl2sql_father.graph import create_nl2sql_father_graph
+    graph = create_nl2sql_father_graph()
+    assert graph is not None
 ```
 
 ### Project Structure
 
 ```
 src/
-├── metaweave/           # Metadata generation module
-│   ├── core/           # Core functionality
-│   │   ├── metadata/  # Metadata models and generation
-│   │   ├── relationships/  # Relationship detection
-│   │   ├── dim_value/ # Dimension value loading
-│   │   └── loaders/   # Data loaders
-│   ├── services/      # External services (vector DB, LLM)
-│   ├── utils/         # Utilities
-│   └── cli/           # Command-line interfaces
-├── modules/
-│   └── nl2sql_father/ # NL2SQL parent graph (LangGraph)
-├── configs/            # Configuration files
+├── modules/           # NL2SQL core modules
+│   ├── nl2sql_father/ # NL2SQL parent graph (LangGraph)
+│   └── sql_generation/# SQL generation subgraph
+├── services/          # External services (vector DB, LLM, storage)
+├── utils/             # Utilities
+├── configs/           # Configuration files
 └── prompts/           # LLM prompts
 
 tests/
 ├── unit/              # Unit tests
-│   ├── metaweave/
-│   └── vector_adapter/
 └── integration/      # Integration tests
 ```
 
@@ -231,13 +215,6 @@ python scripts/nl2sql_subgraph_cli.py "查询2024年10月的销售额"
 python scripts/nl2sql_subgraph_cli.py
 ```
 
-### Running MetaWeave CLI
-
-```bash
-# See available commands
-python -m src.metaweave.cli.main --help
-```
-
 ## Dependencies
 
 Key dependencies (see `pyproject.toml`):
@@ -246,6 +223,5 @@ Key dependencies (see `pyproject.toml`):
 - **psycopg/pgvector**: PostgreSQL and vector storage
 - **neo4j**: Graph database
 - **dashscope**: LLM API (Qwen)
-- **pandas/numpy**: Data processing
 - **pytest**: Testing framework
 - **black/ruff**: Code formatting and linting

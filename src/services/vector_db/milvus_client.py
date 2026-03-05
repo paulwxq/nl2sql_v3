@@ -1,7 +1,7 @@
 """Milvus 向量数据库客户端封装（公共层）。
 
-本模块从 MetaWeave 下沉到公共服务层，供 NL2SQL 和 MetaWeave 共同使用。
-不继承任何基类，仅提供连接和基础操作能力。
+本模块提供 NL2SQL 模块与 Milvus 向量数据库之间的基础连接和操作能力。
+不继承任何基类，仅提供连接、数据插入/更新等基础功能。
 """
 
 import logging
@@ -32,7 +32,7 @@ def _lazy_import_milvus() -> Tuple[Any, ...]:
 class MilvusClient:
     """Milvus 客户端封装（公共层）。
 
-    不继承 BaseVectorClient，避免公共组件反向依赖 MetaWeave。
+    提供连接管理、批量插入、Upsert 等基础操作。
     """
 
     def __init__(self, config: Dict[str, Any]):
@@ -65,7 +65,7 @@ class MilvusClient:
                 raise ValueError(
                     f"Milvus database '{db_name}' 不存在。\n"
                     f"可用的 databases: {existing_databases}\n"
-                    f"请先运行 MetaWeave Loader 创建 database 和 Collection，然后再启动 NL2SQL 模块。"
+                    f"请确保已预先创建好数据库和 Collection，然后再启动 NL2SQL 模块。"
                 )
             # ⚠️ 传递 using=self.alias 以操作正确的连接
             db.using_database(db_name, using=self.alias)
@@ -84,67 +84,6 @@ class MilvusClient:
         except Exception as exc:  # noqa: BLE001
             logger.error("Milvus 连接测试失败: %s", exc)
             return False
-
-    def ensure_collection(
-        self,
-        collection_name: str,
-        schema: Any,
-        index_params: Dict[str, Any],
-        clean: bool = False,
-    ) -> Any:
-        """确保 Collection 存在（用于 MetaWeave Loader）。
-
-        注意：此方法会自动创建 database（如果不存在），与 connect() 的"清晰失败"策略不同。
-        - NL2SQL 使用 connect() → database 不存在时报错
-        - MetaWeave Loader 使用 ensure_collection() → 自动创建 database
-        """
-        connections, db, FieldSchema, CollectionSchema, Collection, _, utility = _lazy_import_milvus()
-
-        # ⚠️ 不调用 self.connect()，自己管理连接（避免 database 不存在时报错）
-        if not self.connected:
-            connections.connect(
-                alias=self.alias,
-                host=self.config.get("host", "localhost"),
-                port=str(self.config.get("port", "19530")),
-                user=self.config.get("user"),
-                password=self.config.get("password"),
-                timeout=self.config.get("timeout", 30),
-            )
-            self.connected = True
-
-        # 自动创建 database（如果不存在）
-        db_name = self.config.get("database")
-        if db_name:
-            # ⚠️ 传递 using=self.alias 以操作正确的连接
-            if db_name not in db.list_database(using=self.alias):
-                db.create_database(db_name, using=self.alias)
-            db.using_database(db_name, using=self.alias)
-
-        # 使用 utility.list_collections() 替代 db.list_collections()
-        existing_collections = utility.list_collections(using=self.alias)
-
-        if clean and collection_name in existing_collections:
-            Collection(collection_name, using=self.alias).drop()
-
-        if collection_name not in utility.list_collections(using=self.alias):
-            collection = Collection(
-                name=collection_name,
-                schema=schema,
-                shards_num=self.config.get("shards_num", 2),
-                using=self.alias,  # 明确指定使用的连接别名
-            )
-        else:
-            collection = Collection(collection_name, using=self.alias)
-
-        # 创建向量索引（若不存在）
-        if not collection.indexes:
-            collection.create_index(
-                field_name="embedding",
-                index_params=index_params,
-            )
-
-        collection.load()
-        return collection
 
     def insert_batch(
         self,
