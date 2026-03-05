@@ -17,6 +17,7 @@ import sys
 import json
 import argparse
 import logging
+import readline
 from pathlib import Path
 from typing import Dict, Any
 

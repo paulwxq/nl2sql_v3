@@ -143,11 +143,11 @@ class TestCheckCompletionNode:
         # 执行检查
         result = check_completion_node(state)
 
-        # 验证返回空字典（强制结束）
-        assert result == {}
+        # 验证返回了 sub_queries（覆盖模式需要显式返回 in-place 修改）
+        assert "sub_queries" in result
         # 验证 pending 的子查询被标记为 failed
-        assert state["sub_queries"][1]["status"] == "failed"
-        assert "超过最大轮次" in state["sub_queries"][1]["error"]
+        assert result["sub_queries"][1]["status"] == "failed"
+        assert "超过最大轮次" in result["sub_queries"][1]["error"]
 
     def test_cycle_detection(self):
         """测试依赖环检测"""
@@ -184,12 +184,12 @@ class TestCheckCompletionNode:
         # 执行检查
         result = check_completion_node(state)
 
-        # 验证返回空字典（检测到环，强制结束）
-        assert result == {}
+        # 验证返回了 sub_queries（覆盖模式需要显式返回 in-place 修改）
+        assert "sub_queries" in result
         # 验证 pending 的子查询被标记为 failed
-        assert state["sub_queries"][0]["status"] == "failed"
-        assert state["sub_queries"][1]["status"] == "failed"
-        assert "依赖环" in state["sub_queries"][0]["error"]
+        assert result["sub_queries"][0]["status"] == "failed"
+        assert result["sub_queries"][1]["status"] == "failed"
+        assert "依赖环" in result["sub_queries"][0]["error"]
 
     def test_orphaned_query_detection(self):
         """测试孤立子查询检测"""
@@ -226,11 +226,53 @@ class TestCheckCompletionNode:
         # 执行检查
         result = check_completion_node(state)
 
-        # 验证返回空字典（检测到孤立子查询，强制结束）
-        assert result == {}
+        # 验证返回了 sub_queries（覆盖模式需要显式返回 in-place 修改）
+        assert "sub_queries" in result
         # 验证孤立子查询被标记为 failed
-        assert state["sub_queries"][1]["status"] == "failed"
-        assert "孤立子查询" in state["sub_queries"][1]["error"]
+        assert result["sub_queries"][1]["status"] == "failed"
+        assert "孤立子查询" in result["sub_queries"][1]["error"]
+
+    def test_max_rounds_returns_modified_sub_queries(self):
+        """测试最大轮次保护时返回的 sub_queries 包含 failed 状态"""
+        state = create_initial_state(user_query="测试", query_id="test_q1")
+        state["current_round"] = 3
+        state["max_rounds"] = 3
+
+        state["sub_queries"] = [
+            {
+                "sub_query_id": "sq1",
+                "status": "completed",
+                "query": "",
+                "dependencies": [],
+                "validated_sql": "SELECT 1",
+                "execution_result": {"success": True},
+                "error": None,
+                "iteration_count": 1,
+                "dependencies_results": None,
+            },
+            {
+                "sub_query_id": "sq2",
+                "status": "in_progress",
+                "query": "",
+                "dependencies": ["sq1"],
+                "validated_sql": None,
+                "execution_result": None,
+                "error": None,
+                "iteration_count": 0,
+                "dependencies_results": None,
+            },
+        ]
+
+        result = check_completion_node(state)
+
+        # 验证 sub_queries 被显式返回且包含 in-place 修改
+        assert "sub_queries" in result
+        assert len(result["sub_queries"]) == 2
+        # sq1 不受影响
+        assert result["sub_queries"][0]["status"] == "completed"
+        # sq2 被标记为 failed
+        assert result["sub_queries"][1]["status"] == "failed"
+        assert "超过最大轮次" in result["sub_queries"][1]["error"]
 
     def test_in_progress_queries(self):
         """测试有 in_progress 的子查询时不结束"""

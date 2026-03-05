@@ -167,14 +167,17 @@ def sql_execution_node(state: NL2SQLFatherState, config: Dict[str, Any] = None) 
 
     if not sqls_to_execute:
         query_logger.warning("没有待执行的SQL")
-        # 保留之前的最大并发数（不覆盖），None 转为 0
+        # 直接返回非空必须字段，省略 execution_results 和 sub_queries 
+        # 会被 LangGraph 自动保留原有值，且不触发 blob 写入
         return {
-            "execution_results": [],
             "parallel_execution_count": state.get("parallel_execution_count") or 0,
         }
 
     if log_sql:
         query_logger.info(f"准备执行 {len(sqls_to_execute)} 条SQL")
+
+    # 保留已有的执行结果（覆盖模式下需要手动拼接，替代原 add reducer）
+    existing_results = state.get("execution_results", [])
 
     # 2. 执行 SQL（自动检测：串行 or 并发）
     results: List[SQLExecutionResult] = []
@@ -254,6 +257,7 @@ def sql_execution_node(state: NL2SQLFatherState, config: Dict[str, Any] = None) 
     max_parallel_count = max(previous_count, current_parallel_count)
 
     return {
-        "execution_results": results,
+        "execution_results": existing_results + results,
+        "sub_queries": state.get("sub_queries", []),
         "parallel_execution_count": max_parallel_count,
     }

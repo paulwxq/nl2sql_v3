@@ -144,6 +144,7 @@ class TestSQLGenWrapper:
             assert result["validated_sql"] == "SELECT SUM(amount) FROM sales"
             assert result["error"] is None
             assert result["iteration_count"] == 2
+            assert "sub_queries" in result  # 覆盖模式需要显式返回
 
             # 验证子查询状态更新
             sub_query = base_state["sub_queries"][0]
@@ -169,6 +170,7 @@ class TestSQLGenWrapper:
             assert result["validated_sql"] is None
             assert result["error"] == "Schema retrieval failed"
             assert result["error_type"] == "schema_retrieval_failed"
+            assert "sub_queries" in result  # 覆盖模式需要显式返回
 
             # 验证子查询状态更新为失败
             sub_query = base_state["sub_queries"][0]
@@ -188,6 +190,7 @@ class TestSQLGenWrapper:
             assert result["validated_sql"] is None
             assert "异常" in result["error"]
             assert result["error_type"] == "generation_failed"
+            assert "sub_queries" in result  # 覆盖模式需要显式返回
 
             # 验证子查询状态更新为失败
             sub_query = base_state["sub_queries"][0]
@@ -208,6 +211,7 @@ class TestSQLGenWrapper:
         # 验证返回错误
         assert result["error"] == "No current sub_query_id"
         assert result["error_type"] == "internal_error"
+        assert "sub_queries" in result  # 覆盖模式需要显式返回
 
     def test_wrapper_sub_query_not_found(self, base_state):
         """测试找不到对应的子查询"""
@@ -220,6 +224,7 @@ class TestSQLGenWrapper:
         # 验证返回错误
         assert "not found" in result["error"]
         assert result["error_type"] == "internal_error"
+        assert "sub_queries" in result  # 覆盖模式需要显式返回
 
     def test_wrapper_preserves_query_id(self, base_state):
         """测试 Wrapper 正确传递 query_id"""

@@ -5,8 +5,7 @@
 
 import logging
 import uuid
-from typing import Annotated, Any, Dict, List, Literal, Optional, TypedDict
-from operator import add
+from typing import Any, Dict, List, Literal, Optional, TypedDict
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +47,7 @@ class NL2SQLFatherState(TypedDict):
     """NL2SQL 父图的 State 定义
 
     使用 TypedDict 定义，支持 LangGraph 的类型检查和序列化。
-    包含 Annotated 字段用于 reducer（增量累加）。
+    所有字段使用覆盖模式（无 reducer），每次节点返回时覆盖旧值。
     """
 
     # ========== 输入与标识 ==========
@@ -59,7 +58,7 @@ class NL2SQLFatherState(TypedDict):
     conversation_history: Optional[List[Dict[str, str]]]  # 对话历史（旧→新，仅 Q/A）
 
     # ========== 子查询管理（支持拆分） ==========
-    sub_queries: Annotated[List[SubQueryInfo], add]  # 子查询列表（使用 reducer）
+    sub_queries: List[SubQueryInfo]  # 子查询列表（覆盖模式）
     current_sub_query_id: Optional[str]  # 当前处理的子查询ID
 
     # ========== Router 输出 ==========
@@ -74,7 +73,7 @@ class NL2SQLFatherState(TypedDict):
     iteration_count: Optional[int]  # SQL生成迭代次数
 
     # ========== SQL执行结果 ==========
-    execution_results: Annotated[List[SQLExecutionResult], add]  # 执行结果列表（使用 reducer）
+    execution_results: List[SQLExecutionResult]  # 执行结果列表（覆盖模式）
 
     # ========== Phase 2 新增字段（Complex Path） ==========
     dependency_graph: Optional[Dict[str, Any]]  # 依赖图结构（Planner 输出，API 诊断）

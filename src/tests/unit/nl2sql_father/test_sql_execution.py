@@ -111,7 +111,7 @@ class TestSQLExecutionNode:
         result = sql_execution_node(base_state_no_sql)
 
         # 验证返回空列表
-        assert result["execution_results"] == []
+        assert "execution_results" not in result
 
     def test_dual_binding_success(self, mock_config, base_state_with_sql):
         """测试双向绑定：成功时更新 sub_query.execution_result"""
@@ -237,7 +237,7 @@ class TestSQLExecutionNode:
         result = sql_execution_node(state)
 
         # 验证：无 SQL 执行
-        assert result["execution_results"] == []
+        assert "execution_results" not in result
 
     def test_timeout_configuration(self, mock_config, base_state_with_sql):
         """测试超时配置传递给 PGClient"""

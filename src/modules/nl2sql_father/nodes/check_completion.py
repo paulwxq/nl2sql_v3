@@ -111,7 +111,7 @@ def check_completion_node(state: NL2SQLFatherState) -> Dict[str, Any]:
                 sq["status"] = "failed"
                 sq["error"] = f"超过最大轮次 {max_rounds}，强制终止"
 
-        return {}  # 返回空字典，路由到 Summarizer
+        return {"sub_queries": sub_queries}  # 显式返回 in-place 修改后的 sub_queries
 
     # ========== 退出条件 3: 依赖环检测 ==========
     if enable_cycle_detection and status_count["pending"] > 0:
@@ -135,7 +135,7 @@ def check_completion_node(state: NL2SQLFatherState) -> Dict[str, Any]:
                     sq["status"] = "failed"
                     sq["error"] = "依赖环或孤立子查询，无法继续推进"
 
-            return {}  # 返回空字典，路由到 Summarizer
+            return {"sub_queries": sub_queries}  # 显式返回 in-place 修改后的 sub_queries
 
     # ========== 继续循环：递增轮次 ==========
     next_round = current_round + 1

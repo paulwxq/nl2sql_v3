@@ -127,5 +127,5 @@ def inject_params_node(state: NL2SQLFatherState) -> Dict[str, Any]:
     if log_injection:
         query_logger.info(f"Inject Params 完成：准备执行 {len(batch_ids)} 个子查询")
 
-    # 4. 返回当前批次ID列表
-    return {"current_batch_ids": batch_ids}
+    # 4. 返回当前批次ID列表（显式返回 sub_queries 以确保 in-place 修改被持久化）
+    return {"current_batch_ids": batch_ids, "sub_queries": state.get("sub_queries", [])}

@@ -53,10 +53,11 @@ class TestInjectParamsNode:
 
         # 验证结果
         assert result["current_batch_ids"] == ["sq2"]
+        assert "sub_queries" in result  # 覆盖模式需要显式返回
         assert state["sub_queries"][1]["status"] == "in_progress"
         assert state["sub_queries"][1]["dependencies_results"] is not None
         assert "sq1" in state["sub_queries"][1]["dependencies_results"]
-        
+
         # 验证新格式
         dep_data = state["sub_queries"][1]["dependencies_results"]["sq1"]
         assert "question" in dep_data
@@ -128,6 +129,7 @@ class TestInjectParamsNode:
 
         # 验证结果
         assert result["current_batch_ids"] == ["sq3"]
+        assert "sub_queries" in result  # 覆盖模式需要显式返回
         assert state["sub_queries"][2]["status"] == "in_progress"
         assert len(state["sub_queries"][2]["dependencies_results"]) == 2
         assert "sq1" in state["sub_queries"][2]["dependencies_results"]
@@ -192,6 +194,7 @@ class TestInjectParamsNode:
 
         # 验证结果：sq2 和 sq3 都应该在当前批次（都依赖 sq1，可以并行执行）
         assert len(result["current_batch_ids"]) == 2
+        assert "sub_queries" in result  # 覆盖模式需要显式返回
         assert "sq2" in result["current_batch_ids"]
         assert "sq3" in result["current_batch_ids"]
         assert state["sub_queries"][1]["status"] == "in_progress"
@@ -232,6 +235,7 @@ class TestInjectParamsNode:
 
         # 验证结果：没有准备好的子查询（因为 sq1 依赖不存在的 sq0，sq2 依赖未完成的 sq1）
         assert result["current_batch_ids"] == []
+        assert "sub_queries" in result  # 覆盖模式需要显式返回
 
     def test_skip_in_progress_and_completed_queries(self):
         """测试跳过已经 in_progress 和 completed 的子查询"""
@@ -279,3 +283,4 @@ class TestInjectParamsNode:
 
         # 验证结果：没有新的待执行子查询
         assert result["current_batch_ids"] == []
+        assert "sub_queries" in result  # 覆盖模式需要显式返回

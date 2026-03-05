@@ -88,7 +88,7 @@ def sql_gen_wrapper(state: NL2SQLFatherState) -> Dict[str, Any]:
     current_sub_query_id = state.get("current_sub_query_id")
     if not current_sub_query_id:
         query_logger.error("缺少 current_sub_query_id")
-        return {"error": "No current sub_query_id", "error_type": "internal_error"}
+        return {"error": "No current sub_query_id", "error_type": "internal_error", "sub_queries": state.get("sub_queries", [])}
 
     # 从 sub_queries 中找到当前子查询
     sub_queries = state.get("sub_queries", [])
@@ -103,6 +103,7 @@ def sql_gen_wrapper(state: NL2SQLFatherState) -> Dict[str, Any]:
         return {
             "error": f"Sub query {current_sub_query_id} not found",
             "error_type": "internal_error",
+            "sub_queries": sub_queries,
         }
 
     query_logger.info(f"开始调用 SQL 生成子图: {current_sub_query_id}")
@@ -132,12 +133,13 @@ def sql_gen_wrapper(state: NL2SQLFatherState) -> Dict[str, Any]:
             current_sub_query["error"] = subgraph_output.get("error")
             query_logger.warning(f"SQL 生成失败: {current_sub_query_id}, error_type={subgraph_output.get('error_type')}")
 
-        # 映射输出到父图State
+        # 映射输出到父图State（显式返回 sub_queries 以确保 in-place 修改被持久化）
         return {
             "validated_sql": subgraph_output.get("validated_sql"),
             "error": subgraph_output.get("error"),
             "error_type": subgraph_output.get("error_type"),
             "iteration_count": subgraph_output.get("iteration_count"),
+            "sub_queries": sub_queries,
         }
 
     except Exception as e:
@@ -155,6 +157,7 @@ def sql_gen_wrapper(state: NL2SQLFatherState) -> Dict[str, Any]:
             "error": error_msg,
             "error_type": "generation_failed",
             "iteration_count": 0,
+            "sub_queries": sub_queries,
         }
 
 
@@ -231,7 +234,7 @@ def sql_gen_batch_wrapper(state: NL2SQLFatherState) -> Dict[str, Any]:
             sub_query["status"] = "failed"
             sub_query["error"] = error_msg
 
-    return {}  # 直接修改 sub_queries，无需返回
+    return {"sub_queries": state.get("sub_queries", [])}  # 显式返回 sub_queries 以确保 in-place 修改被持久化
 
 
 # ==================== 条件边函数 ====================
