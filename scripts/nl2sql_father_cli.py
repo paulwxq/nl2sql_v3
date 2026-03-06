@@ -11,15 +11,17 @@ NL2SQL 父图命令行测试工具
 
     # 带自定义 query_id
     python scripts/nl2sql_father_cli.py --query-id "test-001" "查询销售额"
+
+    # 纯文本输出（禁用 Rich 渲染）
+    python scripts/nl2sql_father_cli.py --no-rich "查询销售额"
 """
 
 import sys
-import json
 import argparse
 import logging
-import readline
+import readline  # noqa: F401 — 启用 input() 行编辑和历史记录
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict
 
 # 添加项目根目录到路径
 project_root = Path(__file__).parent.parent
@@ -34,22 +36,80 @@ setup_logging_from_yaml(str(project_root / "src" / "configs" / "logging.yaml"))
 # CLI 使用独立的 logger
 logger = logging.getLogger("nl2sql.father_cli")
 
+# Rich imports（模块级导入，--no-rich 时仅不渲染，不影响导入）
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.syntax import Syntax
+from rich.text import Text
+from rich.prompt import Prompt
 
-def print_separator(char="=", length=80):
+# 全局 Console 实例（默认构造，自动检测 TTY）
+console = Console()
+
+
+# ============================================================
+# Spinner 与日志冲突处理（§3.3）
+# ============================================================
+
+def _collect_stdout_handlers():
+    """收集所有写到 stdout 的 StreamHandler（跨 nl2sql 和 root logger，按 id 去重）
+
+    nl2sql 和 root logger 可能引用同一个 console handler 实例，
+    用 dict 按 id(handler) 去重，避免重复 set/restore 级别。
+
+    若后续新增其他 propagate=false 且直挂 stdout handler 的 logger，
+    需将其名称加入下方遍历列表。
+    """
+    seen = {}  # id(handler) -> handler
+    for logger_name in ("nl2sql", None):  # None = root logger
+        lgr = logging.getLogger(logger_name)
+        for h in lgr.handlers:
+            if (
+                isinstance(h, logging.StreamHandler)
+                and not isinstance(h, logging.FileHandler)
+                and getattr(h, "stream", None) is sys.stdout
+                and id(h) not in seen
+            ):
+                seen[id(h)] = h
+    return list(seen.values())
+
+
+def _run_with_spinner(query_func, *args, **kwargs):
+    """在 spinner 运行期间临时屏蔽 INFO 日志到终端"""
+    stdout_handlers = _collect_stdout_handlers()
+
+    original_levels = {}
+    for h in stdout_handlers:
+        original_levels[h] = h.level
+        h.setLevel(logging.WARNING)
+
+    try:
+        with console.status(
+            "[bold yellow]🔄 正在执行 NL2SQL 分析与查询...[/bold yellow]",
+            spinner="dots",
+        ):
+            result = query_func(*args, **kwargs)
+        return result
+    finally:
+        for h, level in original_levels.items():
+            h.setLevel(level)
+
+
+# ============================================================
+# Legacy 纯文本输出（--no-rich / 非 TTY 降级路径）
+# ============================================================
+
+def _print_separator_legacy(char="=", length=80):
     """打印分隔线"""
     print(char * length)
 
 
-def print_result(result: Dict[str, Any]):
-    """
-    打印父图执行结果
-
-    Args:
-        result: 父图返回的结果字典
-    """
-    print_separator()
+def _print_result_legacy(result: Dict[str, Any]):
+    """打印父图执行结果（纯文本 legacy 路径）"""
+    _print_separator_legacy()
     print("📊 查询结果")
-    print_separator()
+    _print_separator_legacy()
 
     # 基本信息
     print(f"\n🆔 Query ID: {result['query_id']}")
@@ -61,38 +121,34 @@ def print_result(result: Dict[str, Any]):
     print(f"🏷️  复杂度: {result.get('complexity', 'N/A')}")
     print(f"🛤️  执行路径: {result.get('path_taken', 'N/A')}")
 
-    # 总结（最重要的输出）
+    # 总结
     print(f"\n💬 总结:")
     print("-" * 80)
-    summary = result.get('summary', '无总结')
+    summary = result.get('summary') or '（无总结信息）'
     print(summary)
     print("-" * 80)
 
-    # SQL（如果有）
+    # SQL
     sql = result.get('sql')
     if sql:
         print(f"\n📝 生成的SQL:")
         print("-" * 80)
         print(sql)
         print("-" * 80)
-
-    # 错误信息（如果有）
-    error = result.get('error')
-    if error:
-        print(f"\n❌ 错误信息: {error}")
-
-    # 子查询详情
-    sub_queries = result.get('sub_queries', [])
-    if sub_queries:
-        print(f"\n📋 子查询详情 ({len(sub_queries)} 个):")
-        for i, sq in enumerate(sub_queries, 1):
-            print(f"\n  [{i}] {sq['sub_query_id']}")
-            print(f"      状态: {sq['status']}")
+    else:
+        # Complex Path：遍历子查询
+        sub_queries = result.get('sub_queries', [])
+        for sq in sub_queries:
             if sq.get('validated_sql'):
-                print(f"      SQL: {sq['validated_sql'][:100]}{'...' if len(sq['validated_sql']) > 100 else ''}")
-            if sq.get('error'):
-                print(f"      错误: {sq['error']}")
-            print(f"      迭代次数: {sq.get('iteration_count', 0)}")
+                print(f"\n📝 SQL ({sq['sub_query_id']}):")
+                print("-" * 80)
+                print(sq['validated_sql'])
+                print("-" * 80)
+
+    # 错误信息
+    error = result.get('error')
+    if error and not result.get('execution_results'):
+        print(f"\n❌ 错误信息: {error}")
 
     # 执行结果
     execution_results = result.get('execution_results', [])
@@ -104,17 +160,15 @@ def print_result(result: Dict[str, Any]):
             if exec_result['success']:
                 print(f"      行数: {exec_result['row_count']}")
                 print(f"      耗时: {exec_result['execution_time_ms']:.1f}ms")
-
-                # 显示前几行数据
                 if exec_result.get('rows'):
                     rows = exec_result['rows']
                     columns = exec_result.get('columns', [])
                     print(f"      数据预览:")
                     if columns:
                         print(f"        列名: {', '.join(columns)}")
-                    for row_idx, row in enumerate(rows[:3], 1):  # 只显示前3行
+                    for row_idx, row in enumerate(rows[:5], 1):
                         print(f"        第{row_idx}行: {row}")
-                    if len(rows) > 3:
+                    if len(rows) > 5:
                         print(f"        ... (共 {len(rows)} 行)")
             else:
                 print(f"      错误: {exec_result.get('error')}")
@@ -123,101 +177,344 @@ def print_result(result: Dict[str, Any]):
     metadata = result.get('metadata', {})
     total_time = metadata.get('total_execution_time_ms', 0)
     router_time = metadata.get('router_latency_ms', 0)
-
     print(f"\n⏱️  性能指标:")
     print(f"   总耗时: {total_time:.0f}ms")
     if router_time:
         print(f"   Router 延迟: {router_time:.0f}ms")
-
+    # Phase 2 指标
+    planner_time = metadata.get('planner_latency_ms')
+    if planner_time:
+        print(f"   Planner 延迟: {planner_time:.0f}ms")
+    sub_query_count = metadata.get('sub_query_count', 0)
+    if sub_query_count > 1:
+        parallel_count = metadata.get('parallel_execution_count', 0)
+        print(f"   子查询数: {sub_query_count}")
+        print(f"   并发执行数: {parallel_count}")
     print()
 
+
+def _print_error_legacy(error: Exception):
+    """打印异常错误（纯文本 legacy 路径）"""
+    _print_separator_legacy()
+    print("❌ 执行失败")
+    _print_separator_legacy()
+    print(f"\n错误: {str(error)}")
+    print(f"\n💡 请查看日志了解详情")
+    print()
+
+
+# ============================================================
+# Rich 渲染输出（模块 A~E）
+# ============================================================
+
+def _render_metadata(result: Dict[str, Any]) -> Table:
+    """模块 A：查询元数据"""
+    table = Table(box=None, show_header=False, padding=(0, 2))
+    table.add_column("key", style="cyan", no_wrap=True)
+    table.add_column("value")
+
+    table.add_row("🆔 Query ID", result['query_id'])
+    if result.get('thread_id'):
+        table.add_row("🔗 Thread ID", result['thread_id'])
+    if result.get('user_id'):
+        table.add_row("👤 User ID", result['user_id'])
+    table.add_row("🏷️  复杂度", result.get('complexity') or 'N/A')
+    table.add_row("🛤️  执行路径", result.get('path_taken') or 'N/A')
+    return table
+
+
+def _render_summary(result: Dict[str, Any]) -> Panel:
+    """模块 B：总结信息（始终渲染，空值显示默认文案）"""
+    summary = result.get('summary') or '（无总结信息）'
+    return Panel(
+        summary,
+        title="[bold green]💬 最终总结[/bold green]",
+        border_style="green",
+        expand=True,
+    )
+
+
+def _render_sql(result: Dict[str, Any]):
+    """模块 C：生成的 SQL（返回渲染对象列表，空值返回空列表）"""
+    panels = []
+    sql = result.get('sql')
+
+    if sql:
+        # Fast Path：单子查询
+        syntax = Syntax(sql, "sql", theme="monokai", line_numbers=True)
+        panels.append(Panel(
+            syntax,
+            title="[bold blue]📝 执行的 SQL[/bold blue]",
+            border_style="blue",
+        ))
+    else:
+        # Complex Path：遍历子查询
+        sub_queries = result.get('sub_queries', [])
+        for sq in sub_queries:
+            validated_sql = sq.get('validated_sql')
+            if validated_sql:
+                syntax = Syntax(validated_sql, "sql", theme="monokai", line_numbers=True)
+                panels.append(Panel(
+                    syntax,
+                    title=f"[bold blue]📝 SQL ({sq['sub_query_id']})[/bold blue]",
+                    border_style="blue",
+                ))
+
+    return panels
+
+
+def _render_execution_results(result: Dict[str, Any]):
+    """模块 D：执行结果数据（返回渲染对象列表）"""
+    renderables = []
+    execution_results = result.get('execution_results', [])
+    if not execution_results:
+        return renderables
+
+    for exec_result in execution_results:
+        sub_query_id = exec_result['sub_query_id']
+
+        if not exec_result['success']:
+            # 失败：红色错误面板
+            renderables.append(Panel(
+                f"[red]{exec_result.get('error', '未知错误')}[/red]",
+                title=f"[bold red]❌ 执行失败 ({sub_query_id})[/bold red]",
+                border_style="red",
+            ))
+            continue
+
+        columns = exec_result.get('columns', [])
+        rows = exec_result.get('rows', [])
+        if not columns and not rows:
+            continue
+
+        # 构建数据表格
+        table = Table(
+            title=f"📊 执行结果 ({sub_query_id})",
+            show_lines=False,
+            row_styles=["", "dim"],
+        )
+        for col in columns:
+            table.add_column(col, style="bold")
+
+        max_display = 5
+        for row in rows[:max_display]:
+            table.add_row(*[str(v) for v in row])
+
+        renderables.append(table)
+
+        if len(rows) > max_display:
+            renderables.append(Text(
+                f"  ... (共 {len(rows)} 行数据，仅展示前 {max_display} 行)",
+                style="dim",
+            ))
+
+        renderables.append(Text(
+            f"  行数: {exec_result['row_count']}  |  "
+            f"耗时: {exec_result['execution_time_ms']:.1f}ms",
+            style="dim",
+        ))
+
+    return renderables
+
+
+def _render_top_level_error(result: Dict[str, Any]):
+    """模块 D'：顶层错误面板（仅在有错误且无执行结果时渲染）"""
+    error = result.get('error')
+    if error and not result.get('execution_results'):
+        return Panel(
+            f"[red]{error}[/red]",
+            title="[bold red]❌ 错误信息[/bold red]",
+            border_style="red",
+        )
+    return None
+
+
+def _render_performance(result: Dict[str, Any]) -> Text:
+    """模块 E：性能指标"""
+    metadata = result.get('metadata', {})
+    total_time = metadata.get('total_execution_time_ms', 0)
+    router_time = metadata.get('router_latency_ms', 0)
+
+    parts = [f"⏱️  总耗时: {total_time:.0f}ms"]
+    if router_time:
+        parts.append(f"Router 延迟: {router_time:.0f}ms")
+
+    # Phase 2 指标
+    planner_time = metadata.get('planner_latency_ms')
+    if planner_time:
+        parts.append(f"Planner 延迟: {planner_time:.0f}ms")
+    sub_query_count = metadata.get('sub_query_count', 0)
+    if sub_query_count > 1:
+        parallel_count = metadata.get('parallel_execution_count', 0)
+        parts.append(f"子查询数: {sub_query_count}")
+        parts.append(f"并发执行数: {parallel_count}")
+
+    return Text(" | ".join(parts), style="dim")
+
+
+def _print_result_rich(result: Dict[str, Any]):
+    """使用 Rich 渲染完整的查询结果"""
+    console.print()
+
+    # 模块 A：元数据
+    console.print(_render_metadata(result))
+    console.print()
+
+    # 模块 B：总结（始终渲染）
+    console.print(_render_summary(result))
+
+    # 模块 C：SQL
+    for panel in _render_sql(result):
+        console.print(panel)
+
+    # 模块 D'：顶层错误
+    error_panel = _render_top_level_error(result)
+    if error_panel:
+        console.print(error_panel)
+
+    # 模块 D：执行结果
+    for renderable in _render_execution_results(result):
+        console.print(renderable)
+
+    # 模块 E：性能指标
+    console.print()
+    console.print(_render_performance(result))
+    console.print()
+
+
+def _print_error_rich(error: Exception):
+    """使用 Rich 渲染异常错误"""
+    console.print()
+    console.print(Panel(
+        f"[red]{str(error)}[/red]\n\n[dim]💡 请查看日志了解详情[/dim]",
+        title="[bold red]❌ 执行失败[/bold red]",
+        border_style="red",
+    ))
+    console.print()
+
+
+# ============================================================
+# 核心业务函数
+# ============================================================
 
 def run_single_query(
     question: str,
     query_id: str = None,
     thread_id: str = None,
     user_id: str = None,
+    use_rich: bool = True,
+    interactive: bool = False,
 ):
-    """
-    运行单个查询
+    """运行单个查询
 
     Args:
         question: 用户问题
         query_id: 查询ID（可选）
         thread_id: 会话ID（可选，多轮对话时复用）
         user_id: 用户标识（可选，默认 guest）
+        use_rich: 是否使用 Rich 渲染
+        interactive: 是否在交互模式中调用
     """
-    print(f"\n🔄 正在处理您的问题...")
-    print(f"问题: {question}")
-    if query_id:
-        print(f"Query ID: {query_id}")
-    if thread_id:
-        print(f"Thread ID: {thread_id}")
-    if user_id:
-        print(f"User ID: {user_id}")
-    print()
-
     logger.info(f"开始执行查询: {question}")
 
     try:
-        result = run_nl2sql_query(
-            query=question,
-            query_id=query_id,
-            thread_id=thread_id,
-            user_id=user_id,
-        )
+        # 执行查询（带 spinner 或静态提示）
+        use_spinner = use_rich and console.is_terminal
+
+        if use_spinner:
+            result = _run_with_spinner(
+                run_nl2sql_query,
+                query=question,
+                query_id=query_id,
+                thread_id=thread_id,
+                user_id=user_id,
+            )
+        else:
+            if interactive:
+                print("🔄 正在执行 NL2SQL 分析与查询...")
+            result = run_nl2sql_query(
+                query=question,
+                query_id=query_id,
+                thread_id=thread_id,
+                user_id=user_id,
+            )
 
         logger.info(f"查询完成: query_id={result['query_id']}, complexity={result.get('complexity')}")
 
-        print_result(result)
+        # 渲染结果
+        if use_rich:
+            _print_result_rich(result)
+        else:
+            _print_result_legacy(result)
 
-        # 返回 result 供交互模式使用（获取 thread_id）
         return result
 
     except Exception as e:
         logger.error(f"查询执行异常: {e}", exc_info=True)
 
-        print_separator()
-        print("❌ 执行失败")
-        print_separator()
-        print(f"\n错误: {str(e)}")
-        print(f"\n💡 请查看日志了解详情")
-        print()
+        if use_rich:
+            _print_error_rich(e)
+        else:
+            _print_error_legacy(e)
+
         return None
 
 
-def interactive_mode(thread_id: str = None, user_id: str = None):
+def interactive_mode(
+    thread_id: str = None,
+    user_id: str = None,
+    use_rich: bool = True,
+):
     """交互对话模式
 
     Args:
         thread_id: 初始会话ID（可选，不传则自动生成）
         user_id: 用户标识（可选，默认 guest）
+        use_rich: 是否使用 Rich 渲染
     """
     from datetime import datetime, timezone
 
-    print_separator()
-    print("🤖 NL2SQL 父图测试工具 - 交互模式")
-    print_separator()
-    print("\n欢迎使用！我可以帮您执行完整的 NL2SQL 流程：")
-    print("  Router → Simple Planner → SQL Generation → SQL Execution → Summarizer")
-    print("\n💡 提示:")
-    print("  - 直接输入问题，按回车提交")
-    print("  - 输入 'exit' 或 'quit' 退出")
-    print("  - 按 Ctrl+C 也可以退出")
+    # 欢迎横幅
+    if use_rich:
+        console.print(Panel(
+            "欢迎使用！我可以帮您执行完整的 NL2SQL 流程：\n"
+            "Router → Simple Planner → SQL Gen → SQL Exec → Summarizer\n\n"
+            "[bold]💡 提示[/bold]:\n"
+            "  - 直接输入问题，按回车提交\n"
+            "  - 输入 'exit' 或 'quit' 退出\n"
+            "  - 按 Ctrl+C 也可以退出",
+            title="[bold blue]🤖 NL2SQL 交互式测试终端[/bold blue]",
+            border_style="blue",
+            expand=False,
+        ))
+    else:
+        _print_separator_legacy()
+        print("🤖 NL2SQL 父图测试工具 - 交互模式")
+        _print_separator_legacy()
+        print("\n欢迎使用！我可以帮您执行完整的 NL2SQL 流程：")
+        print("  Router → Simple Planner → SQL Generation → SQL Execution → Summarizer")
+        print("\n💡 提示:")
+        print("  - 直接输入问题，按回车提交")
+        print("  - 输入 'exit' 或 'quit' 退出")
+        print("  - 按 Ctrl+C 也可以退出")
 
-    # 用户标识（默认 guest）
+    # 用户标识
     actual_user_id = user_id or "guest"
 
-    # 启动时生成一次 thread_id（固定整个交互会话）
+    # 启动时生成一次 thread_id
     if thread_id is None:
         now = datetime.now(timezone.utc)
         timestamp = now.strftime("%Y%m%dT%H%M%S") + f"{now.microsecond // 1000:03d}Z"
         thread_id = f"{actual_user_id}:{timestamp}"
 
-    print(f"\n🆔 会话 ID: {thread_id}")
-    print(f"👤 用户: {actual_user_id}\n")
-    print_separator()
-    print()
+    if use_rich:
+        console.print(f"\n[cyan]🆔 会话 ID:[/cyan] {thread_id}")
+        console.print(f"[cyan]👤 用户:[/cyan] {actual_user_id}\n")
+    else:
+        print(f"\n🆔 会话 ID: {thread_id}")
+        print(f"👤 用户: {actual_user_id}\n")
+        _print_separator_legacy()
+        print()
 
     logger.info(f"进入交互模式: thread_id={thread_id}, user_id={actual_user_id}")
 
@@ -226,41 +523,67 @@ def interactive_mode(thread_id: str = None, user_id: str = None):
     while True:
         try:
             # 获取用户输入
-            question = input("👤 您的问题: ").strip()
+            if use_rich:
+                console.print("[bold green]👤 您的问题[/bold green]", end="")
+                question = console.input(": ").strip()
+            else:
+                question = input("👤 您的问题: ").strip()
 
             # 退出命令
             if question.lower() in ["exit", "quit", "q", "bye", "退出", "再见"]:
-                print("\n👋 再见！感谢使用~")
+                if use_rich:
+                    console.print("\n[bold]👋 再见！感谢使用~[/bold]")
+                else:
+                    print("\n👋 再见！感谢使用~")
                 logger.info(f"退出交互模式，共执行 {conversation_count} 次查询")
                 break
 
             # 空输入
             if not question:
-                print("💭 请输入您的问题~\n")
+                if use_rich:
+                    console.print("[dim]💭 请输入您的问题~[/dim]\n")
+                else:
+                    print("💭 请输入您的问题~\n")
                 continue
 
             conversation_count += 1
 
-            # 执行查询（每轮使用同一 thread_id，query_id 自动生成）
+            # 执行查询
             run_single_query(
                 question,
-                query_id=None,  # 每轮自动生成
-                thread_id=thread_id,  # 固定（整个交互会话共享）
+                query_id=None,
+                thread_id=thread_id,
                 user_id=actual_user_id,
+                use_rich=use_rich,
+                interactive=True,
             )
 
-            # 询问是否继续
-            print("💬 您可以继续提问，或输入 'exit' 退出\n")
+            # 继续提示
+            if use_rich:
+                console.print("[dim]💬 您可以继续提问，或输入 'exit' 退出[/dim]\n")
+            else:
+                print("💬 您可以继续提问，或输入 'exit' 退出\n")
 
         except KeyboardInterrupt:
-            print("\n\n👋 再见！感谢使用~")
+            if use_rich:
+                console.print("\n\n[bold]👋 再见！感谢使用~[/bold]")
+            else:
+                print("\n\n👋 再见！感谢使用~")
             logger.info(f"用户中断，退出交互模式，共执行 {conversation_count} 次查询")
             break
         except Exception as e:
             logger.error(f"交互模式异常: {e}", exc_info=True)
-            print(f"\n❌ 抱歉，出现了一些问题: {e}")
-            print("💬 您可以继续提问，或输入 'exit' 退出\n")
+            if use_rich:
+                console.print(f"\n[red]❌ 抱歉，出现了一些问题: {e}[/red]")
+                console.print("[dim]💬 您可以继续提问，或输入 'exit' 退出[/dim]\n")
+            else:
+                print(f"\n❌ 抱歉，出现了一些问题: {e}")
+                print("💬 您可以继续提问，或输入 'exit' 退出\n")
 
+
+# ============================================================
+# 入口
+# ============================================================
 
 def main():
     """主函数"""
@@ -283,6 +606,9 @@ def main():
 
   # 继续某个会话（多轮对话）
   python scripts/nl2sql_father_cli.py --thread-id "alice:20251221T120000000Z" "追加条件"
+
+  # 纯文本输出
+  python scripts/nl2sql_father_cli.py --no-rich "查询销售额"
 
   # 查看详细日志
   python scripts/nl2sql_father_cli.py "查询销售额" --verbose
@@ -314,9 +640,9 @@ def main():
     )
 
     parser.add_argument(
-        "--json",
+        "--no-rich",
         action="store_true",
-        help="以JSON格式输出结果"
+        help="禁用 Rich 渲染，使用纯文本输出"
     )
 
     parser.add_argument(
@@ -332,9 +658,12 @@ def main():
     if args.verbose:
         logging.getLogger("nl2sql").setLevel(logging.DEBUG)
 
-    logger.info("="*80)
+    # 决定渲染路径：use_rich = console.is_terminal and not no_rich
+    use_rich = console.is_terminal and not args.no_rich
+
+    logger.info("=" * 80)
     logger.info("NL2SQL 父图 CLI 启动")
-    logger.info("="*80)
+    logger.info("=" * 80)
 
     # 检查是否提供了问题
     if args.question:
@@ -342,35 +671,21 @@ def main():
         question = " ".join(args.question)
         logger.info("单次查询模式")
 
-        if args.json:
-            # JSON 输出模式
-            try:
-                result = run_nl2sql_query(
-                    query=question,
-                    query_id=args.query_id,
-                    thread_id=args.thread_id,
-                    user_id=args.user_id,
-                )
-                print(json.dumps(result, indent=2, ensure_ascii=False))
-            except Exception as e:
-                error_result = {
-                    "error": str(e),
-                    "query": question,
-                    "query_id": args.query_id
-                }
-                print(json.dumps(error_result, indent=2, ensure_ascii=False))
-                sys.exit(1)
-        else:
-            # 友好输出模式
-            run_single_query(
-                question,
-                query_id=args.query_id,
-                thread_id=args.thread_id,
-                user_id=args.user_id,
-            )
+        run_single_query(
+            question,
+            query_id=args.query_id,
+            thread_id=args.thread_id,
+            user_id=args.user_id,
+            use_rich=use_rich,
+            interactive=False,
+        )
     else:
         # 交互模式
-        interactive_mode(thread_id=args.thread_id, user_id=args.user_id)
+        interactive_mode(
+            thread_id=args.thread_id,
+            user_id=args.user_id,
+            use_rich=use_rich,
+        )
 
 
 if __name__ == "__main__":
