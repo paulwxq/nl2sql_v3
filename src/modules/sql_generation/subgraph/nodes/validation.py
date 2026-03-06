@@ -52,6 +52,7 @@ def validation_node(state: SQLGenerationState) -> Dict[str, Any]:
             },
             "error": "系统错误：空SQL进入验证",
             "error_type": "validation_failed",
+            "failed_step": "validation",
         }
 
     try:
@@ -82,12 +83,17 @@ def validation_node(state: SQLGenerationState) -> Dict[str, Any]:
             # 成功后清理错误字段，避免“成功 + 历史错误”并存
             updates["error"] = None
             updates["error_type"] = None
+            updates["failed_step"] = None
         else:
-            # 验证失败
+            # 验证失败：写入顶层 error/error_type/failed_step
             error_list = validation_result.get("errors") or ["未知错误"]
+            layer = validation_result.get("layer") or "unknown"
+            updates["error"] = error_list[0]
+            updates["error_type"] = f"validation_{layer}_failed"
+            updates["failed_step"] = "validation"
             query_logger.warning(
                 "SQL 验证失败（%s）：%s",
-                validation_result.get("layer", "unknown"),
+                layer,
                 "; ".join(error_list),
             )
 
@@ -106,4 +112,5 @@ def validation_node(state: SQLGenerationState) -> Dict[str, Any]:
             },
             "error": f"验证过程异常：{str(e)}",
             "error_type": "validation_failed",
+            "failed_step": "validation",
         }

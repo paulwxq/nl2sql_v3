@@ -87,10 +87,20 @@ def summarizer_node(state: NL2SQLFatherState) -> Dict[str, Any]:
 
     # ========== 场景2：SQL执行失败或无结果 ==========
     if not execution_results:
-        query_logger.warning("场景2：无执行结果")
-        return {
-            "summary": "抱歉，系统未能生成有效的SQL查询。",
-        }
+        # 尝试从 sub_queries 提取失败信息（Complex Path 增强）
+        failed_sqs = [sq for sq in state.get("sub_queries", []) if sq.get("status") == "failed"]
+        if failed_sqs:
+            lines = []
+            for sq in failed_sqs:
+                step = sq.get("failed_step", "未知阶段")
+                err = sq.get("error", "未知错误")
+                lines.append(f"子查询在{step}阶段失败：{err}")
+            summary = "抱歉，查询未能完成。\n" + "\n".join(lines)
+            query_logger.warning(f"场景2：子查询失败，失败数={len(failed_sqs)}")
+        else:
+            summary = "抱歉，系统未能生成有效的SQL查询。"
+            query_logger.warning("场景2：无执行结果")
+        return {"summary": summary}
 
     # 检查执行是否成功
     success_results = [r for r in execution_results if r.get("success")]
@@ -234,6 +244,9 @@ def _build_error_summary(error: str, error_type: str, user_query: str) -> str:
         "schema_retrieval_failed": "抱歉，系统暂时无法找到相关的数据表。请确认您的问题是否涉及系统已有的数据。",
         "generation_failed": "抱歉，系统在生成查询时遇到了问题。可能是问题过于复杂，建议您简化问题后重试。",
         "validation_failed": "抱歉，系统生成的查询存在问题，无法执行。建议您换一种方式提问。",
+        "validation_syntax_failed": "抱歉，系统生成的SQL存在语法问题，建议您换一种方式描述。",
+        "validation_security_failed": "抱歉，系统检测到不安全的查询操作，已拒绝执行。",
+        "validation_semantic_failed": "抱歉，系统生成的查询引用了不存在的表或列，建议您确认问题描述。",
     }
 
     # 获取模板（如果error_type未知，使用通用模板）

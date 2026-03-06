@@ -71,6 +71,7 @@ class SQLGenerationState(MessagesState):
     validated_sql: Optional[str] = None  # 最终验证通过的SQL
     error: Optional[str] = None  # 错误信息
     error_type: Optional[str] = None  # 错误类型
+    failed_step: Optional[str] = None  # 失败发生的节点名
     execution_time: float = 0.0  # 执行耗时
 
 
@@ -134,6 +135,7 @@ def extract_output(state: SQLGenerationState) -> SQLGenerationOutput:
         # 若已成功，屏蔽错误字段，避免“成功 + 历史错误”并存
         "error": None if has_valid_sql else state.get("error"),
         "error_type": None if has_valid_sql else state.get("error_type"),
+        "failed_step": None if has_valid_sql else state.get("failed_step"),
         "iteration_count": state.get("iteration_count", 0),
         "execution_time": state.get("execution_time", 0.0),
         "schema_context": state.get("schema_context"),
@@ -169,6 +171,7 @@ def get_error_summary(state: SQLGenerationState) -> str:
 
     error = state.get("error", "未知错误")
     error_type = state.get("error_type", "unknown")
+    failed_step = state.get("failed_step", "unknown")
     iteration_count = state.get("iteration_count", 0)
 
-    return f"❌ 失败 (类型: {error_type}, 迭代: {iteration_count}次)\n{error}"
+    return f"❌ 失败 (阶段: {failed_step}, 类型: {error_type}, 迭代: {iteration_count}次)\n{error}"

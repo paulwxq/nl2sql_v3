@@ -515,6 +515,7 @@ def sql_generation_node(state: SQLGenerationState) -> Dict[str, Any]:
             "generated_sql": None,
             "error": "Schema检索结果为空，无法生成SQL",
             "error_type": "generation_failed",
+            "failed_step": "sql_generation",
         }
 
     # 直接从 schema_context 读取历史 SQL（已在 schema_retrieval 阶段完成）
@@ -544,6 +545,7 @@ def sql_generation_node(state: SQLGenerationState) -> Dict[str, Any]:
             # 成功即清理上一轮的错误字段，保证状态一致
             "error": None,
             "error_type": None,
+            "failed_step": None,
         }
 
     except Exception as e:
@@ -553,4 +555,5 @@ def sql_generation_node(state: SQLGenerationState) -> Dict[str, Any]:
             "generated_sql": None,
             "error": f"SQL生成失败: {str(e)}",
             "error_type": "generation_failed",
+            "failed_step": "sql_generation",
         }

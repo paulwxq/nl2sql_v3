@@ -52,6 +52,8 @@ def simple_planner_node(state: NL2SQLFatherState) -> Dict[str, Any]:
         "validated_sql": None,
         "execution_result": None,
         "error": None,
+        "error_type": None,
+        "failed_step": None,
         "iteration_count": 0,
     }
 

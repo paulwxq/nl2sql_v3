@@ -127,10 +127,15 @@ def sql_gen_wrapper(state: NL2SQLFatherState) -> Dict[str, Any]:
             current_sub_query["status"] = "completed"
             current_sub_query["validated_sql"] = subgraph_output["validated_sql"]
             current_sub_query["iteration_count"] = subgraph_output.get("iteration_count", 0)
+            current_sub_query["error"] = None
+            current_sub_query["error_type"] = None
+            current_sub_query["failed_step"] = None
             query_logger.info(f"SQL 生成成功: {current_sub_query_id}")
         else:
             current_sub_query["status"] = "failed"
             current_sub_query["error"] = subgraph_output.get("error")
+            current_sub_query["error_type"] = subgraph_output.get("error_type")
+            current_sub_query["failed_step"] = subgraph_output.get("failed_step")
             query_logger.warning(f"SQL 生成失败: {current_sub_query_id}, error_type={subgraph_output.get('error_type')}")
 
         # 映射输出到父图State（显式返回 sub_queries 以确保 in-place 修改被持久化）
@@ -138,6 +143,7 @@ def sql_gen_wrapper(state: NL2SQLFatherState) -> Dict[str, Any]:
             "validated_sql": subgraph_output.get("validated_sql"),
             "error": subgraph_output.get("error"),
             "error_type": subgraph_output.get("error_type"),
+            "failed_step": subgraph_output.get("failed_step"),
             "iteration_count": subgraph_output.get("iteration_count"),
             "sub_queries": sub_queries,
         }
@@ -150,12 +156,15 @@ def sql_gen_wrapper(state: NL2SQLFatherState) -> Dict[str, Any]:
         # 更新子查询状态
         current_sub_query["status"] = "failed"
         current_sub_query["error"] = error_msg
+        current_sub_query["error_type"] = "generation_failed"
+        current_sub_query["failed_step"] = "sql_generation"
 
         # 返回错误信息，流程将进入 Summarizer 输出友好提示
         return {
             "validated_sql": None,
             "error": error_msg,
             "error_type": "generation_failed",
+            "failed_step": "sql_generation",
             "iteration_count": 0,
             "sub_queries": sub_queries,
         }
@@ -218,11 +227,16 @@ def sql_gen_batch_wrapper(state: NL2SQLFatherState) -> Dict[str, Any]:
             if subgraph_output.get("validated_sql"):
                 sub_query["validated_sql"] = subgraph_output["validated_sql"]
                 sub_query["iteration_count"] = subgraph_output.get("iteration_count", 0)
+                sub_query["error"] = None
+                sub_query["error_type"] = None
+                sub_query["failed_step"] = None
                 # 注意：不在此处更新 status，由 SQL 执行节点更新为 completed
                 query_logger.info(f"SQL 生成成功: {sub_query_id}")
             else:
                 sub_query["status"] = "failed"
                 sub_query["error"] = subgraph_output.get("error", "SQL生成失败")
+                sub_query["error_type"] = subgraph_output.get("error_type")
+                sub_query["failed_step"] = subgraph_output.get("failed_step")
                 query_logger.warning(
                     f"SQL 生成失败: {sub_query_id}, error_type={subgraph_output.get('error_type')}"
                 )
@@ -233,6 +247,8 @@ def sql_gen_batch_wrapper(state: NL2SQLFatherState) -> Dict[str, Any]:
             query_logger.error(error_msg, exc_info=True)
             sub_query["status"] = "failed"
             sub_query["error"] = error_msg
+            sub_query["error_type"] = "generation_failed"
+            sub_query["failed_step"] = "sql_generation"
 
     return {"sub_queries": state.get("sub_queries", [])}  # 显式返回 sub_queries 以确保 in-place 修改被持久化
 

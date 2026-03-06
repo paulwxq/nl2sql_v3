@@ -13,6 +13,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List
 
+from langchain_core.runnables import RunnableConfig
+
 from src.modules.nl2sql_father.state import NL2SQLFatherState, SQLExecutionResult
 from src.services.config_loader import load_config
 from src.services.db.pg_client import PGClient
@@ -113,7 +115,7 @@ def _execute_single_sql(
         return exec_result
 
 
-def sql_execution_node(state: NL2SQLFatherState, config: Dict[str, Any] = None) -> Dict[str, Any]:
+def sql_execution_node(state: NL2SQLFatherState, config: RunnableConfig | None = None) -> Dict[str, Any]:
     """SQL 执行节点（Phase 1 + Phase 2 共享，增强版）
 
     职责：

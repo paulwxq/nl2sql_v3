@@ -71,4 +71,5 @@ def schema_retrieval_node(state: SQLGenerationState) -> Dict[str, Any]:
             "schema_context": None,
             "error": f"Schema检索失败: {str(e)}",
             "error_type": "schema_retrieval_failed",
+            "failed_step": "schema_retrieval",
         }

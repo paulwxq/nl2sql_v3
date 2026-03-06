@@ -223,5 +223,6 @@ def question_parsing_node(state: SQLGenerationState) -> Dict[str, Any]:
             "parsing_source": "llm",
             "error": f"问题解析失败: {exc}",
             "error_type": "parsing_failed",
+            "failed_step": "question_parsing",
             "rewritten_query": query,
         }

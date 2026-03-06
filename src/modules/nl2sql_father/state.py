@@ -23,6 +23,8 @@ class SubQueryInfo(TypedDict):
     validated_sql: Optional[str]  # 生成的SQL（验证通过）
     execution_result: Optional[Dict[str, Any]]  # 执行结果（双向绑定）
     error: Optional[str]  # 错误信息
+    error_type: Optional[str]  # 错误类型
+    failed_step: Optional[str]  # 失败发生的节点名
     iteration_count: int  # SQL生成迭代次数
     dependencies_results: Optional[Dict[str, Any]]  # Phase 2: 依赖结果字典（由 Inject Params 注入）
 
@@ -70,6 +72,7 @@ class NL2SQLFatherState(TypedDict):
     validated_sql: Optional[str]  # 验证通过的SQL
     error: Optional[str]  # 错误信息
     error_type: Optional[str]  # 错误类型
+    failed_step: Optional[str]  # 失败发生的节点名
     iteration_count: Optional[int]  # SQL生成迭代次数
 
     # ========== SQL执行结果 ==========
@@ -164,6 +167,7 @@ def create_initial_state(
         validated_sql=None,
         error=None,
         error_type=None,
+        failed_step=None,
         iteration_count=None,
         # 执行结果
         execution_results=[],
@@ -210,6 +214,8 @@ def extract_final_result(state: NL2SQLFatherState) -> Dict[str, Any]:
         "path_taken": state.get("path_taken"),  # "fast" | "complex" | None
         "summary": state.get("summary"),
         "error": state.get("error"),
+        "error_type": state.get("error_type"),
+        "failed_step": state.get("failed_step"),
         "sql": sql,  # 快捷访问：单子查询时为 SQL，多子查询时为 None
         "sub_queries": sub_queries,  # 完整子查询列表
         "execution_results": state.get("execution_results", []),  # 完整执行结果
