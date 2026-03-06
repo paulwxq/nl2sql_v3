@@ -166,7 +166,7 @@ def _print_result_legacy(result: Dict[str, Any]):
                     print(f"      数据预览:")
                     if columns:
                         print(f"        列名: {', '.join(columns)}")
-                    for row_idx, row in enumerate(rows[:5], 1):
+                    for row_idx, row in enumerate(rows[:20], 1):
                         print(f"        第{row_idx}行: {row}")
                     if len(rows) > 5:
                         print(f"        ... (共 {len(rows)} 行)")
@@ -296,7 +296,7 @@ def _render_execution_results(result: Dict[str, Any]):
         for col in columns:
             table.add_column(col, style="bold")
 
-        max_display = 5
+        max_display = 20
         for row in rows[:max_display]:
             table.add_row(*[str(v) for v in row])
 

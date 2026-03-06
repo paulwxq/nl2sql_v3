@@ -204,9 +204,16 @@ langgraph_persistence:
 
   # 数据库连接（复用 database.* 或独立配置）
   database:
-    use_global_config: false          # true: 从 database.* 组装 URI；false: 使用 db_uri
-    db_uri: ${LANGGRAPH_DB_URI:}     # 仅当 use_global_config=false 时生效（URI 格式）
-    schema: langgraph                # 独立 schema，避免与业务表混用
+    use_global_config: false          # true: 从 database.* 组装 URI；false: 使用下方独立参数
+
+    # 独立连接参数（use_global_config=false 时生效）
+    host: ${LANGGRAPH_DB_HOST:localhost}
+    port: ${LANGGRAPH_DB_PORT:5432}
+    database: ${LANGGRAPH_DB_NAME:lg_persist}
+    user: ${LANGGRAPH_DB_USER:postgres}
+    password: ${LANGGRAPH_DB_PASSWORD:}
+
+    schema: public                   # 当前使用 public schema（后续可迁移至独立 schema）
     sslmode: disable                 # 可选：disable/require/verify-ca 等
     connect_timeout: 5               # 连接超时（秒），防止连接阶段卡死
     statement_timeout_ms: 5000       # SQL 执行超时（毫秒），防止写入卡死

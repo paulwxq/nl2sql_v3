@@ -195,9 +195,7 @@ def list_recent_sessions(
 
     namespace = get_store_namespace()
     persistence_config = _get_persistence_config()
-    # TODO: 历史原因 store 表在 public schema 下，后续统一迁移到 langgraph schema 后改回配置读取
-    # schema = persistence_config.get("database", {}).get("schema", "langgraph")
-    schema = "public"
+    schema = persistence_config.get("database", {}).get("schema") or "public"
     prefix_pattern = f"{namespace}.{user_id}:%"
 
     def _do_query() -> List[Dict[str, Any]]:

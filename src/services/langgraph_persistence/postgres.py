@@ -5,7 +5,7 @@
 
 import logging
 from typing import Optional
-from urllib.parse import quote, quote_plus, urlencode
+from urllib.parse import quote, urlencode
 
 from src.services.config_loader import get_config
 
@@ -125,23 +125,24 @@ def build_db_uri_from_config() -> str:
     persistence_config = config.get("langgraph_persistence", {})
     db_config = persistence_config.get("database", {})
 
+    # ---- 连接参数来源 ----
     if not db_config.get("use_global_config", True):
-        # 直接使用配置的 db_uri
-        # 注意：此模式下 schema/sslmode 配置项不生效，需直接写入 db_uri 的 query 参数中
-        db_uri = db_config.get("db_uri")
-        if not db_uri:
-            raise ValueError(
-                "langgraph_persistence.database.db_uri is required when use_global_config=false"
-            )
-        return db_uri
+        # 从 langgraph_persistence.database.* 读取独立连接参数
+        host = db_config.get("host", "localhost")
+        port = db_config.get("port", 5432)
+        database = db_config.get("database", "postgres")
+        user = db_config.get("user", "postgres")
+        password = quote(str(db_config.get("password", "")), safe="")
+    else:
+        # 从 database.*（全局业务数据库）读取
+        global_db = config.get("database", {})
+        host = global_db.get("host", "localhost")
+        port = global_db.get("port", 5432)
+        database = global_db.get("database", "postgres")
+        user = global_db.get("user", "postgres")
+        password = quote(str(global_db.get("password", "")), safe="")
 
-    # 从 database.* 组装 URI
-    global_db = config.get("database", {})
-    host = global_db.get("host", "localhost")
-    port = global_db.get("port", 5432)
-    database = global_db.get("database", "postgres")
-    user = global_db.get("user", "postgres")
-    password = quote_plus(str(global_db.get("password", "")))  # URL 编码密码
+    # ---- 以下逻辑两种模式共用 ----
 
     # 构建 query 参数
     query_params = {}
@@ -157,7 +158,7 @@ def build_db_uri_from_config() -> str:
 
     # schema 作为 search_path（来自 langgraph_persistence.database.schema）
     # 同时设置 statement_timeout（防止 SQL 执行卡死，单位：毫秒）
-    schema = db_config.get("schema", "langgraph")
+    schema = db_config.get("schema") or "public"
     statement_timeout_ms = db_config.get("statement_timeout_ms", 5000)  # 默认 5 秒
     options_parts = []
     if schema:

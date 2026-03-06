@@ -87,7 +87,7 @@ summarizer:
   timeout: 10  # LLM调用超时（秒）
 
   # 提示词配置
-  max_rows_in_prompt: 10  # 提示词中最多包含多少行数据
+  max_rows_in_prompt: 20  # 提示词中最多包含多少行数据
   use_template: false  # 是否使用模板（true不调用LLM）
   enable_chart_suggestion: false  # Phase 2: 是否生成图表建议
 
