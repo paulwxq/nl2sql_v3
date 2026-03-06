@@ -6,7 +6,7 @@
 import re
 import logging
 from datetime import datetime, timezone
-from typing import Tuple
+from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +135,25 @@ def parse_thread_id(thread_id: str) -> Tuple[str, str]:
         raise ValueError(f"Invalid thread_id format: {thread_id}")
     parts = thread_id.split(":", 1)
     return (parts[0], parts[1])
+
+
+def parse_thread_id_datetime(thread_id: str) -> Optional[datetime]:
+    """从 thread_id 解析会话创建时间。
+
+    Args:
+        thread_id: 格式为 {user_id}:{YYYYMMDDTHHmmssSSS}Z
+
+    Returns:
+        datetime 对象（UTC，带 tzinfo），解析失败返回 None
+    """
+    try:
+        _, timestamp_str = parse_thread_id(thread_id)
+        # "20260305T183946997Z" -> 前15位 "20260305T183946" + 毫秒 "997"
+        dt = datetime.strptime(timestamp_str[:15], "%Y%m%dT%H%M%S")
+        ms = int(timestamp_str[15:18])
+        return dt.replace(microsecond=ms * 1000, tzinfo=timezone.utc)
+    except (ValueError, IndexError):
+        return None
 
 
 def get_user_id_from_thread_id(thread_id: str) -> str:

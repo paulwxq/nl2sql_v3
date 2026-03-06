@@ -21,7 +21,7 @@ import argparse
 import logging
 import readline  # noqa: F401 — 启用 input() 行编辑和历史记录
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 # 添加项目根目录到路径
 project_root = Path(__file__).parent.parent
@@ -394,6 +394,119 @@ def _print_error_rich(error: Exception):
 
 
 # ============================================================
+# 会话选择菜单
+# ============================================================
+
+def _render_session_menu(sessions: List[Dict[str, Any]]) -> Panel:
+    """渲染会话选择菜单（Rich Panel）。
+
+    Args:
+        sessions: list_recent_sessions() 返回的会话列表（新->旧）
+
+    Returns:
+        Rich Panel 对象（仅包含选项列表，不含输入提示）
+    """
+    table = Table(box=None, show_header=False, padding=(0, 1))
+    table.add_column("idx", style="bold cyan", no_wrap=True, width=4)
+    table.add_column("info")
+
+    # 第一行：新建会话
+    table.add_row("[0]", "[bold green]新建会话[/bold green]")
+
+    # 历史会话
+    for i, session in enumerate(sessions, 1):
+        created_at = session["created_at"]
+        # UTC -> 本地时区显示
+        local_time = created_at.astimezone()
+        time_str = local_time.strftime("%Y-%m-%d %H:%M")
+
+        # 首问展示（兜底空值）
+        question = session.get("first_question") or "（无对话内容）"
+        max_q_len = 36
+        if len(question) > max_q_len:
+            question = question[:max_q_len] + "..."
+
+        table.add_row(f"[{i}]", f"{time_str}  {question}")
+
+    return Panel(
+        table,
+        title="[bold blue]NL2SQL 交互式终端[/bold blue]",
+        border_style="blue",
+        expand=False,
+        padding=(1, 2),
+    )
+
+
+def _select_session(
+    user_id: str,
+    use_rich: bool,
+) -> Optional[str]:
+    """展示会话列表并等待用户选择，返回 thread_id。
+
+    Args:
+        user_id: 用户标识（已经过 sanitize_user_id 处理）
+        use_rich: 是否使用 Rich 渲染
+
+    Returns:
+        - 选中的历史 thread_id（继续对话）
+        - None（新建会话，由调用方生成 thread_id）
+    """
+    from src.services.langgraph_persistence.chat_history_reader import (
+        list_recent_sessions,
+    )
+
+    # 查询最近会话
+    sessions = list_recent_sessions(user_id=user_id, max_sessions=3)
+
+    if not sessions:
+        # 无历史会话，直接新建
+        return None
+
+    # 渲染菜单
+    if use_rich:
+        panel = _render_session_menu(sessions)
+        console.print(panel)
+    else:
+        # 纯文本降级
+        print("=" * 50)
+        print("  [0] 新建会话")
+        for i, s in enumerate(sessions, 1):
+            local_time = s["created_at"].astimezone()
+            time_str = local_time.strftime("%Y-%m-%d %H:%M")
+            q = s.get("first_question") or "（无对话内容）"
+            if len(q) > 36:
+                q = q[:36] + "..."
+            print(f"  [{i}] {time_str}  {q}")
+        print("=" * 50)
+
+    # 等待用户输入（输入提示在 Panel 外部）
+    max_idx = len(sessions)
+    while True:
+        if use_rich:
+            choice = console.input(
+                f"[bold]请输入选项编号 (0-{max_idx}): [/bold]"
+            ).strip()
+        else:
+            choice = input(f"请输入选项编号 (0-{max_idx}): ").strip()
+
+        if choice == "0" or choice == "":
+            return None  # 新建会话
+
+        try:
+            idx = int(choice)
+            if 1 <= idx <= max_idx:
+                return sessions[idx - 1]["thread_id"]
+        except ValueError:
+            pass
+
+        # 输入无效，提示重试
+        if use_rich:
+            console.print(f"[red]请输入 0 到 {max_idx} 之间的数字[/red]")
+        else:
+            print(f"请输入 0 到 {max_idx} 之间的数字")
+
+
+# ============================================================
 # 核心业务函数
 # ============================================================
 
@@ -473,9 +586,31 @@ def interactive_mode(
         use_rich: 是否使用 Rich 渲染
     """
     from datetime import datetime, timezone
+    from src.services.langgraph_persistence.identifiers import sanitize_user_id
 
-    # 欢迎横幅
+    # 用户标识（使用项目已有的 sanitize_user_id）
+    actual_user_id = sanitize_user_id(user_id)
+
+    # ====== 会话选择（在欢迎横幅之前） ======
+    is_resumed = False
+    if thread_id is None:
+        # 未通过 --thread-id 指定，展示会话选择菜单
+        selected = _select_session(
+            user_id=actual_user_id,
+            use_rich=use_rich,
+        )
+        if selected is not None:
+            thread_id = selected
+            is_resumed = True
+        else:
+            now = datetime.now(timezone.utc)
+            timestamp = now.strftime("%Y%m%dT%H%M%S") + f"{now.microsecond // 1000:03d}Z"
+            thread_id = f"{actual_user_id}:{timestamp}"
+
+    # ====== 欢迎横幅（在会话选择之后） ======
     if use_rich:
+        if is_resumed:
+            console.print(f"\n[cyan]已恢复历史会话[/cyan]: {thread_id}")
         console.print(Panel(
             "欢迎使用！我可以帮您执行完整的 NL2SQL 流程：\n"
             "Router → Simple Planner → SQL Gen → SQL Exec → Summarizer\n\n"
@@ -488,6 +623,8 @@ def interactive_mode(
             expand=False,
         ))
     else:
+        if is_resumed:
+            print(f"\n已恢复历史会话: {thread_id}")
         _print_separator_legacy()
         print("🤖 NL2SQL 父图测试工具 - 交互模式")
         _print_separator_legacy()
@@ -497,15 +634,6 @@ def interactive_mode(
         print("  - 直接输入问题，按回车提交")
         print("  - 输入 'exit' 或 'quit' 退出")
         print("  - 按 Ctrl+C 也可以退出")
-
-    # 用户标识
-    actual_user_id = user_id or "guest"
-
-    # 启动时生成一次 thread_id
-    if thread_id is None:
-        now = datetime.now(timezone.utc)
-        timestamp = now.strftime("%Y%m%dT%H%M%S") + f"{now.microsecond // 1000:03d}Z"
-        thread_id = f"{actual_user_id}:{timestamp}"
 
     if use_rich:
         console.print(f"\n[cyan]🆔 会话 ID:[/cyan] {thread_id}")

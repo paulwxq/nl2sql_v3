@@ -5,9 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Dict, List
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
-from src.services.langgraph_persistence.chat_history_reader import get_recent_turns
+from src.services.langgraph_persistence.chat_history_reader import (
+    get_recent_turns,
+    list_recent_sessions,
+)
 
 
 @dataclass
@@ -173,4 +176,99 @@ class TestChatHistoryReader:
             )
 
         assert turns == []
+
+
+# ============================================================
+# list_recent_sessions 测试
+# ============================================================
+
+
+_MODULE = "src.services.langgraph_persistence.chat_history_reader"
+
+
+class TestListRecentSessions:
+    """list_recent_sessions() 单元测试"""
+
+    def test_store_disabled_returns_empty(self):
+        with patch(f"{_MODULE}.is_store_enabled", return_value=False):
+            result = list_recent_sessions(user_id="guest")
+        assert result == []
+
+    def test_returns_sessions_sorted_newest_first(self):
+        fake_rows = [
+            {"prefix": "chat_history.guest:20260305T183946997Z", "first_question": "问题A"},
+            {"prefix": "chat_history.guest:20260304T120000000Z", "first_question": "问题B"},
+        ]
+
+        with (
+            patch(f"{_MODULE}.is_store_enabled", return_value=True),
+            patch(f"{_MODULE}.get_store_namespace", return_value="chat_history"),
+            patch(f"{_MODULE}._get_persistence_config", return_value={"database": {"schema": "langgraph"}}),
+            patch(f"{_MODULE}._query_recent_sessions", return_value=fake_rows),
+        ):
+            result = list_recent_sessions(user_id="guest", max_sessions=3)
+
+        assert len(result) == 2
+        assert result[0]["thread_id"] == "guest:20260305T183946997Z"
+        assert result[0]["first_question"] == "问题A"
+        assert result[0]["created_at"].year == 2026
+        assert result[1]["thread_id"] == "guest:20260304T120000000Z"
+
+    def test_skips_invalid_prefix(self):
+        fake_rows = [
+            {"prefix": "no_dot_here", "first_question": "问题"},
+        ]
+
+        with (
+            patch(f"{_MODULE}.is_store_enabled", return_value=True),
+            patch(f"{_MODULE}.get_store_namespace", return_value="chat_history"),
+            patch(f"{_MODULE}._get_persistence_config", return_value={"database": {"schema": "langgraph"}}),
+            patch(f"{_MODULE}._query_recent_sessions", return_value=fake_rows),
+        ):
+            result = list_recent_sessions(user_id="guest")
+
+        assert result == []
+
+    def test_fail_open_on_timeout(self):
+        def _slow_query(**kwargs):
+            import time
+            time.sleep(5)
+            return []
+
+        with (
+            patch(f"{_MODULE}.is_store_enabled", return_value=True),
+            patch(f"{_MODULE}.get_store_namespace", return_value="chat_history"),
+            patch(f"{_MODULE}._get_persistence_config", return_value={"database": {"schema": "langgraph"}}),
+            patch(f"{_MODULE}._query_recent_sessions", side_effect=_slow_query),
+        ):
+            result = list_recent_sessions(user_id="guest", timeout_seconds=0.1)
+
+        assert result == []
+
+    def test_fail_open_on_exception(self):
+        with (
+            patch(f"{_MODULE}.is_store_enabled", return_value=True),
+            patch(f"{_MODULE}.get_store_namespace", return_value="chat_history"),
+            patch(f"{_MODULE}._get_persistence_config", return_value={"database": {"schema": "langgraph"}}),
+            patch(f"{_MODULE}._query_recent_sessions", side_effect=RuntimeError("db down")),
+        ):
+            result = list_recent_sessions(user_id="guest", timeout_seconds=0.5)
+
+        assert result == []
+
+    def test_empty_first_question_stripped(self):
+        fake_rows = [
+            {"prefix": "chat_history.guest:20260305T183946997Z", "first_question": "  "},
+        ]
+
+        with (
+            patch(f"{_MODULE}.is_store_enabled", return_value=True),
+            patch(f"{_MODULE}.get_store_namespace", return_value="chat_history"),
+            patch(f"{_MODULE}._get_persistence_config", return_value={"database": {"schema": "langgraph"}}),
+            patch(f"{_MODULE}._query_recent_sessions", return_value=fake_rows),
+        ):
+            result = list_recent_sessions(user_id="guest")
+
+        assert len(result) == 1
+        assert result[0]["first_question"] == ""
 
