@@ -43,3 +43,7 @@ monitoring = [
     "langsmith>=0.1.0",
     "redis>=5.0.0",
 ]
+web = [
+    "streamlit>=1.55.0",
+    "requests>=2.32.0",
+]

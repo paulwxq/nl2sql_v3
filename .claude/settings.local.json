@@ -31,7 +31,10 @@
       "Bash(timeout 10 python:*)",
       "Bash(mcp list:*)",
       "Bash(/mnt/c/Projects/cursor_2025h2/nl2sql_v3/.venv-wsl/bin/python:*)",
-      "Bash(npm show:*)"
+      "Bash(npm show:*)",
+      "Bash(ss:*)",
+      "Bash(lsof:*)",
+      "Bash(fuser:*)"
     ],
     "deny": [],
     "ask": []

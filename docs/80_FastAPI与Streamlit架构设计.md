@@ -449,7 +449,7 @@ if "messages" not in st.session_state:
 import os
 import requests
 
-API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000/api/v1")
+API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8008/api/v1")
 DEFAULT_TIMEOUT = 120  # 秒，NL2SQL 查询可能较慢
 
 class NL2SQLApiClient:
@@ -563,10 +563,10 @@ Streamlit 前端访问 FastAPI 的地址通过环境变量配置（`.env` 中新
 
 ```bash
 # .env 新增
-API_BASE_URL=http://localhost:8000/api/v1   # FastAPI 后端地址
+API_BASE_URL=http://localhost:8008/api/v1   # FastAPI 后端地址
 ```
 
-`api_client.py` 中通过 `os.getenv("API_BASE_URL", "http://localhost:8000/api/v1")` 读取。
+`api_client.py` 中通过 `os.getenv("API_BASE_URL", "http://localhost:8008/api/v1")` 读取。
 
 > **`.env` 加载注意**：项目的 `.env` 自动加载依赖 `src/utils/env.py` 模块被导入时触发（模块底部的 `load_env()` 调用）。FastAPI 进程会在加载核心模块时自动触发此链路。但 **Streamlit 进程不会自动导入核心模块**，因此需要在 `frontend/app.py` 启动时显式加载：
 > ```python

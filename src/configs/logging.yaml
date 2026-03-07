@@ -19,11 +19,23 @@ handlers:
     maxBytes: 5242880  # 5MB
     backupCount: 5
     encoding: utf-8
+  fastapi_file:
+    class: logging.handlers.RotatingFileHandler
+    level: INFO
+    formatter: standard
+    filename: logs/fastapi.log
+    maxBytes: 5242880  # 5MB
+    backupCount: 5
+    encoding: utf-8
 
 loggers:
   nl2sql:
     level: DEBUG
     handlers: [console, sql_subgraph_file]
+    propagate: false
+  nl2sql.fastapi:
+    level: INFO
+    handlers: [console, fastapi_file]
     propagate: false
 
 # 未特别配置的 logger 默认只走 console（可按需调整）
