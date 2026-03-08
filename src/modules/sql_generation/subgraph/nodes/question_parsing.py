@@ -6,11 +6,11 @@ import json
 from datetime import datetime
 from typing import Any, Dict, Optional, Tuple
 
-from langchain_community.chat_models import ChatTongyi
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.modules.sql_generation.subgraph.state import SQLGenerationState
 from src.services.config_loader import load_subgraph_config
+from src.services.llm_factory import extract_overrides, get_llm
 from src.utils.logger import get_module_logger, with_query_id
 
 
@@ -37,13 +37,9 @@ class QuestionParsingAgent:
 
     def __init__(self, config: Dict[str, Any]):
         self._config = config
-        self._llm = ChatTongyi(
-            model=config.get("parser_model", "qwen-plus"),
-            dashscope_api_key=config.get("api_key"),
-            temperature=config.get("temperature", 0),
-            max_tokens=config.get("max_tokens", 1500),
-            timeout=config.get("timeout", 20),
-        )
+
+        llm_meta = get_llm(config["llm_profile"], **extract_overrides(config))
+        self._llm = llm_meta.llm
 
     def parse_with_rewrite(
         self,

@@ -9,6 +9,23 @@ from src.modules.sql_generation.subgraph.nodes.question_parsing import (
 )
 
 
+def _mock_get_llm_return(content: str = "", side_effect=None):
+    """构造 get_llm 的 Mock 返回值（LLMWithMeta 结构）。"""
+    mock_llm = MagicMock()
+    if side_effect:
+        mock_llm.invoke.side_effect = side_effect
+    else:
+        mock_response = MagicMock()
+        mock_response.content = content
+        mock_llm.invoke.return_value = mock_response
+
+    mock_meta = MagicMock()
+    mock_meta.llm = mock_llm
+    mock_meta.provider = "dashscope"
+    mock_meta.model = "qwen-plus"
+    return mock_meta
+
+
 class TestQuestionParsingAgent:
     """测试 QuestionParsingAgent 类"""
 
@@ -16,22 +33,22 @@ class TestQuestionParsingAgent:
     def mock_config(self):
         """Mock 配置"""
         return {
-            "parser_model": "qwen-plus",
-            "api_key": "test-api-key",
+            "llm_profile": "qwen_plus",
             "temperature": 0,
             "max_tokens": 1500,
-            "timeout": 20,
         }
 
     @pytest.fixture
     def agent(self, mock_config):
         """创建 Agent 实例"""
-        with patch("src.modules.sql_generation.subgraph.nodes.question_parsing.ChatTongyi"):
+        with patch(
+            "src.modules.sql_generation.subgraph.nodes.question_parsing.get_llm"
+        ) as mock_get_llm:
+            mock_get_llm.return_value = _mock_get_llm_return()
             return QuestionParsingAgent(mock_config)
 
     def test_parse_success(self, agent):
         """测试解析成功"""
-        # Mock LLM 响应
         mock_response = MagicMock()
         mock_response.content = """{
             "rewritten_query": "查询2024年的销售额",
@@ -46,10 +63,8 @@ class TestQuestionParsingAgent:
         }"""
         agent._llm.invoke = MagicMock(return_value=mock_response)
 
-        # 执行解析
         result = agent.parse("查询2024年的销售额")
 
-        # 验证结果
         assert result["keywords"] == ["销售额", "2024年"]
         assert result["time"]["start"] == "2024-01-01"
         assert result["metric"]["text"] == "销售额"
@@ -62,7 +77,6 @@ class TestQuestionParsingAgent:
 
     def test_parse_invalid_json(self, agent):
         """测试无效 JSON 响应"""
-        # Mock LLM 返回无效 JSON
         mock_response = MagicMock()
         mock_response.content = "这不是有效的 JSON"
         agent._llm.invoke = MagicMock(return_value=mock_response)
@@ -97,14 +111,14 @@ class TestQuestionParsingNode:
     @pytest.fixture
     def mock_config(self):
         """Mock 配置加载"""
-        with patch("src.modules.sql_generation.subgraph.nodes.question_parsing.load_subgraph_config") as mock:
+        with patch(
+            "src.modules.sql_generation.subgraph.nodes.question_parsing.load_subgraph_config"
+        ) as mock:
             mock.return_value = {
                 "question_parsing": {
-                    "parser_model": "qwen-plus",
-                    "api_key": "test-key",
+                    "llm_profile": "qwen_plus",
                     "temperature": 0,
                     "max_tokens": 1500,
-                    "timeout": 20,
                     "enable_internal_parser": True,
                     "fallback_to_empty": True,
                 }
@@ -135,8 +149,9 @@ class TestQuestionParsingNode:
             "query": "查询销售额",
         }
 
-        # Mock Agent
-        with patch("src.modules.sql_generation.subgraph.nodes.question_parsing.QuestionParsingAgent") as mock_agent:
+        with patch(
+            "src.modules.sql_generation.subgraph.nodes.question_parsing.QuestionParsingAgent"
+        ) as mock_agent:
             mock_agent_instance = MagicMock()
             mock_agent_instance.parse_with_rewrite.return_value = (
                 "查询销售额",
@@ -159,7 +174,6 @@ class TestQuestionParsingNode:
 
     def test_internal_parser_disabled(self, mock_config):
         """测试禁用内部解析"""
-        # 修改配置禁用解析
         mock_config.return_value = {
             "question_parsing": {
                 "enable_internal_parser": False,
@@ -184,8 +198,9 @@ class TestQuestionParsingNode:
             "query": "查询销售额",
         }
 
-        # Mock Agent 抛出异常
-        with patch("src.modules.sql_generation.subgraph.nodes.question_parsing.QuestionParsingAgent") as mock_agent:
+        with patch(
+            "src.modules.sql_generation.subgraph.nodes.question_parsing.QuestionParsingAgent"
+        ) as mock_agent:
             mock_agent_instance = MagicMock()
             mock_agent_instance.parse_with_rewrite.side_effect = Exception("LLM 调用失败")
             mock_agent.return_value = mock_agent_instance
@@ -199,11 +214,9 @@ class TestQuestionParsingNode:
 
     def test_parsing_failure_without_fallback(self, mock_config):
         """测试解析失败时不回退（严格模式）"""
-        # 修改配置禁用回退
         mock_config.return_value = {
             "question_parsing": {
-                "parser_model": "qwen-plus",
-                "api_key": "test-key",
+                "llm_profile": "qwen_plus",
                 "enable_internal_parser": True,
                 "fallback_to_empty": False,
             }
@@ -214,8 +227,9 @@ class TestQuestionParsingNode:
             "query": "查询销售额",
         }
 
-        # Mock Agent 抛出异常
-        with patch("src.modules.sql_generation.subgraph.nodes.question_parsing.QuestionParsingAgent") as mock_agent:
+        with patch(
+            "src.modules.sql_generation.subgraph.nodes.question_parsing.QuestionParsingAgent"
+        ) as mock_agent:
             mock_agent_instance = MagicMock()
             mock_agent_instance.parse_with_rewrite.side_effect = Exception("LLM 调用失败")
             mock_agent.return_value = mock_agent_instance
@@ -228,14 +242,44 @@ class TestQuestionParsingNode:
             assert result["rewritten_query"] == state["query"]
 
 
+_RETRIEVER_MODULE = "src.tools.schema_retrieval.retriever"
+
+_MINIMAL_RETRIEVER_CONFIG = {
+    "schema_retrieval": {
+        "table_category_mapping": {
+            "fact": ["fact"],
+            "dimension": ["dim", "dimension"],
+            "bridge": ["bridge"],
+        }
+    }
+}
+
+
+def _make_retriever(extra_config: dict = None):
+    """在 mock 外部客户端的上下文中创建 SchemaRetriever。"""
+    from src.tools.schema_retrieval.retriever import SchemaRetriever
+
+    config = _MINIMAL_RETRIEVER_CONFIG.copy()
+    if extra_config:
+        sr = config["schema_retrieval"].copy()
+        sr.update(extra_config.get("schema_retrieval", {}))
+        config["schema_retrieval"] = sr
+
+    with (
+        patch(f"{_RETRIEVER_MODULE}.get_pg_client"),
+        patch(f"{_RETRIEVER_MODULE}.get_neo4j_client"),
+        patch(f"{_RETRIEVER_MODULE}.get_embedding_client"),
+        patch(f"{_RETRIEVER_MODULE}.create_vector_search_adapter"),
+    ):
+        return SchemaRetriever(config)
+
+
 class TestDimensionTableOptimization:
     """测试维度表优化逻辑"""
 
     def test_should_use_dimension_only_with_time(self):
         """测试有时间约束时不使用维度表优化"""
-        from src.tools.schema_retrieval.retriever import SchemaRetriever
-
-        retriever = SchemaRetriever()
+        retriever = _make_retriever()
 
         parse_result = {"time": {"start": "2024-01-01", "end": "2024-12-31"}}
         fact_tables = []
@@ -251,9 +295,7 @@ class TestDimensionTableOptimization:
 
     def test_should_use_dimension_only_single_dim_no_time(self):
         """测试单维度表无时间约束时使用优化"""
-        from src.tools.schema_retrieval.retriever import SchemaRetriever
-
-        retriever = SchemaRetriever()
+        retriever = _make_retriever()
 
         parse_result = {}
         fact_tables = []
@@ -269,16 +311,16 @@ class TestDimensionTableOptimization:
 
     def test_should_use_dimension_only_similarity_gap(self):
         """测试相似度差距判断"""
-        from src.tools.schema_retrieval.retriever import SchemaRetriever
-
-        retriever = SchemaRetriever({"schema_retrieval": {"similarity_gap_threshold": 0.05}})
+        retriever = _make_retriever(
+            {"schema_retrieval": {"similarity_gap_threshold": 0.05}}
+        )
 
         parse_result = {}
         fact_tables = ["public.fact_sales"]
         dim_tables = ["public.dim_store"]
         table_similarities = {
             "public.fact_sales": 0.70,
-            "public.dim_store": 0.85,  # 差距 0.15 > 0.05
+            "public.dim_store": 0.85,
         }
 
         should_use, table = retriever._should_use_dimension_only(
@@ -290,9 +332,7 @@ class TestDimensionTableOptimization:
 
     def test_select_best_dim_base_single_table(self):
         """测试单表时直接返回"""
-        from src.tools.schema_retrieval.retriever import SchemaRetriever
-
-        retriever = SchemaRetriever()
+        retriever = _make_retriever()
 
         dim_tables = ["public.dim_store"]
         table_similarities = {"public.dim_store": 0.9}
@@ -303,31 +343,22 @@ class TestDimensionTableOptimization:
 
     def test_select_best_dim_base_multiple_tables(self):
         """测试多表时按连通性选择"""
-        from src.tools.schema_retrieval.retriever import SchemaRetriever
-        from unittest.mock import MagicMock
+        retriever = _make_retriever()
 
-        # Mock Neo4j 客户端
-        with patch("src.tools.schema_retrieval.retriever.get_neo4j_client") as mock_neo4j:
-            mock_client = MagicMock()
-            mock_neo4j.return_value = mock_client
+        def mock_plan_join_paths(base_tables, target_tables, **kwargs):
+            if base_tables[0] == "public.dim_store":
+                return [{"base": "public.dim_store", "edges": [{"src_table": "public.dim_store"}]}]
+            else:
+                return []
 
-            # 模拟连通性：dim_store 可以连接到 dim_product，反之不行
-            def mock_plan_join_paths(base_tables, target_tables, **kwargs):
-                if base_tables[0] == "public.dim_store":
-                    return [{"base": "public.dim_store", "edges": [{"src_table": "public.dim_store"}]}]
-                else:
-                    return []
+        retriever.neo4j_client.plan_join_paths = mock_plan_join_paths
 
-            mock_client.plan_join_paths = mock_plan_join_paths
+        dim_tables = ["public.dim_store", "public.dim_product"]
+        table_similarities = {
+            "public.dim_store": 0.8,
+            "public.dim_product": 0.7,
+        }
 
-            retriever = SchemaRetriever()
-            dim_tables = ["public.dim_store", "public.dim_product"]
-            table_similarities = {
-                "public.dim_store": 0.8,
-                "public.dim_product": 0.7,
-            }
+        result = retriever._select_best_dim_base(dim_tables, table_similarities)
 
-            result = retriever._select_best_dim_base(dim_tables, table_similarities)
-
-            # 应该选择连通性更好的 dim_store
-            assert result == ["public.dim_store"]
+        assert result == ["public.dim_store"]

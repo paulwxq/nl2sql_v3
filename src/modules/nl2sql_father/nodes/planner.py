@@ -12,10 +12,9 @@ import time
 from collections import defaultdict
 from typing import Any, Dict, List
 
-from langchain_community.chat_models import ChatTongyi
-
 from src.modules.nl2sql_father.state import NL2SQLFatherState, SubQueryInfo
 from src.services.config_loader import load_config
+from src.services.llm_factory import extract_overrides, get_llm
 from src.utils.logger import get_module_logger, with_query_id
 
 logger = get_module_logger("planner")
@@ -230,9 +229,6 @@ def planner_node(state: NL2SQLFatherState) -> Dict[str, Any]:
 
     # 加载配置
     config = _get_planner_config()
-    model_name = config["model"]
-    temperature = config["temperature"]
-    timeout = config["timeout"]
     max_sub_queries = config["max_sub_queries"]
     min_sub_queries = config["min_sub_queries"]
     max_rounds = config["max_rounds"]
@@ -256,11 +252,8 @@ def planner_node(state: NL2SQLFatherState) -> Dict[str, Any]:
         query_logger.debug(prompt)
         query_logger.debug("=" * 80)
 
-        llm = ChatTongyi(
-            model=model_name,
-            temperature=temperature,
-            timeout=timeout,
-        )
+        llm_meta = get_llm(config["llm_profile"], **extract_overrides(config))
+        llm = llm_meta.llm
 
         response = llm.invoke(prompt)
         content = response.content.strip()

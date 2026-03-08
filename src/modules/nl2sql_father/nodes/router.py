@@ -5,14 +5,12 @@ Router 是父图的第一个节点，负责判断用户问题是 simple 还是 c
 - complex: 需要多条SQL或依赖查询（Phase 2 实现）
 """
 
-import os
 import time
 from typing import Any, Dict
 
-from langchain_community.chat_models import ChatTongyi
-
 from src.modules.nl2sql_father.state import NL2SQLFatherState
 from src.services.config_loader import load_config
+from src.services.llm_factory import extract_overrides, get_llm
 from src.utils.logger import get_module_logger, with_query_id
 
 logger = get_module_logger("router")
@@ -62,9 +60,6 @@ def router_node(state: NL2SQLFatherState) -> Dict[str, Any]:
 
     # 加载配置
     config = _get_router_config()
-    model_name = config["model"]
-    temperature = config["temperature"]
-    timeout = config["timeout"]
     default_on_error = config["default_on_error"]
     log_decision = config.get("log_decision", True)
 
@@ -98,11 +93,8 @@ def router_node(state: NL2SQLFatherState) -> Dict[str, Any]:
         query_logger.debug(prompt)
         query_logger.debug("=" * 80)
 
-        llm = ChatTongyi(
-            model=model_name,
-            temperature=temperature,
-            timeout=timeout,
-        )
+        llm_meta = get_llm(config["llm_profile"], **extract_overrides(config))
+        llm = llm_meta.llm
 
         response = llm.invoke(prompt)
         content = response.content.strip().lower()

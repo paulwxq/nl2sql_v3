@@ -6,6 +6,23 @@ from unittest.mock import MagicMock, patch
 from src.modules.nl2sql_father.nodes.summarizer import summarizer_node
 
 
+def _mock_get_llm_return(content: str = "", side_effect=None):
+    """构造 get_llm 的 Mock 返回值（LLMWithMeta 结构）。"""
+    mock_llm = MagicMock()
+    if side_effect:
+        mock_llm.invoke.side_effect = side_effect
+    else:
+        mock_response = MagicMock()
+        mock_response.content = content
+        mock_llm.invoke.return_value = mock_response
+
+    mock_meta = MagicMock()
+    mock_meta.llm = mock_llm
+    mock_meta.provider = "dashscope"
+    mock_meta.model = "qwen-plus"
+    return mock_meta
+
+
 class TestSummarizerNode:
     """测试 Summarizer 节点"""
 
@@ -15,9 +32,8 @@ class TestSummarizerNode:
         with patch("src.modules.nl2sql_father.nodes.summarizer.load_config") as mock:
             mock.return_value = {
                 "summarizer": {
-                    "model": "qwen-plus",
+                    "llm_profile": "qwen_plus",
                     "temperature": 0.3,
-                    "timeout": 10,
                     "max_rows_in_prompt": 10,
                     "use_template": False,
                 }
@@ -27,22 +43,19 @@ class TestSummarizerNode:
     @pytest.fixture
     def mock_config_template(self):
         """Mock 配置（使用模板）"""
-        # 清空配置缓存
         import src.modules.nl2sql_father.nodes.summarizer as summarizer_module
         summarizer_module._summarizer_config_cache = None
 
         with patch("src.modules.nl2sql_father.nodes.summarizer.load_config") as mock:
             mock.return_value = {
                 "summarizer": {
-                    "model": "qwen-plus",
+                    "llm_profile": "qwen_plus",
                     "temperature": 0.3,
-                    "timeout": 10,
                     "max_rows_in_prompt": 10,
-                    "use_template": True,  # 使用模板，不调用 LLM
+                    "use_template": True,
                 }
             }
             yield mock
-            # 测试后清空缓存
             summarizer_module._summarizer_config_cache = None
 
     # ========== 场景 1：SQL 生成失败 ==========
@@ -52,14 +65,13 @@ class TestSummarizerNode:
         state = {
             "user_query": "查询销售额",
             "query_id": "test-002",
-            "execution_results": [],  # 无执行结果
+            "execution_results": [],
             "error": "Schema retrieval failed",
             "error_type": "schema_retrieval_failed",
         }
 
         result = summarizer_node(state)
 
-        # 验证返回友好错误提示
         assert "summary" in result
         assert "抱歉" in result["summary"]
 
@@ -75,7 +87,6 @@ class TestSummarizerNode:
 
         result = summarizer_node(state)
 
-        # 验证错误提示包含"换一种方式"
         assert "换一种方式" in result["summary"] or "抱歉" in result["summary"]
 
     def test_scenario_1_error_type_generation_failed(self, mock_config):
@@ -90,7 +101,6 @@ class TestSummarizerNode:
 
         result = summarizer_node(state)
 
-        # 验证错误提示
         assert "summary" in result
         assert "抱歉" in result["summary"]
 
@@ -106,7 +116,6 @@ class TestSummarizerNode:
 
         result = summarizer_node(state)
 
-        # 验证使用通用错误提示
         assert "summary" in result
         assert "抱歉" in result["summary"]
 
@@ -122,7 +131,6 @@ class TestSummarizerNode:
 
         result = summarizer_node(state)
 
-        # 验证返回"未能生成有效的SQL"提示
         assert "summary" in result
         assert "SQL" in result["summary"] or "抱歉" in result["summary"]
 
@@ -132,20 +140,13 @@ class TestSummarizerNode:
             "user_query": "测试",
             "query_id": "test-007",
             "execution_results": [
-                {
-                    "success": False,
-                    "error": "表不存在",
-                },
-                {
-                    "success": False,
-                    "error": "列不存在",
-                },
+                {"success": False, "error": "表不存在"},
+                {"success": False, "error": "列不存在"},
             ],
         }
 
         result = summarizer_node(state)
 
-        # 验证返回错误汇总
         assert "summary" in result
         assert "失败" in result["summary"]
         assert "表不存在" in result["summary"] or "错误" in result["summary"]
@@ -166,17 +167,11 @@ class TestSummarizerNode:
             ],
         }
 
-        # Mock LLM
-        with patch("src.modules.nl2sql_father.nodes.summarizer.ChatTongyi") as mock_llm_class:
-            mock_llm = MagicMock()
-            mock_response = MagicMock()
-            mock_response.content = "2024年的总销售额为15万元。"
-            mock_llm.invoke = MagicMock(return_value=mock_response)
-            mock_llm_class.return_value = mock_llm
+        with patch("src.modules.nl2sql_father.nodes.summarizer.get_llm") as mock_get_llm:
+            mock_get_llm.return_value = _mock_get_llm_return("2024年的总销售额为15万元。")
 
             result = summarizer_node(state)
 
-            # 验证返回 LLM 生成的总结
             assert "summary" in result
             assert result["summary"] == "2024年的总销售额为15万元。"
 
@@ -196,7 +191,6 @@ class TestSummarizerNode:
 
         result = summarizer_node(state)
 
-        # 验证返回模板总结
         assert "summary" in result
         assert "3条" in result["summary"] or "成功" in result["summary"]
 
@@ -206,17 +200,12 @@ class TestSummarizerNode:
             "user_query": "查询不存在的数据",
             "query_id": "test-010",
             "execution_results": [
-                {
-                    "success": True,
-                    "columns": ["id"],
-                    "rows": [],
-                }
+                {"success": True, "columns": ["id"], "rows": []},
             ],
         }
 
         result = summarizer_node(state)
 
-        # 验证返回"未找到"提示
         assert "summary" in result
         assert "未找到" in result["summary"] or "无数据" in result["summary"]
 
@@ -226,17 +215,12 @@ class TestSummarizerNode:
             "user_query": "查询",
             "query_id": "test-011",
             "execution_results": [
-                {
-                    "success": True,
-                    "columns": ["value"],
-                    "rows": [[42]],
-                }
+                {"success": True, "columns": ["value"], "rows": [[42]]},
             ],
         }
 
         result = summarizer_node(state)
 
-        # 验证返回"1条记录"
         assert "summary" in result
         assert "1条" in result["summary"] or "成功" in result["summary"]
 
@@ -246,23 +230,17 @@ class TestSummarizerNode:
             "user_query": "查询",
             "query_id": "test-012",
             "execution_results": [
-                {
-                    "success": True,
-                    "columns": ["id"],
-                    "rows": [[1], [2]],
-                }
+                {"success": True, "columns": ["id"], "rows": [[1], [2]]},
             ],
         }
 
-        # Mock LLM 抛出异常
-        with patch("src.modules.nl2sql_father.nodes.summarizer.ChatTongyi") as mock_llm_class:
-            mock_llm = MagicMock()
-            mock_llm.invoke.side_effect = Exception("API 失败")
-            mock_llm_class.return_value = mock_llm
+        with patch("src.modules.nl2sql_father.nodes.summarizer.get_llm") as mock_get_llm:
+            mock_get_llm.return_value = _mock_get_llm_return(
+                side_effect=Exception("API 失败")
+            )
 
             result = summarizer_node(state)
 
-            # 验证回退到模板
             assert "summary" in result
             assert "2条" in result["summary"] or "成功" in result["summary"]
 
@@ -272,16 +250,8 @@ class TestSummarizerNode:
             "user_query": "复合查询",
             "query_id": "test-013",
             "execution_results": [
-                {
-                    "success": True,
-                    "columns": ["sales"],
-                    "rows": [[1000]],
-                },
-                {
-                    "success": True,
-                    "columns": ["cost"],
-                    "rows": [[600]],
-                },
+                {"success": True, "columns": ["sales"], "rows": [[1000]]},
+                {"success": True, "columns": ["cost"], "rows": [[600]]},
             ],
             "sub_queries": [
                 {"sub_query_id": "test-013_sq1", "query": "查询销售额"},
@@ -289,17 +259,13 @@ class TestSummarizerNode:
             ],
         }
 
-        # Mock LLM
-        with patch("src.modules.nl2sql_father.nodes.summarizer.ChatTongyi") as mock_llm_class:
-            mock_llm = MagicMock()
-            mock_response = MagicMock()
-            mock_response.content = "销售额为1000，成本为600，利润为400。"
-            mock_llm.invoke = MagicMock(return_value=mock_response)
-            mock_llm_class.return_value = mock_llm
+        with patch("src.modules.nl2sql_father.nodes.summarizer.get_llm") as mock_get_llm:
+            mock_get_llm.return_value = _mock_get_llm_return(
+                "销售额为1000，成本为600，利润为400。"
+            )
 
             result = summarizer_node(state)
 
-            # 验证多 SQL 总结
             assert "summary" in result
 
     def test_scenario_3_partial_success(self, mock_config_template):
@@ -308,74 +274,46 @@ class TestSummarizerNode:
             "user_query": "测试",
             "query_id": "test-014",
             "execution_results": [
-                {
-                    "success": True,
-                    "columns": ["value"],
-                    "rows": [[100]],
-                },
-                {
-                    "success": False,
-                    "error": "失败",
-                },
+                {"success": True, "columns": ["value"], "rows": [[100]]},
+                {"success": False, "error": "失败"},
             ],
         }
 
         result = summarizer_node(state)
 
-        # 验证只总结成功的结果
         assert "summary" in result
         assert "成功" in result["summary"] or "1条" in result["summary"]
 
     # ========== 辅助函数测试 ==========
 
     def test_format_table_empty(self):
-        """测试空表格式化"""
         from src.modules.nl2sql_father.nodes.summarizer import _format_table
-
         result = _format_table(["col1"], [])
-
         assert "无数据" in result
 
     def test_format_table_normal(self):
-        """测试正常表格式化"""
         from src.modules.nl2sql_father.nodes.summarizer import _format_table
-
         columns = ["id", "name"]
         rows = [[1, "Alice"], [2, "Bob"]]
-
         result = _format_table(columns, rows)
-
-        # 验证包含列名和数据
         assert "id" in result
         assert "name" in result
         assert "Alice" in result
         assert "Bob" in result
 
     def test_format_table_truncation(self):
-        """测试表格截断（>= 10 行）"""
         from src.modules.nl2sql_father.nodes.summarizer import _format_table
-
         columns = ["num"]
         rows = [[i] for i in range(15)]
-
         result = _format_table(columns, rows)
-
-        # 验证添加了省略号
         assert "..." in result
 
     def test_build_error_summary_parsing_failed(self):
-        """测试错误转换：解析失败"""
         from src.modules.nl2sql_father.nodes.summarizer import _build_error_summary
-
         summary = _build_error_summary("Error", "parsing_failed", "测试")
-
         assert "换一种方式" in summary or "无法理解" in summary
 
     def test_build_error_summary_unknown_type(self):
-        """测试错误转换：未知类型"""
         from src.modules.nl2sql_father.nodes.summarizer import _build_error_summary
-
         summary = _build_error_summary("Error", "unknown_type", "测试")
-
-        # 应该返回通用模板
         assert "抱歉" in summary

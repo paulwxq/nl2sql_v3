@@ -2,12 +2,12 @@
 
 from typing import Any, Dict, List, Optional
 
-from langchain_community.chat_models import ChatTongyi
 from langchain_core.messages import HumanMessage, SystemMessage
 import time
 
 from src.modules.sql_generation.subgraph.state import SQLGenerationState
 from src.services.config_loader import load_subgraph_config
+from src.services.llm_factory import extract_overrides, get_llm
 from src.tools.schema_retrieval.join_planner import format_join_plan_for_prompt
 from src.tools.schema_retrieval.value_matcher import (
     build_optimized_filters,
@@ -30,13 +30,10 @@ class SQLGenerationAgent:
         """
         self.config = config
 
-        # 初始化 LLM
-        self.llm = ChatTongyi(
-            model=config.get("llm_model", "qwen-plus"),
-            dashscope_api_key=config.get("api_key"),
-            temperature=config.get("temperature", 0),
-            max_tokens=config.get("max_tokens", 2000),
-        )
+        llm_meta = get_llm(config["llm_profile"], **extract_overrides(config))
+        self.llm = llm_meta.llm
+        self._provider = llm_meta.provider
+        self._model_name = llm_meta.model
 
         # 维度过滤配置
         dim_filter_cfg = (config or {}).get("dimension_filter", {})
@@ -73,8 +70,8 @@ class SQLGenerationAgent:
         initial_delay_ms = int(retry_conf.get("initial_delay_ms", 500))
 
         qlog = with_query_id(logger, query_id or "")
-        provider = "DashScope"
-        model_name = self.config.get("llm_model", "qwen-plus")
+        provider = self._provider
+        model_name = self._model_name
 
         # 构建提示词
         prompt = self._build_prompt(

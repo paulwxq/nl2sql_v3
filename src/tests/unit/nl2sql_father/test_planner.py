@@ -1,7 +1,7 @@
 """Planner 节点单元测试（Phase 2）"""
 
 import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, MagicMock, patch
 
 from src.modules.nl2sql_father.nodes.planner import (
     planner_node,
@@ -59,16 +59,13 @@ class TestHasCycle:
     """测试环检测"""
 
     def test_no_cycle_simple(self):
-        """测试无环的简单图"""
         graph = {
             "nodes": ["sq1", "sq2"],
             "edges": [{"from": "sq1", "to": "sq2"}],
         }
-
         assert _has_cycle(graph) is False
 
     def test_no_cycle_complex(self):
-        """测试无环的复杂图"""
         graph = {
             "nodes": ["sq1", "sq2", "sq3"],
             "edges": [
@@ -77,11 +74,9 @@ class TestHasCycle:
                 {"from": "sq2", "to": "sq3"},
             ],
         }
-
         assert _has_cycle(graph) is False
 
     def test_has_cycle_simple(self):
-        """测试简单的环"""
         graph = {
             "nodes": ["sq1", "sq2"],
             "edges": [
@@ -89,11 +84,9 @@ class TestHasCycle:
                 {"from": "sq2", "to": "sq1"},
             ],
         }
-
         assert _has_cycle(graph) is True
 
     def test_has_cycle_complex(self):
-        """测试复杂的环"""
         graph = {
             "nodes": ["sq1", "sq2", "sq3"],
             "edges": [
@@ -102,28 +95,37 @@ class TestHasCycle:
                 {"from": "sq3", "to": "sq1"},
             ],
         }
-
         assert _has_cycle(graph) is True
 
     def test_no_cycle_parallel(self):
-        """测试无依赖的并行查询（无环）"""
         graph = {
             "nodes": ["sq1", "sq2", "sq3"],
             "edges": [],
         }
-
         assert _has_cycle(graph) is False
+
+
+def _mock_get_llm_for_planner(content: str):
+    """构造 get_llm 的 Mock 返回值（planner 用）。"""
+    mock_llm = MagicMock()
+    mock_response = Mock()
+    mock_response.content = content
+    mock_llm.invoke.return_value = mock_response
+
+    mock_meta = MagicMock()
+    mock_meta.llm = mock_llm
+    mock_meta.provider = "dashscope"
+    mock_meta.model = "qwen-max"
+    return mock_meta
 
 
 class TestPlannerNode:
     """测试 Planner 节点"""
 
-    @patch("src.modules.nl2sql_father.nodes.planner.ChatTongyi")
-    def test_planner_success(self, mock_chat):
+    @patch("src.modules.nl2sql_father.nodes.planner.get_llm")
+    def test_planner_success(self, mock_get_llm):
         """测试 Planner 成功拆分问题"""
-        # Mock LLM 响应
-        mock_response = Mock()
-        mock_response.content = """```json
+        mock_get_llm.return_value = _mock_get_llm_for_planner("""```json
 {
   "sub_queries": [
     {
@@ -138,16 +140,11 @@ class TestPlannerNode:
     }
   ]
 }
-```"""
-        mock_chat.return_value.invoke.return_value = mock_response
+```""")
 
-        # 创建初始 State
         state = create_initial_state(user_query="哪个服务区销售最高？它的地址是？", query_id="test_q1")
-
-        # 执行 Planner
         result = planner_node(state)
 
-        # 验证结果
         assert "sub_queries" in result
         assert len(result["sub_queries"]) == 2
         assert result["current_round"] == 1
@@ -156,30 +153,22 @@ class TestPlannerNode:
         assert "dependency_graph" in result
         assert result["dependency_graph"]["nodes"] == ["test_q1_sq1", "test_q1_sq2"]
 
-    @patch("src.modules.nl2sql_father.nodes.planner.ChatTongyi")
-    def test_planner_json_parse_failure(self, mock_chat):
+    @patch("src.modules.nl2sql_father.nodes.planner.get_llm")
+    def test_planner_json_parse_failure(self, mock_get_llm):
         """测试 Planner JSON 解析失败"""
-        # Mock LLM 返回无效 JSON
-        mock_response = Mock()
-        mock_response.content = "这不是有效的JSON"
-        mock_chat.return_value.invoke.return_value = mock_response
+        mock_get_llm.return_value = _mock_get_llm_for_planner("这不是有效的JSON")
 
         state = create_initial_state(user_query="测试问题", query_id="test_q2")
-
-        # 执行 Planner
         result = planner_node(state)
 
-        # 验证返回错误
         assert "error" in result
         assert result["error_type"] == "planning_failed"
         assert "JSON" in result["error"]
 
-    @patch("src.modules.nl2sql_father.nodes.planner.ChatTongyi")
-    def test_planner_cycle_detection(self, mock_chat):
+    @patch("src.modules.nl2sql_father.nodes.planner.get_llm")
+    def test_planner_cycle_detection(self, mock_get_llm):
         """测试 Planner 检测到环"""
-        # Mock LLM 返回有环的依赖关系
-        mock_response = Mock()
-        mock_response.content = """```json
+        mock_get_llm.return_value = _mock_get_llm_for_planner("""```json
 {
   "sub_queries": [
     {
@@ -194,25 +183,19 @@ class TestPlannerNode:
     }
   ]
 }
-```"""
-        mock_chat.return_value.invoke.return_value = mock_response
+```""")
 
         state = create_initial_state(user_query="测试问题", query_id="test_q3")
-
-        # 执行 Planner
         result = planner_node(state)
 
-        # 验证返回错误
         assert "error" in result
         assert result["error_type"] == "planning_failed"
         assert "循环依赖" in result["error"]
 
-    @patch("src.modules.nl2sql_father.nodes.planner.ChatTongyi")
-    def test_planner_too_few_sub_queries(self, mock_chat):
+    @patch("src.modules.nl2sql_father.nodes.planner.get_llm")
+    def test_planner_too_few_sub_queries(self, mock_get_llm):
         """测试子查询数量不足"""
-        # Mock LLM 返回只有1个子查询
-        mock_response = Mock()
-        mock_response.content = """```json
+        mock_get_llm.return_value = _mock_get_llm_for_planner("""```json
 {
   "sub_queries": [
     {
@@ -222,15 +205,11 @@ class TestPlannerNode:
     }
   ]
 }
-```"""
-        mock_chat.return_value.invoke.return_value = mock_response
+```""")
 
         state = create_initial_state(user_query="测试问题", query_id="test_q4")
-
-        # 执行 Planner
         result = planner_node(state)
 
-        # 验证返回错误
         assert "error" in result
         assert result["error_type"] == "planning_failed"
         assert "至少需要" in result["error"]

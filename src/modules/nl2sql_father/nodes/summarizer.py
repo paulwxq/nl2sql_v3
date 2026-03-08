@@ -6,13 +6,11 @@ Summarizer 负责将内部状态转换为用户友好的最终响应：
 - 支持单/多SQL结果的总结（Phase 1: 单SQL，Phase 2: 多SQL）
 """
 
-import os
 from typing import Any, Dict, List
-
-from langchain_community.chat_models import ChatTongyi
 
 from src.modules.nl2sql_father.state import NL2SQLFatherState
 from src.services.config_loader import load_config
+from src.services.llm_factory import extract_overrides, get_llm
 from src.utils.logger import get_module_logger, with_query_id
 
 logger = get_module_logger("summarizer")
@@ -72,9 +70,6 @@ def summarizer_node(state: NL2SQLFatherState) -> Dict[str, Any]:
 
     # 加载配置
     config = _get_summarizer_config()
-    model_name = config["model"]
-    temperature = config["temperature"]
-    timeout = config["timeout"]
     max_rows_in_prompt = config["max_rows_in_prompt"]
     use_template = config["use_template"]
     history_block = _format_conversation_history(state.get("conversation_history"))
@@ -176,11 +171,8 @@ def summarizer_node(state: NL2SQLFatherState) -> Dict[str, Any]:
 
 请综合以上所有查询结果，用2-3句话回答用户的问题。"""
 
-        llm = ChatTongyi(
-            model=model_name,
-            temperature=temperature,
-            timeout=timeout,
-        )
+        llm_meta = get_llm(config["llm_profile"], **extract_overrides(config))
+        llm = llm_meta.llm
 
         try:
             # DEBUG: 打印完整提示词（由日志级别控制是否可见）

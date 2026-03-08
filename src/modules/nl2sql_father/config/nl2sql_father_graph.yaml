@@ -16,11 +16,9 @@ graph_control:
 # Router 配置（Phase 1 + Phase 2 共享）
 # ------------------------------------------------------------------------------
 router:
-  # LLM配置
-  model: qwen-turbo  # 轻量级模型，适合快速分类
-  api_key: ${DASHSCOPE_API_KEY}  # 从环境变量读取
+  # LLM配置（引用全局 llm_profiles 注册表）
+  llm_profile: qwen_turbo
   temperature: 0  # 确定性输出
-  timeout: 5  # LLM调用超时（秒）
 
   # 行为配置
   default_on_error: complex  # LLM失败时的默认判定（保守策略）
@@ -30,11 +28,9 @@ router:
 # Planner 配置（Phase 2 新增）
 # ------------------------------------------------------------------------------
 planner:
-  # LLM 配置
-  model: qwen-max  # 强模型（理解能力强）
-  api_key: ${DASHSCOPE_API_KEY}
+  # LLM 配置（引用全局 llm_profiles 注册表）
+  llm_profile: qwen_max
   temperature: 0  # 确定性输出
-  timeout: 15  # 超时时间（秒）
 
   # 问题拆分配置
   max_sub_queries: 5  # 最大子查询数
@@ -90,11 +86,9 @@ sql_execution:
 # Summarizer 配置（Phase 1 + Phase 2 共享）
 # ------------------------------------------------------------------------------
 summarizer:
-  # LLM配置
-  model: qwen-plus  # 平衡效果与成本
-  api_key: ${DASHSCOPE_API_KEY}
+  # LLM配置（引用全局 llm_profiles 注册表）
+  llm_profile: qwen_plus
   temperature: 0.3  # 生成多样性（略高于0）
-  timeout: 10  # LLM调用超时（秒）
 
   # 提示词配置
   max_rows_in_prompt: 20  # 提示词中最多包含多少行数据
