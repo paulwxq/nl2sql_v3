@@ -94,39 +94,6 @@ vector_database:
       shards_num: 2                  # Collection 分片数
 
 # ------------------------------------------------------------------------------
-# SQL 生成子图配置
-# ------------------------------------------------------------------------------
-sql_generation:
-  # 子图配置文件路径（相对于项目根目录）
-  subgraph_config_path: src/modules/sql_generation/config/sql_generation_subgraph.yaml
-
-  # 全局开关
-  enabled: true                      # 是否启用 SQL 生成子图
-
-  # 超时配置
-  timeout: 60                        # 子图总超时（秒）
-
-  # 提示词路径（当前不使用模板渲染，仅预留；实际提示词由代码拼接生成）
-  prompt_path: src/prompts/sql_generation/generator_prompt.txt
-
-# ------------------------------------------------------------------------------
-# NL2SQL 父图配置（Phase 1: Fast Path）
-# ------------------------------------------------------------------------------
-nl2sql_father:
-  # 父图配置文件路径（相对于项目根目录）
-  father_graph_config_path: src/modules/nl2sql_father/config/nl2sql_father_graph.yaml
-
-  # 全局开关
-  enabled: true                      # 是否启用 NL2SQL 父图
-
-  # 超时配置
-  total_timeout: 120                 # 父图总超时（秒）
-
-  # 路径配置（Phase 1: Fast Path only）
-  fast_path_enabled: true            # 是否启用 Fast Path
-  complex_path_enabled: false        # 是否启用 Complex Path（Phase 2）
-
-# ------------------------------------------------------------------------------
 # 日志配置
 # ------------------------------------------------------------------------------
 logging:
@@ -184,17 +151,6 @@ cache:
 
   # 默认 TTL
   default_ttl: 3600                  # 1小时
-
-# ------------------------------------------------------------------------------
-# 性能配置
-# ------------------------------------------------------------------------------
-performance:
-  # 并发配置
-  max_concurrent_queries: 10         # 最大并发查询数
-
-  # 查询限制
-  query_result_max_rows: 10000       # 查询结果最大行数
-  query_timeout: 300                 # 查询超时（秒）
 
 # ------------------------------------------------------------------------------
 # LangGraph 持久化配置（Checkpoint + Store）

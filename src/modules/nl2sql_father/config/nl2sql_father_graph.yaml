@@ -3,6 +3,16 @@
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
+# 整体图调度控制
+# ------------------------------------------------------------------------------
+graph_control:
+  enabled: true                      # 是否启用 NL2SQL 父图
+  total_timeout: 120                 # 父图总超时（秒）
+  fast_path_enabled: true            # 是否启用 Fast Path
+  complex_path_enabled: false        # 是否启用 Complex Path（Phase 2）
+
+
+# ------------------------------------------------------------------------------
 # Router 配置（Phase 1 + Phase 2 共享）
 # ------------------------------------------------------------------------------
 router:
@@ -106,6 +116,3 @@ conversation_history:
 observability:
   enable_tracing: true  # 是否启用 tracing
   log_state_transitions: true  # 是否记录 State 变更
-  # [已弃用] save_checkpoints 不再生效，checkpoint 统一由 config.yaml 的
-  # langgraph_persistence.checkpoint.enabled 控制
-  save_checkpoints: false  # 已弃用，保留仅为向后兼容
