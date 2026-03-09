@@ -29,7 +29,8 @@ router:
 # ------------------------------------------------------------------------------
 planner:
   # LLM 配置（引用全局 llm_profiles 注册表）
-  llm_profile: qwen_max
+  # llm_profile: qwen3_max
+  llm_profile: qwen3_5_plus
   temperature: 0  # 确定性输出
 
   # 问题拆分配置

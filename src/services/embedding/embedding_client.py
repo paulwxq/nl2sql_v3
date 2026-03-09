@@ -10,23 +10,20 @@ from src.services.config_loader import get_config
 
 
 class EmbeddingClient:
-    """Qwen Embedding 客户端"""
+    """Embedding 客户端（通过 embedding_profiles + llm_providers 配置）"""
 
     def __init__(self, config: Optional[dict] = None):
         """
         初始化 Embedding 客户端
 
         Args:
-            config: Embedding 配置，如果为 None 则从全局配置加载
+            config: Embedding profile 配置字典。为 None 时从全局配置
+                    的 ``embedding_profiles`` 中读取 active profile。
         """
         if config is None:
-            main_config = get_config()
-            config = main_config["embedding"]
+            config = self._load_profile_config()
 
         self.config = config
-
-        # 设置 API Key
-        dashscope.api_key = self.config["api_key"]
 
         # 模型配置
         self.model = self.config.get("model", "text-embedding-v3")
@@ -36,6 +33,55 @@ class EmbeddingClient:
         self.batch_size = self.config.get("batch_size", 20)
 
         print(f"✅ Embedding 客户端已初始化: model={self.model}, dimensions={self.dimensions}")
+
+    @staticmethod
+    def _load_profile_config() -> dict:
+        """从 embedding_profiles + llm_providers 解析出完整配置。"""
+        main_config = get_config()
+
+        profiles = main_config.get("embedding_profiles")
+        if not profiles:
+            raise ValueError(
+                "全局配置缺少 embedding_profiles 段，请检查 config.yaml"
+            )
+
+        active_name = profiles.get("active")
+        if not active_name:
+            raise ValueError(
+                "embedding_profiles 缺少 'active' 字段，"
+                "请指定当前使用的 Embedding profile"
+            )
+        if active_name not in profiles:
+            raise ValueError(
+                f"embedding_profiles.active 引用了不存在的 profile "
+                f"'{active_name}'，可用的 profile: "
+                f"{[k for k in profiles if k != 'active']}"
+            )
+        profile = dict(profiles[active_name])
+
+        provider_name = profile.get("provider")
+        if not provider_name:
+            raise ValueError(
+                f"embedding profile '{active_name}' 缺少 'provider' 字段"
+            )
+
+        providers = main_config.get("llm_providers")
+        if not providers or provider_name not in providers:
+            raise ValueError(
+                f"embedding profile '{active_name}' 引用了不存在的 "
+                f"provider '{provider_name}'，请检查 llm_providers 配置"
+            )
+        provider_config = providers[provider_name]
+
+        api_key = provider_config.get("api_key")
+        if not api_key:
+            raise ValueError(
+                f"provider '{provider_name}' 缺少 'api_key'，"
+                "请检查 llm_providers 和 .env 配置"
+            )
+
+        dashscope.api_key = api_key
+        return profile
 
     def embed_query(self, text: str) -> List[float]:
         """

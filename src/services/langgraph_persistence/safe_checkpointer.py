@@ -7,10 +7,12 @@
 import logging
 from typing import Any, Iterator, Optional, Sequence, Tuple
 
+from langgraph.checkpoint.base import BaseCheckpointSaver
+
 logger = logging.getLogger(__name__)
 
 
-class SafeCheckpointer:
+class SafeCheckpointer(BaseCheckpointSaver):
     """Fail-open 适配层：捕获异常，失败时记录日志并返回空结果
 
     用法：

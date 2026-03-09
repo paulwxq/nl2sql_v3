@@ -34,7 +34,10 @@
       "Bash(npm show:*)",
       "Bash(ss:*)",
       "Bash(lsof:*)",
-      "Bash(fuser:*)"
+      "Bash(fuser:*)",
+      "Bash(.venv-wsl/bin/pip show:*)",
+      "WebSearch",
+      "WebFetch(domain:help.aliyun.com)"
     ],
     "deny": [],
     "ask": []

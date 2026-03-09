@@ -1,5 +1,6 @@
 """配置加载器 - 加载和解析 YAML 配置文件，支持环境变量替换"""
 
+import logging
 import os
 import re
 from pathlib import Path
@@ -7,6 +8,8 @@ from typing import Any, Dict, Optional
 
 import yaml
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 
 class ConfigLoader:
@@ -52,9 +55,9 @@ class ConfigLoader:
         dotenv_path = project_root / ".env"
         if dotenv_path.exists():
             load_dotenv(dotenv_path)
-            print(f"✅ 已加载环境变量文件: {dotenv_path}")
+            print(f"[OK] 已加载环境变量文件: {dotenv_path}")
         else:
-            print(f"⚠️  未找到 .env 文件: {dotenv_path}")
+            print(f"[WARN] 未找到 .env 文件: {dotenv_path}")
         
         if not self.config_path.exists():
             raise FileNotFoundError(f"配置文件不存在: {self.config_path}")
@@ -97,31 +100,52 @@ class ConfigLoader:
         """
         替换字符串中的环境变量
 
+        当整个字符串就是单个 ${VAR} 且该变量未设置时，返回 None（而非抛异常），
+        将校验责任延迟到真正使用该值的地方（如 llm_factory.get_llm()）。
+        内嵌在更长字符串中的缺失变量会被替换为空字符串并记录 WARNING。
+
         Args:
             text: 原始字符串
 
         Returns:
-            替换后的值（可能是字符串、数字、布尔值等）
+            替换后的值（可能是字符串、数字、布尔值、None）
         """
         # 匹配 ${VAR_NAME} 或 ${VAR_NAME:default}
         pattern = r'\$\{([A-Za-z_][A-Za-z0-9_]*?)(?::([^}]*))?\}'
 
+        # 特殊情况：整个字符串就是一个独立占位符，例如 "api_key: ${MINIMAX_API_KEY}"
+        # 此时直接返回 None，保留类型语义（而非空字符串）
+        sole_match = re.fullmatch(pattern, text.strip())
+        if sole_match:
+            var_name = sole_match.group(1)
+            default_value = sole_match.group(2)
+            value = os.getenv(var_name)
+            if value is None:
+                if default_value is not None:
+                    return self._convert_type(default_value)
+                else:
+                    logger.warning(
+                        "环境变量 '%s' 未设置且无默认值，配置项将为 None。"
+                        "如需使用该功能，请在 .env 文件中配置此变量。",
+                        var_name,
+                    )
+                    return None
+            return self._convert_type(value)
+
+        # 通用情况：占位符内嵌在更长的字符串中（如 base_url、路径拼接等）
         def replacer(match: re.Match) -> str:
             var_name = match.group(1)
-            default_value = match.group(2)  # 可能为 None
-
-            # 从环境变量获取值
+            default_value = match.group(2)
             value = os.getenv(var_name)
-
             if value is None:
                 if default_value is not None:
                     return default_value
                 else:
-                    raise ValueError(
-                        f"环境变量 '{var_name}' 未设置，且没有提供默认值。"
-                        f"请在 .env 文件中配置或在配置文件中提供默认值。"
+                    logger.warning(
+                        "环境变量 '%s' 未设置且无默认值，内嵌占位符将被替换为空字符串。",
+                        var_name,
                     )
-
+                    return ""
             return value
 
         result = re.sub(pattern, replacer, text)
