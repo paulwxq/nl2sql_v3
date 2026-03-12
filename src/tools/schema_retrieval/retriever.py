@@ -178,6 +178,13 @@ class SchemaRetriever:
             f"桥接表: {len(candidate_set['candidate_bridge_tables'])} 个, "
             f"维度值命中: {len(candidate_set['dim_value_hits'])} 个"
         )
+        # column dimension backfill 汇总日志
+        column_dim_summary = candidate_set.get("column_dim_summary", {})
+        if column_dim_summary:
+            qlog.debug(
+                f"column dimension backfill 补充 {len(column_dim_summary)} 个父表: "
+                f"{list(column_dim_summary.keys())}"
+            )
         # 列出详细名单
         if candidate_set.get("candidate_fact_tables"):
             qlog.debug(f"事实表列表: {candidate_set['candidate_fact_tables']}")
@@ -242,7 +249,12 @@ class SchemaRetriever:
         )
         table_cards = self.vector_client.fetch_table_cards(all_table_ids)
 
-        table_names = self._collect_table_names(semantic_tables, semantic_columns)
+        # 统计口径：总去重后的候选表数量（含所有来源）
+        all_candidate_count = len(dict.fromkeys(
+            candidate_set["candidate_fact_tables"] +
+            candidate_set["candidate_dim_tables"] +
+            candidate_set["candidate_bridge_tables"]
+        ))
 
         # 6) 检索历史相似 SQL（带异常降级）
         qlog.info("步骤6: 检索历史相似 SQL")
@@ -286,8 +298,8 @@ class SchemaRetriever:
             # 可选：元数据（调试/统计用，后续如需可在统一瘦身口移除）
             "metadata": {
                 "retrieval_time": retrieval_time,
-                "table_count": len(table_names),
-                "column_count": len(semantic_columns),
+                "table_count": all_candidate_count,
+                "column_count": len(semantic_columns) + candidate_set.get("column_dim_hit_count", 0),
                 "join_plan_count": len(join_plans),
                 "dim_match_count": len(candidate_set["dim_value_hits"]),
                 # ✅ 候选表列表（调试用）
@@ -370,6 +382,7 @@ class SchemaRetriever:
         parse_result: Optional[Dict[str, Any]],
     ) -> Dict[str, Any]:
         """构建 CandidateSet，区分事实表/维度表/桥接表并附加维度值命中"""
+        qlog = with_query_id(logger, "")
 
         # 1) 维度值检索
         dim_value_hits = self._retrieve_dim_value_hits(parse_result)
@@ -388,26 +401,46 @@ class SchemaRetriever:
                 dim_tables_from_values.append(table_id)
                 seen_dim_from_values.add(table_id)
 
-        # 3) 通过列命中收集父表（三分类）
-        fact_from_columns: List[str] = []
-        dim_from_columns: List[str] = []
-        bridge_from_columns: List[str] = []  # 桥接表
-
-        # 仅使用表级查询结果获取分类（object_type='table'）
+        # ── 提前初始化（原在步骤 4，前移以支持步骤 3 写入相似度） ──
         table_category_map = {
             t.get("object_id"): (t.get("table_category") or t.get("category") or "")
             for t in semantic_tables
             if t.get("object_id")
         }
+        table_similarities: Dict[str, float] = {}
+        table_categories: Dict[str, str] = {}
 
-        for col in semantic_columns:
+        # 2.5) 【新增】通过 column 维度文本检索补充候选列命中
+        column_dim_hits = self._retrieve_column_dimension_hits(parse_result)
+
+        # 2.6) 【新增】补全 column_dim_hits 父表的 table_category
+        #   Milvus 中 object_type="column" 的 table_category 为空，需通过父表 ID 查询
+        if column_dim_hits:
+            column_parent_ids = list({
+                col.get("parent_id") for col in column_dim_hits if col.get("parent_id")
+            })
+            missing_parents = [pid for pid in column_parent_ids if pid not in table_category_map]
+            if missing_parents:
+                extra_categories = self.vector_client.fetch_table_categories(missing_parents)
+                table_category_map.update(extra_categories)
+                table_categories.update(extra_categories)
+
+        # 3) 通过列命中收集父表（三分类）—— 合并 semantic_columns + column_dim_hits
+        fact_from_columns: List[str] = []
+        dim_from_columns: List[str] = []
+        bridge_from_columns: List[str] = []
+
+        all_column_hits = list(semantic_columns) + list(column_dim_hits)
+
+        # column_dim_summary: 仅收集 column_dim_hits 来源的汇总信息（日志用，不进入 schema_context）
+        column_dim_summary: Dict[str, Dict] = {}
+
+        for col in all_column_hits:
             parent_id = col.get("parent_id")
             if not parent_id:
                 continue
-            # 读取原始 table_category 值（仅从表级别数据获取）
-            category = table_category_map.get(parent_id, "")
 
-            # 归类逻辑（通过配置映射）
+            category = table_category_map.get(parent_id, "")
             category_group = self._classify_table_category(category)
 
             if category_group == "fact":
@@ -417,16 +450,38 @@ class SchemaRetriever:
                 if parent_id not in bridge_from_columns:
                     bridge_from_columns.append(parent_id)
             else:
-                # 默认归为维度表
                 if parent_id not in dim_from_columns:
                     dim_from_columns.append(parent_id)
 
-        # 4) 语义检索结果分类（三分类）
+            # 写入相似度（取 max，修复既有问题：列命中父表此前从未写入 table_similarities）
+            similarity = col.get("similarity")
+            if similarity is not None:
+                existing = table_similarities.get(parent_id, 0.0)
+                table_similarities[parent_id] = max(existing, float(similarity))
+
+            # 收集 column_dim_hits 来源的汇总（用于日志）
+            if col.get("source_dimension_text") is not None:
+                if parent_id not in column_dim_summary:
+                    column_dim_summary[parent_id] = {
+                        "best_similarity": 0.0,
+                        "raw_category": category,
+                        "category_group": category_group,
+                        "source_texts": [],
+                    }
+                entry = column_dim_summary[parent_id]
+                entry["best_similarity"] = max(entry["best_similarity"], float(similarity or 0))
+                entry["category_group"] = category_group
+                src = col.get("source_dimension_text", "")
+                if src and src not in entry["source_texts"]:
+                    entry["source_texts"].append(src)
+
+        if column_dim_summary:
+            qlog.debug(f"column dimension 补充候选表: {column_dim_summary}")
+
+        # 4) 语义检索结果分类（三分类）—— 表级检索按信号优先级覆盖步骤 3 的列级分数
         semantic_fact_tables: List[str] = []
         semantic_dim_tables: List[str] = []
-        semantic_bridge_tables: List[str] = []  # 桥接表
-        table_similarities: Dict[str, float] = {}
-        table_categories: Dict[str, str] = {}  # 保存原始类型
+        semantic_bridge_tables: List[str] = []
 
         for table in semantic_tables:
             table_id = table.get("object_id")
@@ -434,15 +489,13 @@ class SchemaRetriever:
                 continue
             similarity = table.get("similarity")
             if similarity is not None:
+                # 表级直接检索，信号优先级高于列级间接推导，直接覆盖
                 table_similarities[table_id] = float(similarity)
 
-            # 读取并保存原始 table_category 值
-            # 注意：semantic_tables 来自 search_semantic_tables()，已使用 object_type='table' 条件
             category = table.get("table_category") or table.get("category") or ""
             if category:
                 table_categories[table_id] = category
 
-            # 归类逻辑
             category_group = self._classify_table_category(category)
 
             if category_group == "fact":
@@ -460,26 +513,27 @@ class SchemaRetriever:
         candidate_dim_tables = list(
             dict.fromkeys(dim_tables_from_values + dim_from_columns + semantic_dim_tables)
         )
-        candidate_bridge_tables = list(dict.fromkeys(semantic_bridge_tables + bridge_from_columns))  # 桥接表
+        candidate_bridge_tables = list(dict.fromkeys(semantic_bridge_tables + bridge_from_columns))
 
         # 6) 补全缺失的表类型信息（用于提示词展示）
         all_candidate_tables = list(dict.fromkeys(
             candidate_fact_tables + candidate_dim_tables + candidate_bridge_tables
         ))
         missing_tables = [t for t in all_candidate_tables if t not in table_categories]
-        
+
         if missing_tables:
-            # 批量查询缺失的表类型（原始 table_category 值）
             missing_categories = self.vector_client.fetch_table_categories(missing_tables)
             table_categories.update(missing_categories)
 
         return {
             "candidate_fact_tables": candidate_fact_tables,
             "candidate_dim_tables": candidate_dim_tables,
-            "candidate_bridge_tables": candidate_bridge_tables,  # 桥接表
+            "candidate_bridge_tables": candidate_bridge_tables,
             "table_similarities": table_similarities,
-            "table_categories": table_categories,  # 原始类型（现在包含所有候选表）
+            "table_categories": table_categories,
             "dim_value_hits": dim_value_hits,
+            "column_dim_summary": column_dim_summary,  # 仅日志用，不进入 schema_context
+            "column_dim_hit_count": len(column_dim_hits),  # 统计用
         }
 
     def _retrieve_join_plans(
@@ -747,6 +801,65 @@ class SchemaRetriever:
                 edges_map[target] = all_edges
                 
         return edges_map
+
+    def _retrieve_column_dimension_hits(
+        self,
+        parse_result: Optional[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """根据 role='column' 维度文本检索匹配列，补充候选表。
+
+        对 parse_result 中 role='column' 的维度（如"城市"），生成 embedding
+        并在 table_schema_embeddings 中搜索 object_type='column'，返回命中列
+        及其父表信息。
+
+        Returns:
+            命中列列表，每个元素包含 object_id, parent_id, similarity,
+            table_category（空，需后续补全）, source_dimension_text。
+        """
+        qlog = with_query_id(logger, "")
+
+        if not parse_result:
+            return []
+
+        dimensions = parse_result.get("dimensions") or []
+        if not dimensions:
+            return []
+
+        # 1) 筛选 role="column" 的条目，按 text 去重
+        seen_texts = set()
+        column_dimensions = []
+        for dim in dimensions:
+            if dim.get("role") != "column":
+                continue
+            text = (dim.get("text") or "").strip()
+            if not text or text in seen_texts:
+                continue
+            seen_texts.add(text)
+            column_dimensions.append(text)
+
+        if not column_dimensions:
+            return []
+
+        qlog.debug(f"column dimension 检索: {column_dimensions}")
+
+        # 2) 逐个检索
+        all_hits: List[Dict[str, Any]] = []
+        for text in column_dimensions:
+            embedding = self.embedding_client.embed_query(text)
+            matches = self.vector_client.search_columns(
+                embedding=embedding,
+                top_k=self.topk_columns,
+                similarity_threshold=self.similarity_threshold,
+            )
+            qlog.debug(
+                f"column dimension '{text}' 命中 {len(matches)} 列: "
+                f"{[m['object_id'] for m in matches]}"
+            )
+            for m in matches:
+                m["source_dimension_text"] = text
+            all_hits.extend(matches)
+
+        return all_hits
 
     def _retrieve_dim_value_hits(
         self,
