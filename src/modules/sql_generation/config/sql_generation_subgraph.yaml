@@ -35,7 +35,7 @@ schema_retrieval:
 
   # 维度值检索配置
   dim_index_topk: 3                  # 维度值检索 Top-K（system.dim_value_index）
-  dim_value_min_score: 0.4           # 维度值匹配最小分数
+  dim_value_min_score: 0.75          # 维度值匹配最小分数
 
   # 历史 SQL 检索配置
   sql_embedding_top_k: 3             # 历史 SQL 相似案例数量（system.sql_embedding）
