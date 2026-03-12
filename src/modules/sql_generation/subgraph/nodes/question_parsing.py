@@ -10,7 +10,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.modules.sql_generation.subgraph.state import SQLGenerationState
 from src.services.config_loader import load_subgraph_config
-from src.services.llm_factory import extract_overrides, get_llm
+from src.services.llm_factory import extract_llm_content, extract_overrides, get_llm
 from src.utils.logger import get_module_logger, with_query_id
 
 
@@ -131,7 +131,7 @@ Follow these rules strictly:
             ]
         )
 
-        raw_content = (response.content or "").strip()
+        raw_content = extract_llm_content(response)
         if not raw_content:
             raise ValueError("LLM 返回空响应")
 

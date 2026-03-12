@@ -7,7 +7,7 @@ import time
 
 from src.modules.sql_generation.subgraph.state import SQLGenerationState
 from src.services.config_loader import load_subgraph_config
-from src.services.llm_factory import extract_overrides, get_llm
+from src.services.llm_factory import extract_llm_content, extract_overrides, get_llm
 from src.tools.schema_retrieval.join_planner import format_join_plan_for_prompt
 from src.tools.schema_retrieval.value_matcher import (
     build_optimized_filters,
@@ -104,8 +104,8 @@ class SQLGenerationAgent:
                 logger.debug(response.content)
                 logger.debug("=" * 80)
 
-                # 清理 SQL（去除 markdown 标记）
-                sql = (response.content or "").strip()
+                # 清理 SQL（去除 markdown 标记及 thinking 标签）
+                sql = extract_llm_content(response)
                 sql = sql.replace("```sql", "").replace("```", "").strip()
 
                 logger.debug(f"清理后的 SQL: {sql}")

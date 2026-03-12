@@ -14,7 +14,7 @@ from typing import Any, Dict, List
 
 from src.modules.nl2sql_father.state import NL2SQLFatherState, SubQueryInfo
 from src.services.config_loader import load_config
-from src.services.llm_factory import extract_overrides, get_llm
+from src.services.llm_factory import extract_llm_content, extract_overrides, get_llm
 from src.utils.logger import get_module_logger, with_query_id
 
 logger = get_module_logger("planner")
@@ -256,7 +256,7 @@ def planner_node(state: NL2SQLFatherState) -> Dict[str, Any]:
         llm = llm_meta.llm
 
         response = llm.invoke(prompt)
-        content = response.content.strip()
+        content = extract_llm_content(response)
 
         # 解析 JSON
         try:

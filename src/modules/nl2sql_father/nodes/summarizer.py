@@ -10,7 +10,7 @@ from typing import Any, Dict, List
 
 from src.modules.nl2sql_father.state import NL2SQLFatherState
 from src.services.config_loader import load_config
-from src.services.llm_factory import extract_overrides, get_llm
+from src.services.llm_factory import extract_llm_content, extract_overrides, get_llm
 from src.utils.logger import get_module_logger, with_query_id
 
 logger = get_module_logger("summarizer")
@@ -183,7 +183,7 @@ def summarizer_node(state: NL2SQLFatherState) -> Dict[str, Any]:
             query_logger.debug("=" * 80)
 
             response = llm.invoke(prompt)
-            summary = response.content.strip()
+            summary = extract_llm_content(response)
             query_logger.info("LLM 生成总结成功")
         except Exception as e:
             # LLM失败时，使用简单模板

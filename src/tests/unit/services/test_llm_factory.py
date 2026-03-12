@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 from src.services.llm_factory import (
     LLMWithMeta,
     _build_params,
+    extract_llm_content,
     extract_overrides,
     get_llm,
 )
@@ -1127,3 +1128,112 @@ class TestExtractOverrides:
     def test_no_matching_keys(self):
         config = {"llm_profile": "qwen_turbo", "log_decision": True}
         assert extract_overrides(config) == {}
+
+
+# ---------------------------------------------------------------------------
+# extract_llm_content 测试
+# ---------------------------------------------------------------------------
+
+class TestExtractLlmContent:
+    """extract_llm_content 从 LLM 响应中提取干净文本。
+
+    测试覆盖：
+    - 无 think 标签时透传（不启用 thinking 的常规场景）
+    - 剥离单个 <think>...</think> 块
+    - 剥离多个 think 块
+    - 大小写不敏感（<THINK>、<Think> 等）
+    - think 块跨多行
+    - response.content 为 None / 空字符串
+    - think 块后有有效内容
+    - additional_kwargs 中包含 reasoning_content 时不影响 content 提取
+    """
+
+    def _mock_response(self, content):
+        """构造一个只含 content 字段的模拟 LLM 响应对象。"""
+        mock = MagicMock()
+        mock.content = content
+        return mock
+
+    def test_plain_content_unchanged(self):
+        """无 think 标签时返回原始内容（不启用 thinking 的常规场景）"""
+        response = self._mock_response("SELECT * FROM orders WHERE date = '2024-01'")
+        assert extract_llm_content(response) == "SELECT * FROM orders WHERE date = '2024-01'"
+
+    def test_json_content_unchanged(self):
+        """JSON 内容无 think 标签时原样返回"""
+        content = '{"rewritten_query": "2024年1月订单", "parse_result": {}}'
+        response = self._mock_response(content)
+        assert extract_llm_content(response) == content
+
+    def test_strips_single_think_block(self):
+        """剥离单个 <think>...</think> 块，保留后续内容"""
+        content = "<think>这是推理过程，用户想查询订单。</think>\nSELECT * FROM orders"
+        response = self._mock_response(content)
+        assert extract_llm_content(response) == "SELECT * FROM orders"
+
+    def test_strips_multiline_think_block(self):
+        """剥离跨多行的 think 块"""
+        content = (
+            "<think>\n"
+            "第一步：分析用户意图\n"
+            "第二步：确定表结构\n"
+            "</think>\n"
+            '{"rewritten_query": "2024年销售额"}'
+        )
+        response = self._mock_response(content)
+        assert extract_llm_content(response) == '{"rewritten_query": "2024年销售额"}'
+
+    def test_strips_multiple_think_blocks(self):
+        """剥离多个 think 块"""
+        content = "<think>第一段推理</think>\n中间内容\n<think>第二段推理</think>\n最终答案"
+        response = self._mock_response(content)
+        result = extract_llm_content(response)
+        assert "中间内容" in result
+        assert "最终答案" in result
+        assert "<think>" not in result
+        assert "第一段推理" not in result
+        assert "第二段推理" not in result
+
+    def test_case_insensitive_think_tag(self):
+        """think 标签大小写不敏感（如 <THINK>、<Think>）"""
+        response_upper = self._mock_response("<THINK>推理内容</THINK>\nsimple")
+        assert extract_llm_content(response_upper) == "simple"
+
+        response_mixed = self._mock_response("<Think>推理内容</Think>\ncomplex")
+        assert extract_llm_content(response_mixed) == "complex"
+
+    def test_none_content_returns_empty_string(self):
+        """response.content 为 None 时返回空字符串"""
+        response = self._mock_response(None)
+        assert extract_llm_content(response) == ""
+
+    def test_empty_content_returns_empty_string(self):
+        """response.content 为空字符串时返回空字符串"""
+        response = self._mock_response("")
+        assert extract_llm_content(response) == ""
+
+    def test_only_think_block_returns_empty(self):
+        """只有 think 标签、无实际内容时返回空字符串"""
+        response = self._mock_response("<think>只有推理，没有答案</think>")
+        assert extract_llm_content(response) == ""
+
+    def test_whitespace_trimmed(self):
+        """返回值去除首尾空白"""
+        response = self._mock_response("  <think>x</think>  \n  结果内容  \n  ")
+        assert extract_llm_content(response) == "结果内容"
+
+    def test_reasoning_content_in_additional_kwargs_not_leaked(self):
+        """reasoning_content 在 additional_kwargs 中时不影响 content 提取（标准行为验证）"""
+        response = MagicMock()
+        response.content = '{"rewritten_query": "月销售额"}'
+        response.additional_kwargs = {"reasoning_content": "大量推理内容..."}
+        assert extract_llm_content(response) == '{"rewritten_query": "月销售额"}'
+
+    def test_think_block_before_json_parseable(self):
+        """剥离 think 块后，残余内容可直接被 json.loads() 解析"""
+        import json
+        content = '<think>分析：用户查询月销售额</think>\n{"rewritten_query": "月销售额", "parse_result": {}}'
+        response = self._mock_response(content)
+        result = extract_llm_content(response)
+        parsed = json.loads(result)
+        assert parsed["rewritten_query"] == "月销售额"

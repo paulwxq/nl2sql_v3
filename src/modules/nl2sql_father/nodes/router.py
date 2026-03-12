@@ -10,7 +10,7 @@ from typing import Any, Dict
 
 from src.modules.nl2sql_father.state import NL2SQLFatherState
 from src.services.config_loader import load_config
-from src.services.llm_factory import extract_overrides, get_llm
+from src.services.llm_factory import extract_llm_content, extract_overrides, get_llm
 from src.utils.logger import get_module_logger, with_query_id
 
 logger = get_module_logger("router")
@@ -97,7 +97,7 @@ def router_node(state: NL2SQLFatherState) -> Dict[str, Any]:
         llm = llm_meta.llm
 
         response = llm.invoke(prompt)
-        content = response.content.strip().lower()
+        content = extract_llm_content(response).lower()
 
         # 归一化输出（注意：返回字符串 "simple" 或 "complex"，非布尔值）
         if "simple" in content:

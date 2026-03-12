@@ -10,8 +10,9 @@ from typing import Any, Dict, List, Optional
 from src.services.embedding.embedding_client import get_embedding_client
 from src.services.vector_adapter.base import BaseVectorSearchAdapter
 from src.services.vector_db.milvus_client import MilvusClient, _lazy_import_milvus
+from src.utils.logger import get_module_logger
 
-logger = logging.getLogger(__name__)
+logger = get_module_logger("milvus_adapter")
 
 
 class MilvusSearchAdapter(BaseVectorSearchAdapter):
@@ -121,12 +122,15 @@ class MilvusSearchAdapter(BaseVectorSearchAdapter):
         collection = self._get_table_schema_collection()
 
         # Milvus 搜索（不支持 expr 中过滤向量相似度，只能在结果中过滤）
+        search_expr = 'object_type == "table"'
+        search_limit = top_k * 2
+        logger.debug(f"search_tables: collection={collection.name}, expr={search_expr!r}, limit={search_limit}, threshold={similarity_threshold}")
         results = collection.search(
             data=[embedding],
             anns_field="embedding",
             param=self._get_search_params(),
-            limit=top_k * 2,  # 多取一些，后续过滤阈值和 object_type
-            expr='object_type == "table"',
+            limit=search_limit,
+            expr=search_expr,
             output_fields=["object_id", "object_type", "table_category", "time_col_hint"],
         )
 
@@ -169,12 +173,15 @@ class MilvusSearchAdapter(BaseVectorSearchAdapter):
         """
         collection = self._get_table_schema_collection()
 
+        search_expr = 'object_type == "column"'
+        search_limit = top_k * 2
+        logger.debug(f"search_columns: collection={collection.name}, expr={search_expr!r}, limit={search_limit}, threshold={similarity_threshold}")
         results = collection.search(
             data=[embedding],
             anns_field="embedding",
             param=self._get_search_params(),
-            limit=top_k * 2,  # 多取一些，后续过滤阈值和 object_type
-            expr='object_type == "column"',
+            limit=search_limit,
+            expr=search_expr,
             output_fields=["object_id", "object_type", "parent_id", "table_category"],
         )
 
@@ -293,12 +300,14 @@ class MilvusSearchAdapter(BaseVectorSearchAdapter):
 
         # ⚠️ 使用 JSON 序列化避免单引号问题
         expr = f"object_id in {json.dumps(table_names)}"
+        logger.debug(f"fetch_table_cards: collection={collection.name}, expr={expr!r}, table_names={table_names}")
 
         # ⚠️ 查询正确的字段名：object_desc（而非 text_raw）、time_col_hint
         results = collection.query(
             expr=expr,
             output_fields=["object_id", "object_desc", "time_col_hint", "table_category"],
         )
+        logger.debug(f"fetch_table_cards: 返回 {len(results)} 条记录")
 
         cards = {}
         for row in results:
@@ -329,11 +338,13 @@ class MilvusSearchAdapter(BaseVectorSearchAdapter):
 
         # ⚠️ 使用 JSON 序列化避免单引号问题
         expr = f'object_id in {json.dumps(table_names)} and object_type == "table"'
+        logger.debug(f"fetch_table_categories: collection={collection.name}, expr={expr!r}, table_names={table_names}")
 
         results = collection.query(
             expr=expr,
             output_fields=["object_id", "table_category"],
         )
+        logger.debug(f"fetch_table_categories: 返回 {len(results)} 条记录")
 
         categories = {}
         for row in results:

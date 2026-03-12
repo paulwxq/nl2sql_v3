@@ -83,6 +83,7 @@ class Neo4jClient:
 
         try:
             with self.neo4j_manager.get_session() as session:
+                logger.debug(f"APOC Dijkstra CQL: {query.strip()}  参数: base={base_table!r}, target={target_table!r}")
                 result = session.run(query, base=base_table, target=target_table)
                 record = result.single()
 
@@ -127,6 +128,7 @@ class Neo4jClient:
 
         try:
             with self.neo4j_manager.get_session() as session:
+                logger.debug(f"shortestPath CQL: {query.strip()}  参数: base={base_table!r}, target={target_table!r}")
                 result = session.run(query, base=base_table, target=target_table)
                 record = result.single()
 

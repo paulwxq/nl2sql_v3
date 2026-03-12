@@ -1,4 +1,4 @@
-"""LLM 工厂模块 — 根据全局配置的 llm_profiles 创建 LLM 实例
+"""LLM 工厂模块 — 根据全局配置的 llm_profiles 创建 LLM 实例，并提供响应内容提取工具
 
 设计参考：src/services/vector_adapter/factory.py（已有的工厂模式先例）
 
@@ -23,6 +23,7 @@ DeepSeek 特有参数（thinking）
 
 import importlib
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -303,3 +304,26 @@ def _import_class(module_path: str, class_name: str) -> type:
     """动态导入指定模块中的类。"""
     module = importlib.import_module(module_path)
     return getattr(module, class_name)
+
+
+_THINK_TAG_RE = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
+
+
+def extract_llm_content(response) -> str:
+    """从 LLM 响应中提取干净的文本内容。
+
+    兼容两种 thinking 输出情况：
+
+    1. 标准行为（DashScope 原生 / OpenAI 兼容模式均适用）：
+       thinking 推理内容在 ``response.additional_kwargs["reasoning_content"]``，
+       ``response.content`` 已经是干净的最终回答，直接返回。
+
+    2. 边缘情况（部分 LangChain 适配器 bug）：
+       thinking 内容以 ``<think>...</think>`` 标签混入 ``response.content``，
+       此时剥离标签后再返回。
+
+    对不启用 thinking 的场景完全透明：内容中不含 ``<think>`` 标签时，
+    正则不会命中，返回值与直接访问 ``response.content`` 完全一致。
+    """
+    content = (response.content or "").strip()
+    return _THINK_TAG_RE.sub("", content).strip()
