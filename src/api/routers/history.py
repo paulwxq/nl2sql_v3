@@ -24,6 +24,8 @@ def list_sessions(
         list_recent_sessions,
     )
 
+    logger.debug(f"获取会话列表: user_id={user_id}, limit={limit}")
+
     try:
         # 如果没有传 limit，则从配置文件中读取 max_recent_sessions，默认值为 5
         if limit is None:
@@ -50,6 +52,8 @@ def get_turns(
     from src.services.langgraph_persistence.chat_history_reader import (
         get_recent_turns,
     )
+
+    logger.debug(f"获取对话明细: thread_id={thread_id}, limit={limit}")
 
     try:
         turns = get_recent_turns(

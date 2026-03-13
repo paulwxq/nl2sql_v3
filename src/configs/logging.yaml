@@ -12,20 +12,20 @@ handlers:
     formatter: standard
     stream: ext://sys.stdout
   nl2sql_file:
-    class: logging.handlers.RotatingFileHandler
+    class: logging.handlers.TimedRotatingFileHandler
     level: DEBUG
     formatter: standard
-    filename: logs/app/nl2sql.log
-    maxBytes: 10485760  # 10MB
-    backupCount: 10
+    filename: logs/nl2sql.log
+    when: midnight
+    backupCount: 30
     encoding: utf-8
   api_file:
-    class: logging.handlers.RotatingFileHandler
+    class: logging.handlers.TimedRotatingFileHandler
     level: INFO
     formatter: standard
-    filename: logs/app/api.log
-    maxBytes: 10485760  # 10MB
-    backupCount: 10
+    filename: logs/api.log
+    when: midnight
+    backupCount: 30
     encoding: utf-8
 
 loggers:

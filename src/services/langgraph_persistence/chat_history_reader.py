@@ -23,7 +23,7 @@ from src.services.langgraph_persistence.postgres import (
     is_store_enabled,
     _get_persistence_config,
 )
-from src.utils.logger import get_module_logger
+from src.utils.logger import get_module_logger, with_query_id
 
 logger = get_module_logger("persistence.history_reader")
 
@@ -93,6 +93,9 @@ def get_recent_turns(
     namespace = get_store_namespace()
     limit = max(1, int(history_max_turns) * _DEFAULT_FETCH_MULTIPLIER)
 
+    # 如果本次读取明确属于某次请求（有 exclude_query_id），使用带 query_id 前缀的 logger
+    _log = with_query_id(logger, exclude_query_id) if exclude_query_id else logger
+
     def _do_read() -> List[Any]:
         # PostgresStore.search(namespace_prefix, *, limit, offset, filter, query, ...)
         return store.search((namespace, thread_id), limit=limit, offset=0)
@@ -102,14 +105,14 @@ def get_recent_turns(
         future = executor.submit(_do_read)
         items = future.result(timeout=float(timeout_seconds))
     except FuturesTimeoutError:
-        logger.warning(
+        _log.warning(
             "读取对话历史超时（%ss，已跳过）：thread_id=%s",
             timeout_seconds,
             thread_id,
         )
         return []
     except Exception as e:
-        logger.warning("读取对话历史失败（已跳过）：%s", e)
+        _log.warning("读取对话历史失败（已跳过）：thread_id=%s, %s", thread_id, e)
         return []
 
     # 防御性排序：按 updated_at 升序（旧→新）
@@ -159,8 +162,12 @@ def get_recent_turns(
             continue
 
     if len(turns) <= history_max_turns:
-        return turns
-    return turns[-history_max_turns:]
+        result_turns = turns
+    else:
+        result_turns = turns[-history_max_turns:]
+
+    _log.debug("读取对话历史完成: thread_id=%s, 返回 %d 轮", thread_id, len(result_turns))
+    return result_turns
 
 
 def list_recent_sessions(

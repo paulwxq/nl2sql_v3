@@ -17,7 +17,7 @@ from src.services.langgraph_persistence.postgres import (
     get_store_write_timeout,
     is_store_enabled,
 )
-from src.utils.logger import get_module_logger
+from src.utils.logger import get_module_logger, with_query_id
 
 logger = get_module_logger("persistence.history_writer")
 
@@ -94,8 +94,11 @@ def append_turn(
     """
     global _consecutive_timeouts, _disabled_at
 
+    # 在函数入口处创建带 query_id 前缀的局部 logger，覆盖所有分支（含跳过/降级日志）
+    qlog = with_query_id(logger, query_id)
+
     if not is_store_enabled():
-        logger.debug("Store 未启用，跳过对话历史写入")
+        qlog.debug("Store 未启用，跳过对话历史写入")
         return False
 
     # 健康检查：连续超时过多时临时禁用，但有冷却期自动恢复
@@ -106,23 +109,23 @@ def append_turn(
                 elapsed = time.time() - _disabled_at
                 if elapsed >= _COOLDOWN_SECONDS:
                     # 冷却期已过，自动恢复尝试一次
-                    logger.info(f"Store 写入冷却期已过（{elapsed:.1f}s），尝试恢复...")
+                    qlog.info(f"Store 写入冷却期已过（{elapsed:.1f}s），尝试恢复...")
                     _consecutive_timeouts = 0
                     _disabled_at = None
                 else:
-                    logger.debug(
+                    qlog.debug(
                         f"Store 写入已临时禁用（连续超时 {_consecutive_timeouts} 次），"
                         f"剩余冷却 {_COOLDOWN_SECONDS - elapsed:.1f}s"
                     )
                     return False
             else:
                 # 首次达到阈值但未设置禁用时间（不应该发生，防御性处理）
-                logger.debug(f"Store 写入已临时禁用（连续超时 {_consecutive_timeouts} 次）")
+                qlog.debug(f"Store 写入已临时禁用（连续超时 {_consecutive_timeouts} 次）")
                 return False
 
     store = get_postgres_store()
     if store is None:
-        logger.warning("PostgresStore 实例获取失败，跳过对话历史写入")
+        qlog.warning("PostgresStore 实例获取失败，跳过对话历史写入")
         return False
 
     # key 仅使用 query_id（thread_id 已下钻到 namespace/prefix）
@@ -166,7 +169,7 @@ def append_turn(
             _consecutive_timeouts = 0
             _disabled_at = None
         
-        logger.debug(f"对话历史写入成功: key={key}")
+        qlog.debug(f"对话历史写入成功: key={key}")
         return True
 
     except FuturesTimeoutError:
@@ -175,15 +178,15 @@ def append_turn(
             _consecutive_timeouts += 1
             if _consecutive_timeouts >= _MAX_CONSECUTIVE_TIMEOUTS:
                 _disabled_at = time.time()  # 记录禁用时间
-                logger.error(
+                qlog.error(
                     f"对话历史写入连续超时 {_consecutive_timeouts} 次，已临时禁用 {_COOLDOWN_SECONDS}s。"
                     "可能是数据库连接问题，请检查。"
                 )
-        logger.warning(f"对话历史写入超时（{write_timeout}s），已跳过: key={key}")
+        qlog.warning(f"对话历史写入超时（{write_timeout}s），已跳过: key={key}")
         return False
 
     except Exception as e:
-        logger.warning(f"对话历史写入失败（已跳过）: {e}")
+        qlog.warning(f"对话历史写入失败（已跳过）: {e}, key={key}")
         return False
 
 
