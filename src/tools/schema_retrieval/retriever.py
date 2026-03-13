@@ -11,7 +11,7 @@ from src.tools.schema_retrieval.join_planner import build_join_plans
 from src.tools.schema_retrieval.value_matcher import add_source_index_to_matches
 from src.utils.logger import get_module_logger, with_query_id
 
-logger = get_module_logger("schema_retrieval")
+logger = get_module_logger("retrieval")
 
 
 class SchemaRetriever:

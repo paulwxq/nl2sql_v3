@@ -4,10 +4,11 @@
 不继承任何基类，仅提供连接、数据插入/更新等基础功能。
 """
 
-import logging
 from typing import Any, Dict, List, Optional, Tuple
 
-logger = logging.getLogger(__name__)
+from src.utils.logger import get_module_logger
+
+logger = get_module_logger("milvus_client")
 
 
 def _lazy_import_milvus() -> Tuple[Any, ...]:

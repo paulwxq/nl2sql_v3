@@ -25,10 +25,10 @@ from src.modules.sql_generation.subgraph.create_subgraph import (
 )
 from src.utils.logger import setup_logging_from_yaml
 
-# 加载 YAML 日志配置（统一输出到 logs/sql_subgraph.log + 控制台）
+# 加载 YAML 日志配置（统一输出到 logs/app/nl2sql.log + 控制台）
 setup_logging_from_yaml(str(project_root / "src" / "configs" / "logging.yaml"))
 
-# CLI 使用 nl2sql 命名空间的子 logger，日志会聚合到 sql_subgraph.log
+# CLI 使用 nl2sql 命名空间的子 logger，日志会聚合到 logs/app/nl2sql.log
 logger = logging.getLogger("nl2sql.cli")
 
 

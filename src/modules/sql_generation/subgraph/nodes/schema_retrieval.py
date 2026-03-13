@@ -7,7 +7,7 @@ from src.services.config_loader import load_subgraph_config
 from src.tools.schema_retrieval.retriever import SchemaRetriever
 from src.utils.logger import get_module_logger, with_query_id
 
-logger = get_module_logger("schema_retrieval")
+logger = get_module_logger("retrieval")
 
 
 def schema_retrieval_node(state: SQLGenerationState) -> Dict[str, Any]:

@@ -1,6 +1,5 @@
 """配置加载器 - 加载和解析 YAML 配置文件，支持环境变量替换"""
 
-import logging
 import os
 import re
 from pathlib import Path
@@ -9,7 +8,9 @@ from typing import Any, Dict, Optional
 import yaml
 from dotenv import load_dotenv
 
-logger = logging.getLogger(__name__)
+from src.utils.logger import get_module_logger
+
+logger = get_module_logger("config_loader")
 
 
 class ConfigLoader:

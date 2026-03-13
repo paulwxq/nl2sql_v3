@@ -20,7 +20,7 @@ from src.services.config_loader import load_config
 from src.services.db.pg_client import PGClient
 from src.utils.logger import get_module_logger, with_query_id
 
-logger = get_module_logger("sql_execution")
+logger = get_module_logger("execution")
 
 # 配置缓存（模块级别加载一次）
 _sql_exec_config_cache = None

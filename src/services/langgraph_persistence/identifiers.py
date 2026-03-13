@@ -4,11 +4,12 @@
 """
 
 import re
-import logging
 from datetime import datetime, timezone
 from typing import Optional, Tuple
 
-logger = logging.getLogger(__name__)
+from src.utils.logger import get_module_logger
+
+logger = get_module_logger("persistence.identifiers")
 
 # ==============================================================================
 # user_id 相关

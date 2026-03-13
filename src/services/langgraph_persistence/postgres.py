@@ -3,13 +3,13 @@
 提供 checkpointer 和 store 的单例管理、URI 构建、初始化等功能。
 """
 
-import logging
 from typing import Optional
 from urllib.parse import quote, urlencode
 
 from src.services.config_loader import get_config
+from src.utils.logger import get_module_logger
 
-logger = logging.getLogger(__name__)
+logger = get_module_logger("persistence.postgres")
 
 # ==============================================================================
 # 单例缓存

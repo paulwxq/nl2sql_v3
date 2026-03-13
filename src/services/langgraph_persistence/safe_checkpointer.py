@@ -4,12 +4,13 @@
 实现"checkpoint best-effort，不影响主流程返回"的策略。
 """
 
-import logging
 from typing import Any, Iterator, Optional, Sequence, Tuple
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
-logger = logging.getLogger(__name__)
+from src.utils.logger import get_module_logger
+
+logger = get_module_logger("persistence.checkpointer")
 
 
 class SafeCheckpointer(BaseCheckpointSaver):

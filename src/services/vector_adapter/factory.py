@@ -3,15 +3,15 @@
 根据配置动态创建 PgVector 或 Milvus 适配器。
 """
 
-import logging
 from typing import Any, Dict, Optional
 
 from src.services.config_loader import get_config
 from src.services.vector_adapter.base import BaseVectorSearchAdapter
 from src.services.vector_adapter.milvus_adapter import MilvusSearchAdapter
 from src.services.vector_adapter.pgvector_adapter import PgVectorSearchAdapter
+from src.utils.logger import get_module_logger
 
-logger = logging.getLogger(__name__)
+logger = get_module_logger("vector_factory")
 
 
 def create_vector_search_adapter(

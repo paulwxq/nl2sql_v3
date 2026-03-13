@@ -8,7 +8,7 @@ from src.api.schemas.common import BaseResponse
 from src.api.schemas.query import QueryRequest, QueryResponseData
 from src.utils.logger import get_module_logger
 
-logger = get_module_logger("fastapi")
+logger = get_module_logger("api")
 
 router = APIRouter()
 

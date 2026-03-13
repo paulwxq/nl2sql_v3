@@ -30,7 +30,7 @@ from src.modules.nl2sql_father.state import (
 )
 from src.utils.logger import get_module_logger, with_query_id
 
-logger = get_module_logger("nl2sql_father")
+logger = get_module_logger("father")
 
 _father_graph_config_cache: dict | None = None
 

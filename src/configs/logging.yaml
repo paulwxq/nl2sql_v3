@@ -11,36 +11,34 @@ handlers:
     level: INFO
     formatter: standard
     stream: ext://sys.stdout
-  sql_subgraph_file:
+  nl2sql_file:
     class: logging.handlers.RotatingFileHandler
     level: DEBUG
     formatter: standard
-    filename: logs/sql_subgraph.log
-    maxBytes: 5242880  # 5MB
-    backupCount: 5
+    filename: logs/app/nl2sql.log
+    maxBytes: 10485760  # 10MB
+    backupCount: 10
     encoding: utf-8
-  fastapi_file:
+  api_file:
     class: logging.handlers.RotatingFileHandler
     level: INFO
     formatter: standard
-    filename: logs/fastapi.log
-    maxBytes: 5242880  # 5MB
-    backupCount: 5
+    filename: logs/app/api.log
+    maxBytes: 10485760  # 10MB
+    backupCount: 10
     encoding: utf-8
 
 loggers:
   nl2sql:
     level: DEBUG
-    handlers: [console, sql_subgraph_file]
+    handlers: [console, nl2sql_file]
     propagate: false
-  nl2sql.fastapi:
+  nl2sql.api:
     level: INFO
-    handlers: [console, fastapi_file]
+    handlers: [console, api_file]
     propagate: false
 
 # 未特别配置的 logger 默认只走 console（可按需调整）
 root:
   level: WARNING
   handlers: [console]
-
-

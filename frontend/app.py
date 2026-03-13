@@ -4,12 +4,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+import traceback
+
 import pandas as pd
 import requests
 import streamlit as st
 
 from api_client import NL2SQLApiClient
-from logger import streamlit_logger as logger
 
 # ========== 页面配置 ==========
 
@@ -248,14 +249,14 @@ with st.sidebar:
         st.session_state.user_id = new_user_id
         st.session_state.thread_id = None
         st.session_state.messages = []
-        logger.info(f"切换用户: {new_user_id}")
+        print(f"切换用户: {new_user_id}")
         st.rerun()
 
     # 新建对话
     if st.button("+ 新建对话", type="primary", width="stretch"):
         st.session_state.thread_id = None
         st.session_state.messages = []
-        logger.info("新建对话")
+        print("新建对话")
         st.rerun()
 
     st.divider()
@@ -297,11 +298,12 @@ with st.sidebar:
                                     }
                                 )
                             st.session_state.messages = messages
-                            logger.info(
+                            print(
                                 f"加载历史会话: {tid}, {len(turns)} 轮"
                             )
                         except Exception as e:
-                            logger.error(f"加载历史对话失败: {e}")
+                            print(f"加载历史对话失败: {e}")
+                            traceback.print_exc()
                             st.error(f"加载历史对话失败: {e}")
                         st.rerun()
         else:
@@ -309,7 +311,8 @@ with st.sidebar:
     except requests.RequestException:
         st.warning("无法连接后端服务")
     except Exception as e:
-        logger.error(f"获取会话列表失败: {e}")
+        print(f"获取会话列表失败: {e}")
+        traceback.print_exc()
         st.warning(f"获取会话列表失败: {e}")
 
 # ========== 主区域 ==========
@@ -446,7 +449,7 @@ if prompt := st.chat_input("请输入您的数据查询需求..."):
                     }
                 )
 
-                logger.info(
+                print(
                     f"查询完成: query_id={data.get('query_id')}, "
                     f"complexity={data.get('complexity')}"
                 )
@@ -457,11 +460,12 @@ if prompt := st.chat_input("请输入您的数据查询需求..."):
                 st.session_state.messages.append(
                     {"role": "assistant", "content": error_msg}
                 )
-                logger.error("后端服务不可用")
+                print("后端服务不可用")
             except Exception as e:
                 error_msg = f"请求失败: {str(e)}"
                 st.error(error_msg)
                 st.session_state.messages.append(
                     {"role": "assistant", "content": error_msg}
                 )
-                logger.error(f"查询异常: {e}", exc_info=True)
+                print(f"查询异常: {e}")
+                traceback.print_exc()

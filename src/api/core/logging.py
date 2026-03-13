@@ -11,10 +11,10 @@ def init_api_logging() -> logging.Logger:
 
     对标 CLI 入口 nl2sql_father_cli.py 的做法：
     - setup_logging_from_yaml() 初始化全局日志体系
-    - nl2sql.fastapi logger 已在 logging.yaml 中配置
+    - nl2sql.api logger 已在 logging.yaml 中配置
     """
     project_root = Path(__file__).parent.parent.parent.parent
     yaml_path = str(project_root / "src" / "configs" / "logging.yaml")
     setup_logging_from_yaml(yaml_path)
 
-    return logging.getLogger("nl2sql.fastapi")
+    return logging.getLogger("nl2sql.api")

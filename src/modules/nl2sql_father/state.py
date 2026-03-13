@@ -3,11 +3,12 @@
 定义父图的状态类型和辅助函数。
 """
 
-import logging
 import uuid
 from typing import Any, Dict, List, Literal, Optional, TypedDict
 
-logger = logging.getLogger(__name__)
+from src.utils.logger import get_module_logger
+
+logger = get_module_logger("father")
 
 
 class SubQueryInfo(TypedDict):

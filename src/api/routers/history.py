@@ -9,7 +9,7 @@ from src.api.schemas.history import SessionInfo, TurnInfo
 from src.utils.logger import get_module_logger
 from src.services.config_loader import get_config
 
-logger = get_module_logger("fastapi")
+logger = get_module_logger("api")
 
 router = APIRouter()
 

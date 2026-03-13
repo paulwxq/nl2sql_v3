@@ -3,13 +3,13 @@
 封装 PGClient 的向量检索方法，提供统一接口。
 """
 
-import logging
 from typing import Any, Dict, List
 
 from src.services.db.pg_client import PGClient
 from src.services.vector_adapter.base import BaseVectorSearchAdapter
+from src.utils.logger import get_module_logger
 
-logger = logging.getLogger(__name__)
+logger = get_module_logger("pgvector_adapter")
 
 
 class PgVectorSearchAdapter(BaseVectorSearchAdapter):

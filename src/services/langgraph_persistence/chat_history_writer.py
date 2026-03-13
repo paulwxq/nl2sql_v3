@@ -5,7 +5,6 @@
 """
 
 import atexit
-import logging
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
@@ -18,8 +17,9 @@ from src.services.langgraph_persistence.postgres import (
     get_store_write_timeout,
     is_store_enabled,
 )
+from src.utils.logger import get_module_logger
 
-logger = logging.getLogger(__name__)
+logger = get_module_logger("persistence.history_writer")
 
 # 线程池用于超时控制（多 worker 避免单点阻塞）
 # 注意：

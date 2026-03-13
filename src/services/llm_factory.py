@@ -30,8 +30,9 @@ from typing import Any
 from langchain_core.language_models import BaseChatModel
 
 from src.services.config_loader import get_config
+from src.utils.logger import get_module_logger
 
-logger = logging.getLogger(__name__)
+logger = get_module_logger("llm_factory")
 
 _PROVIDER_MAP: dict[str, tuple[str, str]] = {
     "dashscope": ("langchain_community.chat_models", "ChatTongyi"),

@@ -11,7 +11,6 @@
 from __future__ import annotations
 
 import atexit
-import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from datetime import datetime
@@ -24,8 +23,9 @@ from src.services.langgraph_persistence.postgres import (
     is_store_enabled,
     _get_persistence_config,
 )
+from src.utils.logger import get_module_logger
 
-logger = logging.getLogger(__name__)
+logger = get_module_logger("persistence.history_reader")
 
 _DEFAULT_READ_TIMEOUT_SECONDS = 10.0
 _DEFAULT_FETCH_MULTIPLIER = 2

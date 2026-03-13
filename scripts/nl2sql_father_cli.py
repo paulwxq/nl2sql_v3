@@ -30,7 +30,7 @@ sys.path.insert(0, str(project_root))
 from src.modules.nl2sql_father.graph import run_nl2sql_query
 from src.utils.logger import setup_logging_from_yaml
 
-# 加载 YAML 日志配置
+# 加载 YAML 日志配置（统一输出到 logs/app/nl2sql.log + 控制台）
 setup_logging_from_yaml(str(project_root / "src" / "configs" / "logging.yaml"))
 
 # CLI 使用独立的 logger
