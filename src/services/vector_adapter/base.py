@@ -37,7 +37,8 @@ class BaseVectorSearchAdapter(ABC):
 
         Returns:
             匹配结果列表，每条记录包含：
-            - object_id: 表全名（schema.table）
+            - object_id: 原始表标识（通常为 db.schema.table 或 schema.table）
+            - table_name: 业务表名（schema.table）
             - similarity: 相似度分数（0.0 - 1.0）
             - object_type: 固定值 "table"
             - grain_hint: 表的粒度提示（可选，Milvus 返回 None）
@@ -61,6 +62,7 @@ class BaseVectorSearchAdapter(ABC):
         Returns:
             匹配结果列表，每条记录包含：
             - object_id: 列全名（schema.table.column）
+            - table_name: 所属表名（schema.table）
             - similarity: 相似度分数（0.0 - 1.0）
             - object_type: 固定值 "column"
             - grain_hint: 列的粒度提示（可选，Milvus 返回 None）
@@ -110,8 +112,6 @@ class BaseVectorSearchAdapter(ABC):
             - sql: 历史 SQL
             - similarity: 相似度分数（0.0 - 1.0）
 
-        Note:
-            Milvus 适配器暂不支持此功能，返回空列表。
         """
 
     @abstractmethod

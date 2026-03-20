@@ -31,6 +31,7 @@ class TestPgVectorSearchAdapter:
         expected_result = [
             {
                 "object_id": "public.table1",
+                "table_name": "public.table1",
                 "object_type": "table",
                 "similarity": 0.85,
                 "grain_hint": "daily",
@@ -60,6 +61,7 @@ class TestPgVectorSearchAdapter:
             {
                 "object_id": "public.table1.col1",
                 "parent_id": "public.table1",
+                "table_name": "public.table1",
                 "object_type": "column",
                 "similarity": 0.75,
                 "grain_hint": None,

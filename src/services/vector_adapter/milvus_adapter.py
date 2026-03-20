@@ -7,6 +7,7 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
+from src.services.config_loader import get_config
 from src.services.embedding.embedding_client import get_embedding_client
 from src.services.vector_adapter.base import BaseVectorSearchAdapter
 from src.services.vector_db.milvus_client import MilvusClient, _lazy_import_milvus
@@ -77,6 +78,7 @@ class MilvusSearchAdapter(BaseVectorSearchAdapter):
         self._Collection = Collection
         self._collection_table_schema: Optional[Any] = None
         self._collection_dim_value: Optional[Any] = None
+        self._collection_sql_example: Optional[Any] = None
 
         # 获取 Embedding 客户端（用于 search_dim_values）
         self.embedding_client = get_embedding_client()
@@ -101,9 +103,24 @@ class MilvusSearchAdapter(BaseVectorSearchAdapter):
             )
         return self._collection_dim_value
 
+    def _get_sql_example_collection(self) -> Any:
+        """获取 sql_example_embeddings Collection（懒加载）。"""
+        if self._collection_sql_example is None:
+            self._collection_sql_example = self._Collection(
+                "sql_example_embeddings",
+                using=self.milvus_client.alias,
+            )
+        return self._collection_sql_example
+
     def _get_search_params(self) -> Dict[str, Any]:
         """获取 Milvus 搜索参数。"""
         return self.search_params
+
+    def _get_business_db_name(self) -> str:
+        """获取业务数据库名，用于绑定 db_name 过滤条件。"""
+        config = get_config()
+        db_name = config.get("database.database", "")
+        return str(db_name or "")
 
     def search_tables(
         self,
@@ -131,7 +148,7 @@ class MilvusSearchAdapter(BaseVectorSearchAdapter):
             param=self._get_search_params(),
             limit=search_limit,
             expr=search_expr,
-            output_fields=["object_id", "object_type", "table_category", "time_col_hint"],
+            output_fields=["object_id", "object_type", "table_name", "table_category", "time_col_hint"],
         )
 
         matches = []
@@ -149,6 +166,7 @@ class MilvusSearchAdapter(BaseVectorSearchAdapter):
 
             matches.append({
                 "object_id": hit.entity.get("object_id"),
+                "table_name": hit.entity.get("table_name"),
                 "object_type": "table",
                 "similarity": similarity,
                 "grain_hint": None,  # ⚠️ Milvus 无此字段
@@ -182,7 +200,7 @@ class MilvusSearchAdapter(BaseVectorSearchAdapter):
             param=self._get_search_params(),
             limit=search_limit,
             expr=search_expr,
-            output_fields=["object_id", "object_type", "parent_id", "table_category"],
+            output_fields=["object_id", "object_type", "table_name", "table_category"],
         )
 
         matches = []
@@ -199,7 +217,7 @@ class MilvusSearchAdapter(BaseVectorSearchAdapter):
 
             matches.append({
                 "object_id": hit.entity.get("object_id"),
-                "parent_id": hit.entity.get("parent_id"),
+                "table_name": hit.entity.get("table_name"),
                 "object_type": "column",
                 "similarity": similarity,
                 "grain_hint": None,  # ⚠️ Milvus 无此字段
@@ -229,6 +247,8 @@ class MilvusSearchAdapter(BaseVectorSearchAdapter):
 
         # 向量化 query_value
         query_embedding = self.embedding_client.embed_query(query_value)
+        business_db_name = self._get_business_db_name()
+        search_expr = f"db_name == {json.dumps(business_db_name)}" if business_db_name else None
 
         # Milvus 搜索
         # ⚠️ 多取一些数据，后续在内存中过滤阈值
@@ -237,6 +257,7 @@ class MilvusSearchAdapter(BaseVectorSearchAdapter):
             anns_field="embedding",
             param=self._get_search_params(),
             limit=top_k * 2 if min_score > 0.0 else top_k,
+            expr=search_expr,
             output_fields=["table_name", "col_name", "col_value"],
         )
 
@@ -273,12 +294,51 @@ class MilvusSearchAdapter(BaseVectorSearchAdapter):
     ) -> List[Dict[str, Any]]:
         """检索历史相似 SQL。
 
-        Note:
-            Milvus 适配器暂不支持历史 SQL 检索，返回空列表。
-            如需支持，需在 Milvus 中创建对应的 sql_embedding Collection。
+        使用 sql_example_embeddings Collection，通过 db_name 过滤当前业务库。
         """
-        logger.warning("Milvus 适配器暂不支持历史 SQL 检索，返回空列表")
-        return []
+        collection = self._get_sql_example_collection()
+        business_db_name = self._get_business_db_name()
+        search_expr = f"db_name == {json.dumps(business_db_name)}" if business_db_name else None
+
+        results = collection.search(
+            data=[embedding],
+            anns_field="embedding",
+            param=self._get_search_params(),
+            limit=top_k * 2,
+            expr=search_expr,
+            output_fields=["example_id", "question_sql", "domain"],
+        )
+
+        matches = []
+        for hit in results[0]:
+            similarity_raw = float(hit.distance)
+            if similarity_raw < similarity_threshold:
+                continue
+
+            similarity = max(0.0, min(1.0, similarity_raw))
+            question = ""
+            sql_text = ""
+            payload = hit.entity.get("question_sql", "")
+            if payload:
+                try:
+                    parsed = json.loads(payload)
+                    question = parsed.get("question", "") or ""
+                    sql_text = parsed.get("sql", "") or ""
+                except (TypeError, ValueError):
+                    sql_text = str(payload)
+
+            matches.append({
+                "question": question,
+                "sql": sql_text,
+                "similarity": similarity,
+                "example_id": hit.entity.get("example_id", ""),
+                "domain": hit.entity.get("domain", ""),
+            })
+
+            if len(matches) >= top_k:
+                break
+
+        return matches
 
     def fetch_table_cards(
         self,
@@ -299,22 +359,23 @@ class MilvusSearchAdapter(BaseVectorSearchAdapter):
         collection = self._get_table_schema_collection()
 
         # ⚠️ 使用 JSON 序列化避免单引号问题
-        expr = f"object_id in {json.dumps(table_names)}"
+        expr = f'object_type == "table" and table_name in {json.dumps(table_names)}'
         logger.debug(f"fetch_table_cards: collection={collection.name}, expr={expr!r}, table_names={table_names}")
 
         # ⚠️ 查询正确的字段名：object_desc（而非 text_raw）、time_col_hint
         results = collection.query(
             expr=expr,
-            output_fields=["object_id", "object_desc", "time_col_hint", "table_category"],
+            output_fields=["object_id", "table_name", "object_desc", "time_col_hint", "table_category"],
         )
         logger.debug(f"fetch_table_cards: 返回 {len(results)} 条记录")
 
         cards = {}
         for row in results:
-            object_id = row.get("object_id")
-            if object_id:
+            table_name = row.get("table_name")
+            if table_name:
                 # ⚠️ 将 object_desc 映射为 text_raw（保持与 PgVector 接口一致）
-                cards[object_id] = {
+                cards[table_name] = {
+                    "object_id": row.get("object_id"),
                     "text_raw": row.get("object_desc", ""),  # Milvus 字段名是 object_desc
                     "grain_hint": None,  # Milvus 无此字段
                     "time_col_hint": row.get("time_col_hint"),  # Milvus 有此字段（仅 table 类型可能有值）
@@ -337,18 +398,18 @@ class MilvusSearchAdapter(BaseVectorSearchAdapter):
         collection = self._get_table_schema_collection()
 
         # ⚠️ 使用 JSON 序列化避免单引号问题
-        expr = f'object_id in {json.dumps(table_names)} and object_type == "table"'
+        expr = f'table_name in {json.dumps(table_names)} and object_type == "table"'
         logger.debug(f"fetch_table_categories: collection={collection.name}, expr={expr!r}, table_names={table_names}")
 
         results = collection.query(
             expr=expr,
-            output_fields=["object_id", "table_category"],
+            output_fields=["table_name", "table_category"],
         )
         logger.debug(f"fetch_table_categories: 返回 {len(results)} 条记录")
 
         categories = {}
         for row in results:
-            object_id = row.get("object_id")
+            object_id = row.get("table_name")
             category = row.get("table_category", "")
             if object_id and category:  # 只记录非空的类型
                 categories[object_id] = category

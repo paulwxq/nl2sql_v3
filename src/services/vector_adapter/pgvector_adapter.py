@@ -47,6 +47,8 @@ class PgVectorSearchAdapter(BaseVectorSearchAdapter):
         for item in results:
             if "object_type" not in item:
                 item["object_type"] = "table"
+            if "table_name" not in item:
+                item["table_name"] = item.get("object_id")
 
         return results
 
@@ -70,6 +72,8 @@ class PgVectorSearchAdapter(BaseVectorSearchAdapter):
         for item in results:
             if "object_type" not in item:
                 item["object_type"] = "column"
+            if "table_name" not in item:
+                item["table_name"] = item.get("parent_id")
 
         return results
 

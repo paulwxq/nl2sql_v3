@@ -1,7 +1,7 @@
 """Milvus 适配器单元测试
 
 重点测试：
-1. COSINE 距离转换的"先raw过滤、再clamp"原则
+1. COSINE 相似度的"先raw过滤、再clamp"原则
 2. 字段映射正确性（object_desc → text_raw, time_col_hint, grain_hint=None）
 3. 配置验证（清晰失败原则）
 4. JSON 序列化的精确查询
@@ -65,6 +65,22 @@ def mock_embedding_client():
 
 
 @pytest.fixture
+def mock_global_config():
+    """Mock 全局配置，提供业务 db_name。"""
+    with patch("src.services.vector_adapter.milvus_adapter.get_config") as mock:
+        config = Mock()
+
+        def get_value(key_path, default=None):
+            if key_path == "database.database":
+                return "test_db"
+            return default
+
+        config.get.side_effect = get_value
+        mock.return_value = config
+        yield config
+
+
+@pytest.fixture
 def mock_lazy_import():
     """Mock _lazy_import_milvus"""
     with patch("src.services.vector_adapter.milvus_adapter._lazy_import_milvus") as mock:
@@ -116,29 +132,28 @@ class TestMilvusAdapterInitialization:
 
 
 class TestCOSINEDistanceConversion:
-    """COSINE 距离转换测试（核心测试）"""
+    """COSINE 相似度处理测试（核心测试）"""
 
     @pytest.mark.parametrize(
-        "distance,expected_raw,expected_clamped,should_pass_threshold",
+        "similarity,expected_raw,expected_clamped,should_pass_threshold",
         [
-            (0.0, 1.0, 1.0, True),  # 完全相同
-            (0.2, 0.8, 0.8, True),  # 高相似度
+            (0.0, 0.0, 0.0, True),  # 零相似度（边界）
+            (0.2, 0.2, 0.2, True),  # 低相似度
             (0.5, 0.5, 0.5, True),  # 阈值边界
-            (1.0, 0.0, 0.0, True),  # 零相似度（边界情况，允许通过）
-            (1.5, -0.5, 0.0, False),  # 负相似度（应被过滤）
-            (2.0, -1.0, 0.0, False),  # 极端负相似度
+            (1.0, 1.0, 1.0, True),  # 完全相同
+            (-0.2, -0.2, 0.0, False),  # 负相似度（应被过滤）
+            (-1.0, -1.0, 0.0, False),  # 极端负相似度
         ],
     )
     def test_cosine_conversion_logic(
         self,
-        distance,
+        similarity,
         expected_raw,
         expected_clamped,
         should_pass_threshold,
     ):
-        """测试 COSINE 距离转换逻辑（先raw过滤、再clamp）"""
-        # 模拟转换逻辑
-        raw_similarity = 1.0 - distance
+        """测试 COSINE 相似度处理逻辑（先raw过滤、再clamp）"""
+        raw_similarity = similarity
         assert abs(raw_similarity - expected_raw) < 1e-10  # 允许浮点误差
 
         # 验证阈值过滤（使用 raw_similarity）
@@ -159,9 +174,10 @@ class TestCOSINEDistanceConversion:
         # Mock Collection.search() 返回负相似度结果
         mock_collection = Mock()
         mock_hit = Mock()
-        mock_hit.distance = 1.2  # raw_similarity = -0.2
+        mock_hit.distance = -0.2
         mock_hit.entity = {
             "object_id": "public.table1",
+            "table_name": "public.table1",
             "object_type": "table",
             "table_category": "fact",
             "time_col_hint": "created_at",
@@ -193,6 +209,7 @@ class TestFieldMapping:
         mock_collection.query.return_value = [
             {
                 "object_id": "public.table1",
+                "table_name": "public.table1",
                 "object_desc": "表1的描述信息",  # Milvus 字段
                 "time_col_hint": "created_at",
                 "table_category": "fact",
@@ -205,6 +222,7 @@ class TestFieldMapping:
 
         # 验证字段映射
         assert result["public.table1"]["text_raw"] == "表1的描述信息"
+        assert result["public.table1"]["object_id"] == "public.table1"
         assert result["public.table1"]["grain_hint"] is None  # Milvus 无此字段
         assert result["public.table1"]["time_col_hint"] == "created_at"
         assert result["public.table1"]["table_category"] == "fact"
@@ -218,9 +236,10 @@ class TestFieldMapping:
         # Mock Collection.search()
         mock_collection = Mock()
         mock_hit = Mock()
-        mock_hit.distance = 0.2  # similarity = 0.8
+        mock_hit.distance = 0.8
         mock_hit.entity = {
             "object_id": "public.fact_sales",
+            "table_name": "public.fact_sales",
             "object_type": "table",
             "table_category": "fact",
             "time_col_hint": "sale_date",
@@ -235,6 +254,7 @@ class TestFieldMapping:
 
         # 验证 time_col_hint 被正确返回
         assert len(results) == 1
+        assert results[0]["table_name"] == "public.fact_sales"
         assert results[0]["time_col_hint"] == "sale_date"
         assert results[0]["grain_hint"] is None  # Milvus 无此字段
 
@@ -247,10 +267,10 @@ class TestFieldMapping:
         # Mock Collection.search()
         mock_collection = Mock()
         mock_hit = Mock()
-        mock_hit.distance = 0.3  # similarity = 0.7
+        mock_hit.distance = 0.7
         mock_hit.entity = {
             "object_id": "public.table1.col1",
-            "parent_id": "public.table1",
+            "table_name": "public.table1",
             "object_type": "column",
             "table_category": "fact",
         }
@@ -264,10 +284,11 @@ class TestFieldMapping:
 
         # 验证 grain_hint=None
         assert len(results) == 1
+        assert results[0]["table_name"] == "public.table1"
         assert results[0]["grain_hint"] is None
 
     def test_search_dim_values_missing_key_fields(
-        self, valid_config, mock_milvus_client, mock_lazy_import, mock_embedding_client
+        self, valid_config, mock_milvus_client, mock_lazy_import, mock_embedding_client, mock_global_config
     ):
         """测试 search_dim_values() 不返回 key_col/key_value（Milvus 无此字段）"""
         adapter = MilvusSearchAdapter(config=valid_config)
@@ -275,7 +296,7 @@ class TestFieldMapping:
         # Mock Collection.search()
         mock_collection = Mock()
         mock_hit = Mock()
-        mock_hit.distance = 0.15  # similarity = 0.85
+        mock_hit.distance = 0.85
         mock_hit.entity = {
             "table_name": "public.dim_city",
             "col_name": "city_name",
@@ -294,6 +315,7 @@ class TestFieldMapping:
         assert results[0]["dim_table"] == "public.dim_city"
         assert results[0]["dim_col"] == "city_name"
         assert results[0]["matched_text"] == "北京市"
+        assert mock_collection.search.call_args.kwargs["expr"] == 'db_name == "test_db"'
 
 
 class TestJSONSerialization:
@@ -348,21 +370,38 @@ class TestJSONSerialization:
 class TestSearchMethods:
     """搜索方法测试"""
 
-    def test_search_similar_sqls_returns_empty(
-        self, valid_config, mock_milvus_client, mock_lazy_import
+    def test_search_similar_sqls_returns_matches(
+        self, valid_config, mock_milvus_client, mock_lazy_import, mock_global_config
     ):
-        """测试 search_similar_sqls() 返回空列表（暂不支持）"""
+        """测试 search_similar_sqls() 返回解析后的历史 SQL"""
         adapter = MilvusSearchAdapter(config=valid_config)
+        mock_collection = Mock()
+
+        mock_hit = Mock()
+        mock_hit.distance = 0.88
+        mock_hit.entity = {
+            "example_id": "test_db:abc123",
+            "domain": "测试域",
+            "question_sql": (
+                '{"question": "查询昨天销售额", '
+                '"sql": "SELECT sum(amount) FROM public.fact_sales"}'
+            ),
+        }
+        mock_collection.search.return_value = [[mock_hit]]
+        adapter._collection_sql_example = mock_collection
 
         result = adapter.search_similar_sqls(
             embedding=[0.1] * 768, top_k=3, similarity_threshold=0.6
         )
 
-        # 验证返回空列表
-        assert result == []
+        assert len(result) == 1
+        assert result[0]["question"] == "查询昨天销售额"
+        assert result[0]["sql"] == "SELECT sum(amount) FROM public.fact_sales"
+        assert result[0]["similarity"] == 0.88
+        assert mock_collection.search.call_args.kwargs["expr"] == 'db_name == "test_db"'
 
     def test_search_dim_values_with_embedding(
-        self, valid_config, mock_milvus_client, mock_lazy_import, mock_embedding_client
+        self, valid_config, mock_milvus_client, mock_lazy_import, mock_embedding_client, mock_global_config
     ):
         """测试 search_dim_values() 对 query_value 进行向量化"""
         adapter = MilvusSearchAdapter(config=valid_config)
@@ -377,6 +416,7 @@ class TestSearchMethods:
 
         # 验证 embedding_client.embed_query() 被调用
         mock_embedding_client.embed_query.assert_called_once_with("测试值")
+        assert mock_collection.search.call_args.kwargs["expr"] == 'db_name == "test_db"'
 
 
 class TestEdgeCases:
@@ -412,14 +452,14 @@ class TestEdgeCases:
         assert results == []
 
     def test_search_dim_values_with_min_score(
-        self, valid_config, mock_milvus_client, mock_lazy_import, mock_embedding_client
+        self, valid_config, mock_milvus_client, mock_lazy_import, mock_embedding_client, mock_global_config
     ):
         """测试 search_dim_values() 的 min_score 参数过滤低分结果"""
         adapter = MilvusSearchAdapter(config=valid_config)
 
         # Mock 搜索结果（包含高分和低分）
         mock_hit_high = Mock()
-        mock_hit_high.distance = 0.2  # distance=0.2 → raw_similarity=0.8
+        mock_hit_high.distance = 0.8
         mock_hit_high.entity = {
             "table_name": "dim_store",
             "col_name": "store_name",
@@ -427,7 +467,7 @@ class TestEdgeCases:
         }
 
         mock_hit_low = Mock()
-        mock_hit_low.distance = 0.7  # distance=0.7 → raw_similarity=0.3
+        mock_hit_low.distance = 0.3
         mock_hit_low.entity = {
             "table_name": "dim_store",
             "col_name": "store_name",
@@ -446,17 +486,17 @@ class TestEdgeCases:
         # 验证只返回高分结果
         assert len(results) == 1
         assert results[0]["matched_text"] == "京东便利店"
-        assert results[0]["score"] == 0.8  # 0.8 >= 0.5，通过
+        assert results[0]["score"] == 0.8
 
     def test_search_dim_values_default_min_score(
-        self, valid_config, mock_milvus_client, mock_lazy_import, mock_embedding_client
+        self, valid_config, mock_milvus_client, mock_lazy_import, mock_embedding_client, mock_global_config
     ):
         """测试 search_dim_values() 默认 min_score=0.0（不过滤）"""
         adapter = MilvusSearchAdapter(config=valid_config)
 
         # Mock 搜索结果（包含正相似度和负相似度）
         mock_hit_positive = Mock()
-        mock_hit_positive.distance = 0.9  # distance=0.9 → raw_similarity=0.1
+        mock_hit_positive.distance = 0.9
         mock_hit_positive.entity = {
             "table_name": "dim_store",
             "col_name": "store_name",
@@ -464,7 +504,7 @@ class TestEdgeCases:
         }
 
         mock_hit_negative = Mock()
-        mock_hit_negative.distance = 1.2  # distance=1.2 → raw_similarity=-0.2
+        mock_hit_negative.distance = -0.2
         mock_hit_negative.entity = {
             "table_name": "dim_store",
             "col_name": "store_name",
@@ -481,7 +521,7 @@ class TestEdgeCases:
         # 验证只返回正相似度结果
         assert len(results) == 1
         assert results[0]["matched_text"] == "京东"
-        assert abs(results[0]["score"] - 0.1) < 1e-10  # 0.1 >= 0.0，通过（浮点误差容忍）
+        assert abs(results[0]["score"] - 0.9) < 1e-10
 
     def test_similarity_threshold_filtering(
         self, valid_config, mock_milvus_client, mock_lazy_import
@@ -492,18 +532,20 @@ class TestEdgeCases:
         # Mock Collection.search() 返回多个结果
         mock_collection = Mock()
         hit1 = Mock()
-        hit1.distance = 0.1  # similarity = 0.9
+        hit1.distance = 0.9
         hit1.entity = {
             "object_id": "public.table1",
+            "table_name": "public.table1",
             "object_type": "table",
             "table_category": "fact",
             "time_col_hint": "created_at",
         }
 
         hit2 = Mock()
-        hit2.distance = 0.6  # similarity = 0.4
+        hit2.distance = 0.4
         hit2.entity = {
             "object_id": "public.table2",
+            "table_name": "public.table2",
             "object_type": "table",
             "table_category": "dimension",
             "time_col_hint": None,

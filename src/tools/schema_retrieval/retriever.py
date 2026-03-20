@@ -132,7 +132,7 @@ class SchemaRetriever:
         if semantic_tables:
             table_lines = []
             for t in semantic_tables:
-                tid = t.get("object_id")
+                tid = t.get("table_name") or t.get("object_id")
                 cat = (t.get("table_category") or t.get("category") or "").lower()
                 sim = t.get("similarity")
                 grain = t.get("grain_hint")
@@ -157,7 +157,7 @@ class SchemaRetriever:
             col_lines = []
             for c in semantic_columns:
                 cid = c.get("object_id")
-                pid = c.get("parent_id")
+                pid = c.get("table_name") or c.get("parent_id")
                 sim = c.get("similarity")
                 if sim is not None:
                     col_lines.append(f"{cid} (parent={pid}, sim={float(sim):.2f})")
@@ -329,12 +329,15 @@ class SchemaRetriever:
 
         # 从表检索添加
         for t in semantic_tables:
-            table_set.add(t["object_id"])
+            table_name = t.get("table_name") or t.get("object_id")
+            if table_name:
+                table_set.add(table_name)
 
         # 从列检索添加父表
         for c in semantic_columns:
-            if c.get("parent_id"):
-                table_set.add(c["parent_id"])
+            table_name = c.get("table_name") or c.get("parent_id")
+            if table_name:
+                table_set.add(table_name)
 
         return sorted(list(table_set))
 
@@ -403,9 +406,9 @@ class SchemaRetriever:
 
         # ── 提前初始化（原在步骤 4，前移以支持步骤 3 写入相似度） ──
         table_category_map = {
-            t.get("object_id"): (t.get("table_category") or t.get("category") or "")
+            (t.get("table_name") or t.get("object_id")): (t.get("table_category") or t.get("category") or "")
             for t in semantic_tables
-            if t.get("object_id")
+            if (t.get("table_name") or t.get("object_id"))
         }
         table_similarities: Dict[str, float] = {}
         table_categories: Dict[str, str] = {}
@@ -417,7 +420,9 @@ class SchemaRetriever:
         #   Milvus 中 object_type="column" 的 table_category 为空，需通过父表 ID 查询
         if column_dim_hits:
             column_parent_ids = list({
-                col.get("parent_id") for col in column_dim_hits if col.get("parent_id")
+                (col.get("table_name") or col.get("parent_id"))
+                for col in column_dim_hits
+                if (col.get("table_name") or col.get("parent_id"))
             })
             missing_parents = [pid for pid in column_parent_ids if pid not in table_category_map]
             if missing_parents:
@@ -436,7 +441,7 @@ class SchemaRetriever:
         column_dim_summary: Dict[str, Dict] = {}
 
         for col in all_column_hits:
-            parent_id = col.get("parent_id")
+            parent_id = col.get("table_name") or col.get("parent_id")
             if not parent_id:
                 continue
 
@@ -484,7 +489,7 @@ class SchemaRetriever:
         semantic_bridge_tables: List[str] = []
 
         for table in semantic_tables:
-            table_id = table.get("object_id")
+            table_id = table.get("table_name") or table.get("object_id")
             if not table_id:
                 continue
             similarity = table.get("similarity")
@@ -813,7 +818,7 @@ class SchemaRetriever:
         及其父表信息。
 
         Returns:
-            命中列列表，每个元素包含 object_id, parent_id, similarity,
+            命中列列表，每个元素包含 object_id, table_name, similarity,
             table_category（空，需后续补全）, source_dimension_text。
         """
         qlog = with_query_id(logger, "")

@@ -635,27 +635,32 @@ def run_nl2sql_query(
     # 提取结果
     result = extract_final_result(final_state)
 
-    # 写入历史对话（仅写入，失败不影响主流程）
+    # 写入历史对话（仅在成功时写入，失败不进入对话历史）
     if is_store_enabled():
         try:
+            # 只要 execution_results 中有任何一个成功的记录，就认为整体成功（兼容多子查询）
             success = any(
                 isinstance(r, dict) and r.get("success") for r in result.get("execution_results", [])
             )
-            append_turn(
-                thread_id=actual_thread_id,
-                query_id=actual_query_id,
-                user_text=query,
-                assistant_text=result.get("summary") or "",
-                user_id=actual_user_id,
-                metadata={
-                    "complexity": result.get("complexity"),
-                    "path_taken": result.get("path_taken"),
-                    "total_execution_time_ms": total_time_ms,
-                    "sub_query_count": len(result.get("sub_queries", [])),
-                },
-                success=success,
-            )
-            query_logger.debug("历史对话写入成功")
+            
+            if success:
+                append_turn(
+                    thread_id=actual_thread_id,
+                    query_id=actual_query_id,
+                    user_text=query,
+                    assistant_text=result.get("summary") or "",
+                    user_id=actual_user_id,
+                    metadata={
+                        "complexity": result.get("complexity"),
+                        "path_taken": result.get("path_taken"),
+                        "total_execution_time_ms": total_time_ms,
+                        "sub_query_count": len(result.get("sub_queries", [])),
+                    },
+                    success=True, # 明确标记为成功
+                )
+                query_logger.debug("对话历史写入成功")
+            else:
+                query_logger.info("查询未成功执行 SQL，跳过对话历史写入")
         except Exception as e:
             query_logger.warning(f"历史对话写入失败（已跳过）: {e}")
 

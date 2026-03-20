@@ -104,7 +104,7 @@ schema_retrieval:
     params:
       ef: 100                        # HNSW 参数：越大召回越高，延迟越高
 
-  # 注意：当使用 Milvus 时，sql_embedding_top_k 暂不支持检索，系统会自动降级为空结果
+  # 注意：当使用 Milvus 时，sql_embedding_top_k 将作用于 sql_example_embeddings 的历史 SQL 检索
 
 # ------------------------------------------------------------------------------
 # SQL 生成配置

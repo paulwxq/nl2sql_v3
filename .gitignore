@@ -61,3 +61,5 @@ logs/metaweave/
 # MetaWeave local configs
 configs/metaweave/.env
 configs/metaweave/*_local.yaml
+
+tmp/
