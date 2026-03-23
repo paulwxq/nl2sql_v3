@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 from src.modules.nl2sql_father.graph import (
     route_by_complexity,
     route_after_sql_gen,
+    sql_gen_batch_wrapper,
     sql_gen_wrapper,
     reset_father_graph_cache,
 )
@@ -150,7 +151,24 @@ class TestSQLGenWrapper:
             sub_query = base_state["sub_queries"][0]
             assert sub_query["status"] == "completed"
             assert sub_query["validated_sql"] == "SELECT SUM(amount) FROM sales"
+            assert sub_query["rewritten_query"] is None
             assert sub_query["iteration_count"] == 2
+
+    def test_wrapper_persists_rewritten_query(self, base_state):
+        """测试 Fast Path 会回写 rewritten_query"""
+        with patch("src.modules.sql_generation.subgraph.create_subgraph.run_sql_generation_subgraph") as mock_subgraph:
+            mock_subgraph.return_value = {
+                "validated_sql": "SELECT SUM(amount) FROM sales",
+                "rewritten_query": "查询销售额总和",
+                "error": None,
+                "error_type": None,
+                "iteration_count": 2,
+            }
+
+            result = sql_gen_wrapper(base_state)
+
+            assert result["validated_sql"] == "SELECT SUM(amount) FROM sales"
+            assert base_state["sub_queries"][0]["rewritten_query"] == "查询销售额总和"
 
     def test_wrapper_failure(self, base_state):
         """测试 Wrapper 调用失败（子图返回错误）"""
@@ -297,6 +315,68 @@ class TestSQLGenWrapper:
             # 验证 parse_hints 为 None
             call_kwargs = mock_subgraph.call_args[1]
             assert call_kwargs["parse_hints"] is None
+
+
+class TestSQLGenBatchWrapper:
+    """测试 Complex Path 批量 SQL 生成 Wrapper"""
+
+    def test_batch_wrapper_persists_rewritten_query(self):
+        state = {
+            "query_id": "test-batch-001",
+            "user_query": "复合查询",
+            "thread_id": "thread-001",
+            "conversation_history": None,
+            "current_batch_ids": ["test-batch-001_sq2"],
+            "sub_queries": [
+                {
+                    "sub_query_id": "test-batch-001_sq1",
+                    "query": "找出档口数量最多的服务区 ID",
+                    "status": "completed",
+                    "dependencies": [],
+                    "validated_sql": "SELECT 1",
+                    "execution_result": None,
+                    "error": None,
+                    "error_type": None,
+                    "failed_step": None,
+                    "iteration_count": 1,
+                    "dependencies_results": {},
+                },
+                {
+                    "sub_query_id": "test-batch-001_sq2",
+                    "query": "查询服务区 {{sq1.result}} 的编码",
+                    "status": "in_progress",
+                    "dependencies": ["test-batch-001_sq1"],
+                    "validated_sql": None,
+                    "execution_result": None,
+                    "error": None,
+                    "error_type": None,
+                    "failed_step": None,
+                    "iteration_count": 0,
+                    "dependencies_results": {
+                        "test-batch-001_sq1": {
+                            "question": "找出档口数量最多的服务区 ID",
+                            "execution_result": {"columns": ["高速服务区 ID"], "rows": [["abc123"]]},
+                        }
+                    },
+                },
+            ],
+        }
+
+        with patch("src.modules.sql_generation.subgraph.create_subgraph.run_sql_generation_subgraph") as mock_subgraph:
+            mock_subgraph.return_value = {
+                "validated_sql": "SELECT service_no FROM mapper WHERE service_area_id = 'abc123'",
+                "rewritten_query": "查询服务区 abc123 的编码",
+                "error": None,
+                "error_type": None,
+                "iteration_count": 1,
+            }
+
+            result = sql_gen_batch_wrapper(state)
+
+            assert result["sub_queries"][1]["validated_sql"] == (
+                "SELECT service_no FROM mapper WHERE service_area_id = 'abc123'"
+            )
+            assert result["sub_queries"][1]["rewritten_query"] == "查询服务区 abc123 的编码"
 
 
 class TestGraphCompilation:

@@ -74,6 +74,7 @@ class SQLGenerationAgent:
         model_name = self._model_name
 
         # 构建提示词
+        prompt_build_started_at = time.perf_counter()
         prompt = self._build_prompt(
             query=query,
             schema_context=schema_context,
@@ -83,19 +84,48 @@ class SQLGenerationAgent:
             validation_errors=validation_errors,
             conversation_history=conversation_history,
         )
+        prompt_build_elapsed_ms = (time.perf_counter() - prompt_build_started_at) * 1000.0
+        qlog.debug(
+            "SQL Generation prompt 构造完成: chars=%d, elapsed_ms=%.1f",
+            len(prompt),
+            prompt_build_elapsed_ms,
+        )
 
         # 调用 LLM（带固定次数重试与空结果自检）
         last_error_text: Optional[str] = None
         for attempt in range(1, max_attempts + 1):
             # 准备消息
+            message_build_started_at = time.perf_counter()
             messages = [
                 SystemMessage(content="You are an expert PostgreSQL SQL writer. Return valid SQL only."),
                 HumanMessage(content=prompt),
             ]
+            message_build_elapsed_ms = (time.perf_counter() - message_build_started_at) * 1000.0
+            qlog.debug(
+                "SQL Generation messages 构造完成: attempt=%d/%d, message_count=%d, elapsed_ms=%.1f",
+                attempt,
+                max_attempts,
+                len(messages),
+                message_build_elapsed_ms,
+            )
 
             try:
-                logger.debug("调用 LLM 生成 SQL...")
+                qlog.debug(
+                    "SQL Generation 即将调用 LLM: attempt=%d/%d, provider=%s, model=%s",
+                    attempt,
+                    max_attempts,
+                    provider,
+                    model_name,
+                )
+                llm_invoke_started_at = time.perf_counter()
                 response = self.llm.invoke(messages)
+                llm_invoke_elapsed_ms = (time.perf_counter() - llm_invoke_started_at) * 1000.0
+                qlog.debug(
+                    "SQL Generation LLM 调用返回: attempt=%d/%d, elapsed_ms=%.1f",
+                    attempt,
+                    max_attempts,
+                    llm_invoke_elapsed_ms,
+                )
 
                 # DEBUG: 打印 LLM 原始响应
                 logger.debug("=" * 80)

@@ -112,7 +112,7 @@ schema_retrieval:
 sql_generation:
   # LLM 配置（引用全局 llm_profiles 注册表）
   # llm_profile: qwen3_max
-  llm_profile: qwen3_5_plus
+  llm_profile: qwen_plus
   temperature: 0                     # 温度（0=确定性输出）
   max_tokens: 2000                   # 最大 token 数
 

@@ -19,6 +19,7 @@ class SubQueryInfo(TypedDict):
 
     sub_query_id: str  # 子查询ID（格式：{query_id}_sq1）
     query: str  # 子查询文本
+    rewritten_query: Optional[str]  # 解析后的自包含子查询文本
     status: str  # pending | in_progress | completed | failed
     dependencies: List[str]  # 依赖的其他子查询ID列表（Phase 2）
     validated_sql: Optional[str]  # 生成的SQL（验证通过）

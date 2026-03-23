@@ -138,6 +138,7 @@ def extract_output(state: SQLGenerationState) -> SQLGenerationOutput:
         "failed_step": None if has_valid_sql else state.get("failed_step"),
         "iteration_count": state.get("iteration_count", 0),
         "execution_time": state.get("execution_time", 0.0),
+        "rewritten_query": state.get("rewritten_query"),
         "schema_context": state.get("schema_context"),
         "validation_history": state.get("validation_history", []),
     }

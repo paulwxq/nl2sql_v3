@@ -26,6 +26,15 @@ def _mock_get_llm_return(content: str = "", side_effect=None):
 class TestSummarizerNode:
     """测试 Summarizer 节点"""
 
+    @pytest.fixture(autouse=True)
+    def reset_summarizer_cache(self):
+        """每个测试前后重置配置缓存。"""
+        import src.modules.nl2sql_father.nodes.summarizer as summarizer_module
+
+        summarizer_module._summarizer_config_cache = None
+        yield
+        summarizer_module._summarizer_config_cache = None
+
     @pytest.fixture
     def mock_config(self):
         """Mock 配置加载"""
@@ -36,6 +45,7 @@ class TestSummarizerNode:
                     "temperature": 0.3,
                     "max_rows_in_prompt": 10,
                     "use_template": False,
+                    "llm_retry": {"max_attempts": 3, "delays_seconds": [1, 2, 3]},
                 }
             }
             yield mock
@@ -43,9 +53,6 @@ class TestSummarizerNode:
     @pytest.fixture
     def mock_config_template(self):
         """Mock 配置（使用模板）"""
-        import src.modules.nl2sql_father.nodes.summarizer as summarizer_module
-        summarizer_module._summarizer_config_cache = None
-
         with patch("src.modules.nl2sql_father.nodes.summarizer.load_config") as mock:
             mock.return_value = {
                 "summarizer": {
@@ -53,10 +60,10 @@ class TestSummarizerNode:
                     "temperature": 0.3,
                     "max_rows_in_prompt": 10,
                     "use_template": True,
+                    "llm_retry": {"max_attempts": 3, "delays_seconds": [1, 2, 3]},
                 }
             }
             yield mock
-            summarizer_module._summarizer_config_cache = None
 
     # ========== 场景 1：SQL 生成失败 ==========
 
@@ -268,6 +275,150 @@ class TestSummarizerNode:
 
             assert "summary" in result
 
+    def test_scenario_3_multi_sql_prefers_rewritten_query_in_prompt(self, mock_config):
+        """测试多 SQL 场景下优先展示 rewritten_query。"""
+        state = {
+            "user_query": "复合查询",
+            "query_id": "test-013b",
+            "execution_results": [
+                {
+                    "success": True,
+                    "sub_query_id": "test-013b_sq1",
+                    "columns": ["service_area_id"],
+                    "rows": [["abc123"]],
+                },
+                {
+                    "success": True,
+                    "sub_query_id": "test-013b_sq2",
+                    "columns": ["service_no"],
+                    "rows": [["1055"]],
+                },
+            ],
+            "sub_queries": [
+                {
+                    "sub_query_id": "test-013b_sq1",
+                    "query": "找出档口数量最多的服务区 ID",
+                    "rewritten_query": "找出档口数量最多的服务区 ID",
+                },
+                {
+                    "sub_query_id": "test-013b_sq2",
+                    "query": "查询服务区 {{sq1.result}} 的编码",
+                    "rewritten_query": "查询服务区 abc123 的编码",
+                },
+            ],
+        }
+
+        with patch("src.modules.nl2sql_father.nodes.summarizer.get_llm") as mock_get_llm:
+            llm_meta = _mock_get_llm_return("最终回答")
+            mock_get_llm.return_value = llm_meta
+
+            result = summarizer_node(state)
+
+            prompt = llm_meta.llm.invoke.call_args[0][0]
+            assert "【查询服务区 abc123 的编码】" in prompt
+            assert "【查询服务区 {{sq1.result}} 的编码】" not in prompt
+            assert result["summary"] == "最终回答"
+
+    def test_scenario_3_llm_retry_succeeds_on_third_attempt(self, mock_config):
+        """测试可重试异常会在后续 attempt 成功。"""
+        state = {
+            "user_query": "查询",
+            "query_id": "test-012b",
+            "execution_results": [
+                {"success": True, "columns": ["id"], "rows": [[1], [2]]},
+            ],
+        }
+
+        with (
+            patch("src.modules.nl2sql_father.nodes.summarizer.get_llm") as mock_get_llm,
+            patch("src.modules.nl2sql_father.nodes.summarizer.time.sleep") as mock_sleep,
+        ):
+            timeout_error = Exception("ConnectTimeout: temporary timeout")
+            mock_get_llm.return_value = _mock_get_llm_return(
+                side_effect=[timeout_error, timeout_error, MagicMock(content="第三次成功")]
+            )
+
+            result = summarizer_node(state)
+
+            assert result["summary"] == "第三次成功"
+            assert mock_get_llm.return_value.llm.invoke.call_count == 3
+            assert mock_sleep.call_count == 2
+            assert mock_sleep.call_args_list[0].args[0] == 1
+            assert mock_sleep.call_args_list[1].args[0] == 2
+
+    def test_scenario_3_llm_retry_skips_400(self, mock_config):
+        """测试 400 错误不重试，直接模板兜底。"""
+        state = {
+            "user_query": "查询",
+            "query_id": "test-012c",
+            "execution_results": [
+                {"success": True, "columns": ["id"], "rows": [[1], [2]]},
+            ],
+        }
+
+        with (
+            patch("src.modules.nl2sql_father.nodes.summarizer.get_llm") as mock_get_llm,
+            patch("src.modules.nl2sql_father.nodes.summarizer.time.sleep") as mock_sleep,
+        ):
+            mock_get_llm.return_value = _mock_get_llm_return(
+                side_effect=Exception("HTTP 400 Bad Request")
+            )
+
+            result = summarizer_node(state)
+
+            assert "2条" in result["summary"] or "成功" in result["summary"]
+            assert mock_get_llm.return_value.llm.invoke.call_count == 1
+            mock_sleep.assert_not_called()
+
+    def test_scenario_3_llm_retry_skips_401(self, mock_config):
+        """测试 401 错误不重试，直接模板兜底。"""
+        state = {
+            "user_query": "查询",
+            "query_id": "test-012d",
+            "execution_results": [
+                {"success": True, "columns": ["id"], "rows": [[1], [2]]},
+            ],
+        }
+
+        with (
+            patch("src.modules.nl2sql_father.nodes.summarizer.get_llm") as mock_get_llm,
+            patch("src.modules.nl2sql_father.nodes.summarizer.time.sleep") as mock_sleep,
+        ):
+            mock_get_llm.return_value = _mock_get_llm_return(
+                side_effect=Exception("HTTP 401 Unauthorized")
+            )
+
+            result = summarizer_node(state)
+
+            assert "2条" in result["summary"] or "成功" in result["summary"]
+            assert mock_get_llm.return_value.llm.invoke.call_count == 1
+            mock_sleep.assert_not_called()
+
+    def test_scenario_3_llm_retry_exhausted_falls_back_to_template(self, mock_config):
+        """测试可重试异常连续失败后回退模板。"""
+        state = {
+            "user_query": "查询",
+            "query_id": "test-012e",
+            "execution_results": [
+                {"success": True, "columns": ["id"], "rows": [[1], [2]]},
+            ],
+        }
+
+        with (
+            patch("src.modules.nl2sql_father.nodes.summarizer.get_llm") as mock_get_llm,
+            patch("src.modules.nl2sql_father.nodes.summarizer.time.sleep") as mock_sleep,
+        ):
+            timeout_error = Exception("ConnectTimeout: temporary timeout")
+            mock_get_llm.return_value = _mock_get_llm_return(
+                side_effect=[timeout_error, timeout_error, timeout_error]
+            )
+
+            result = summarizer_node(state)
+
+            assert "2条" in result["summary"] or "成功" in result["summary"]
+            assert mock_get_llm.return_value.llm.invoke.call_count == 3
+            assert mock_sleep.call_count == 2
+
     def test_scenario_3_partial_success(self, mock_config_template):
         """场景 3：部分 SQL 成功"""
         state = {
@@ -317,3 +468,25 @@ class TestSummarizerNode:
         from src.modules.nl2sql_father.nodes.summarizer import _build_error_summary
         summary = _build_error_summary("Error", "unknown_type", "测试")
         assert "抱歉" in summary
+
+    def test_format_multi_results_prefers_rewritten_query(self):
+        from src.modules.nl2sql_father.nodes.summarizer import _format_multi_results
+
+        results = [
+            {
+                "sub_query_id": "sq2",
+                "columns": ["service_no"],
+                "rows": [["1055"]],
+            }
+        ]
+        sub_queries = [
+            {
+                "sub_query_id": "sq2",
+                "query": "查询服务区 {{sq1.result}} 的编码",
+                "rewritten_query": "查询服务区 abc123 的编码",
+            }
+        ]
+
+        result = _format_multi_results(results, sub_queries, max_rows=10)
+        assert "【查询服务区 abc123 的编码】" in result
+        assert "{{sq1.result}}" not in result

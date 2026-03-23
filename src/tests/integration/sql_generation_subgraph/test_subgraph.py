@@ -266,6 +266,56 @@ class TestSubgraphExecution:
         )
         assert output["validated_sql"] is not None
 
+    def test_question_parsing_prompt_includes_dependencies(self, mock_all_dependencies):
+        """测试依赖结果会进入 question_parsing 提示词"""
+        dependencies_results = {
+            "sq1": {
+                "question": "查询北京的门店",
+                "execution_result": {
+                    "sub_query_id": "sq1",
+                    "sql": "SELECT store_id FROM public.dim_store WHERE city = '北京'",
+                    "success": True,
+                    "columns": ["store_id", "store_name"],
+                    "rows": [["BJ001", "北京朝阳店"]],
+                    "row_count": 1,
+                    "execution_time_ms": 3.0,
+                    "error": None,
+                },
+            }
+        }
+
+        parser_meta = mock_all_dependencies["parser_get_llm"].return_value
+
+        def _parser_side_effect(messages):
+            user_prompt = messages[1].content
+            assert "Dependency results" in user_prompt
+            assert "store_id" in user_prompt
+            assert "BJ001" in user_prompt
+
+            response = MagicMock()
+            response.content = """{
+                "rewritten_query": "查询门店ID为 BJ001 的订单",
+                "parse_result": {
+                    "keywords": ["门店ID", "订单"],
+                    "time": null,
+                    "metric": {"text": "订单", "is_aggregate_candidate": false},
+                    "dimensions": [{"text": "BJ001", "role": "value", "evidence": "依赖结果"}],
+                    "intent": {"task": "plain_agg", "topn": null},
+                    "signals": []
+                }
+            }"""
+            return response
+
+        parser_meta.llm.invoke.side_effect = _parser_side_effect
+
+        output = run_sql_generation_subgraph(
+            query="查询这些门店的订单",
+            query_id="test-003-deps",
+            user_query="查询北京门店的订单",
+            dependencies_results=dependencies_results,
+        )
+        assert output["validated_sql"] is not None
+
     def test_retry_on_validation_failure(self, mock_all_dependencies):
         validation_results = [
             {"valid": False, "errors": ["表名不存在"], "warnings": [], "layer": "semantic", "explain_plan": None},

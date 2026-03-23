@@ -6,6 +6,7 @@ Summarizer 负责将内部状态转换为用户友好的最终响应：
 - 支持单/多SQL结果的总结（Phase 1: 单SQL，Phase 2: 多SQL）
 """
 
+import time
 from typing import Any, Dict, List
 
 from src.modules.nl2sql_father.state import NL2SQLFatherState
@@ -32,6 +33,47 @@ def _get_summarizer_config() -> Dict[str, Any]:
         full_config = load_config(config_path)
         _summarizer_config_cache = full_config["summarizer"]
     return _summarizer_config_cache
+
+
+def _build_template_summary(success_results: List[Dict[str, Any]]) -> str:
+    """使用简单模板生成总结。"""
+    result_count = sum(len(r.get("rows", [])) for r in success_results)
+    if result_count == 0:
+        return "查询成功，但未找到相关数据。"
+    if result_count == 1:
+        return "查询成功，找到1条记录。"
+    return f"查询成功，共找到{result_count}条记录。"
+
+
+def _is_non_retryable_llm_error(exc: Exception) -> bool:
+    """判断异常是否属于不可重试错误。
+
+    当前策略：
+    - 400 / 401 直接放弃重试
+    - 其余错误交给节点级 retry 处理
+    """
+    msg = str(exc).lower()
+    non_retryable_markers = (
+        " 400",
+        "status_code=400",
+        "bad request",
+        "invalid request",
+        "invalidrequest",
+        " 401",
+        "status_code=401",
+        "authentication",
+        "unauthorized",
+    )
+    return any(marker in msg for marker in non_retryable_markers)
+
+
+def _get_retry_delay(delays_seconds: List[float], attempt_index: int) -> float:
+    """获取当前 attempt 对应的重试等待时间。"""
+    if not delays_seconds:
+        return 0.0
+    if attempt_index < len(delays_seconds):
+        return max(0.0, float(delays_seconds[attempt_index]))
+    return max(0.0, float(delays_seconds[-1]))
 
 
 def summarizer_node(state: NL2SQLFatherState) -> Dict[str, Any]:
@@ -72,6 +114,9 @@ def summarizer_node(state: NL2SQLFatherState) -> Dict[str, Any]:
     config = _get_summarizer_config()
     max_rows_in_prompt = config["max_rows_in_prompt"]
     use_template = config["use_template"]
+    retry_conf = config.get("llm_retry", {})
+    max_attempts = max(1, int(retry_conf.get("max_attempts", 3)))
+    delays_seconds = retry_conf.get("delays_seconds", [1, 2, 3])
     history_block = _format_conversation_history(state.get("conversation_history"))
 
     # ========== 场景1：SQL生成失败（从子图直接跳转过来，跳过了SQL执行） ==========
@@ -135,13 +180,7 @@ def summarizer_node(state: NL2SQLFatherState) -> Dict[str, Any]:
     # 生成总结
     if use_template:
         # 使用模板（不调用LLM）
-        result_count = sum(len(r.get("rows", [])) for r in success_results)
-        if result_count == 0:
-            summary = "查询成功，但未找到相关数据。"
-        elif result_count == 1:
-            summary = "查询成功，找到1条记录。"
-        else:
-            summary = f"查询成功，共找到{result_count}条记录。"
+        summary = _build_template_summary(success_results)
     else:
         # 调用LLM生成自然语言总结（自适应提示词）
         if len(success_results) == 1:
@@ -182,19 +221,45 @@ def summarizer_node(state: NL2SQLFatherState) -> Dict[str, Any]:
             query_logger.debug(prompt)
             query_logger.debug("=" * 80)
 
-            response = llm.invoke(prompt)
-            summary = extract_llm_content(response)
-            query_logger.info("LLM 生成总结成功")
+            summary = None
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    response = llm.invoke(prompt)
+                    summary = extract_llm_content(response)
+                    query_logger.info(f"LLM 生成总结成功（attempt={attempt}）")
+                    break
+                except Exception as e:
+                    if _is_non_retryable_llm_error(e):
+                        query_logger.error(
+                            f"LLM 生成总结失败（不可重试）: {str(e)}，使用模板",
+                            exc_info=True,
+                        )
+                        summary = _build_template_summary(success_results)
+                        break
+
+                    if attempt >= max_attempts:
+                        query_logger.error(
+                            f"LLM 生成总结失败，已重试 {max_attempts} 次: {str(e)}，使用模板",
+                            exc_info=True,
+                        )
+                        summary = _build_template_summary(success_results)
+                        break
+
+                    delay_seconds = _get_retry_delay(delays_seconds, attempt - 1)
+                    query_logger.warning(
+                        "LLM 生成总结失败（attempt=%s/%s）: %s，%s秒后重试",
+                        attempt,
+                        max_attempts,
+                        str(e),
+                        delay_seconds,
+                    )
+                    time.sleep(delay_seconds)
+            if summary is None:
+                summary = _build_template_summary(success_results)
         except Exception as e:
-            # LLM失败时，使用简单模板
-            query_logger.error(f"LLM 生成总结失败: {str(e)}，使用模板", exc_info=True)
-            result_count = sum(len(r.get("rows", [])) for r in success_results)
-            if result_count == 0:
-                summary = "查询成功，但未找到相关数据。"
-            elif result_count == 1:
-                summary = "查询成功，找到1条记录。"
-            else:
-                summary = f"查询成功，共找到{result_count}条记录。"
+            # 节点级保护：理论上不应进入，但保留兜底防止重试逻辑本身异常
+            query_logger.error(f"Summarizer 内部异常: {str(e)}，使用模板", exc_info=True)
+            summary = _build_template_summary(success_results)
 
     query_logger.info("Summarizer 完成响应生成")
     return {
@@ -313,7 +378,10 @@ def _format_multi_results(results: List[Dict], sub_queries: List[Dict], max_rows
 
         # 3. 获取子查询文本（用于标题）
         if sub_query_id and sub_query_id in sub_query_map:
-            query_text = sub_query_map[sub_query_id].get("query", "")
+            query_text = (
+                sub_query_map[sub_query_id].get("rewritten_query")
+                or sub_query_map[sub_query_id].get("query", "")
+            )
             if query_text:
                 title = f"【{query_text}】"
             else:

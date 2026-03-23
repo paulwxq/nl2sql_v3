@@ -126,6 +126,7 @@ def sql_gen_wrapper(state: NL2SQLFatherState) -> Dict[str, Any]:
         if subgraph_output.get("validated_sql"):
             current_sub_query["status"] = "completed"
             current_sub_query["validated_sql"] = subgraph_output["validated_sql"]
+            current_sub_query["rewritten_query"] = subgraph_output.get("rewritten_query")
             current_sub_query["iteration_count"] = subgraph_output.get("iteration_count", 0)
             current_sub_query["error"] = None
             current_sub_query["error_type"] = None
@@ -226,6 +227,7 @@ def sql_gen_batch_wrapper(state: NL2SQLFatherState) -> Dict[str, Any]:
             # 更新子查询状态
             if subgraph_output.get("validated_sql"):
                 sub_query["validated_sql"] = subgraph_output["validated_sql"]
+                sub_query["rewritten_query"] = subgraph_output.get("rewritten_query")
                 sub_query["iteration_count"] = subgraph_output.get("iteration_count", 0)
                 sub_query["error"] = None
                 sub_query["error_type"] = None

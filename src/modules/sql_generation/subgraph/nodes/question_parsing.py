@@ -14,6 +14,14 @@ from src.services.llm_factory import extract_llm_content, extract_overrides, get
 from src.utils.logger import get_module_logger, with_query_id
 
 
+def _truncate_dependency_value(value: Any, max_len: int = 120) -> str:
+    """截断依赖结果中的长文本，避免解析提示词膨胀。"""
+    text = str(value)
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 3] + "..."
+
+
 def _format_conversation_history(
     conversation_history: Optional[list[dict[str, str]]],
 ) -> str:
@@ -28,6 +36,61 @@ def _format_conversation_history(
             continue
         lines.append(f"{i}. Q: {q}")
         lines.append(f"   A: {a}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _format_dependencies_for_parsing(
+    dependencies_results: Optional[Dict[str, Any]],
+    *,
+    max_rows: int = 3,
+    max_cell_len: int = 120,
+) -> str:
+    """将依赖查询结果压缩为适合 question_parsing 的短文本。"""
+    if not dependencies_results:
+        return ""
+
+    lines = ["Dependency results (use them to resolve references/placeholders):"]
+    for dep_id, dep_data in dependencies_results.items():
+        if not isinstance(dep_data, dict):
+            continue
+
+        question = (dep_data.get("question") or f"子查询 {dep_id}").strip()
+        exec_result = dep_data.get("execution_result")
+
+        lines.append(f"- {dep_id}")
+        lines.append(f"  question: {_truncate_dependency_value(question, max_cell_len)}")
+
+        if not isinstance(exec_result, dict):
+            lines.append("  result: unavailable")
+            continue
+
+        columns = exec_result.get("columns") or []
+        rows = exec_result.get("rows") or []
+
+        if columns:
+            formatted_columns = ", ".join(
+                _truncate_dependency_value(col, max_cell_len) for col in columns
+            )
+            lines.append(f"  columns: [{formatted_columns}]")
+
+        if not rows:
+            lines.append("  result: empty")
+            continue
+
+        lines.append("  rows:")
+        for row in rows[:max_rows]:
+            if isinstance(row, (list, tuple)):
+                row_text = ", ".join(
+                    _truncate_dependency_value(cell, max_cell_len) for cell in row
+                )
+            else:
+                row_text = _truncate_dependency_value(row, max_cell_len)
+            lines.append(f"    - [{row_text}]")
+
+        if len(rows) > max_rows:
+            lines.append(f"  ... total_rows={len(rows)}, showing_first={max_rows}")
+
     lines.append("")
     return "\n".join(lines)
 
@@ -47,6 +110,7 @@ class QuestionParsingAgent:
         *,
         current_date: Optional[str] = None,
         conversation_history: Optional[list[dict[str, str]]] = None,
+        dependencies_results: Optional[Dict[str, Any]] = None,
         query_id: Optional[str] = None,
     ) -> Tuple[str, Dict[str, Any]]:
         if not query:
@@ -83,12 +147,17 @@ Follow these rules strictly:
 2. Always emit valid JSON that matches the QueryParseResult schema.
 3. Classify each dimension as either a column name candidate (column) or a literal value (value).
 4. Supported intent.task values: plain_agg, topn, rank, compare_yoy, compare_mom.
+5. If the current question contains references such as “它/这个/这些/上述” or placeholders like {{sq1.result}}, use dependency results first to rewrite it into a self-contained question.
+6. If dependency results include stronger identifiers such as ID/code together with names, prefer keeping ID/code in rewritten_query because they are more precise for downstream retrieval and SQL generation.
+7. If a dependency result is empty, do not invent a fake entity. Preserve uncertainty in the rewritten question instead of hallucinating.
 """
 
         history_text = _format_conversation_history(conversation_history)
+        dependencies_text = _format_dependencies_for_parsing(dependencies_results)
         user_prompt = (
             "Today's date is: {current_date} (Asia/Shanghai timezone)\n\n"
             "{history_text}\n"
+            "{dependencies_text}"
             "Current question: {query}\n\n"
             "Output JSON schema (strict):\n{{\n"
             "  \"rewritten_query\": str,\n"
@@ -108,9 +177,16 @@ Follow these rules strictly:
             "}}\n"
             "Notes:\n"
             "- rewritten_query MUST be a self-contained question in Chinese; if already self-contained, keep it identical.\n"
+            "- If dependency results contain ID/code/name together, prefer ID/code in rewritten_query because they are stronger constraints.\n"
+            "- If dependency results are empty, do not fabricate a concrete entity.\n"
             "- Populate time ONLY when explicitly mentioned; otherwise time MUST be null.\n"
             "- Return JSON only, without any extra explanations."
-        ).format(current_date=current_date, query=query, history_text=history_text)
+        ).format(
+            current_date=current_date,
+            query=query,
+            history_text=history_text,
+            dependencies_text=dependencies_text,
+        )
 
         if query_id:
             qlog = with_query_id(get_module_logger("sql_subgraph"), query_id)
@@ -160,6 +236,7 @@ def question_parsing_node(state: SQLGenerationState) -> Dict[str, Any]:
     query_id = state.get("query_id", "unknown")
     query = state.get("query")
     qlog = with_query_id(get_module_logger("sql_subgraph"), query_id)
+    dependencies_results = state.get("dependencies_results") or {}
 
     # 1. 向后兼容：外部传入 parse_hints 时直接复用
     if state.get("parse_hints"):
@@ -185,16 +262,18 @@ def question_parsing_node(state: SQLGenerationState) -> Dict[str, Any]:
     agent = QuestionParsingAgent(parsing_config)
 
     try:
+        qlog.debug(f"question_parsing 收到 dependencies_results={len(dependencies_results)}")
         qlog.info("开始执行问题解析")
         rewritten_query, parse_result = agent.parse_with_rewrite(
             query=query,
             conversation_history=state.get("conversation_history"),
+            dependencies_results=dependencies_results,
             query_id=query_id,
         )
         qlog.info("问题解析完成")
+        qlog.debug(f"rewritten_query={rewritten_query}")
         
         # 详细记录解析结果
-        import json
         qlog.debug("========== 问题解析结果 ==========")
         qlog.debug(json.dumps(parse_result, ensure_ascii=False, indent=2))
         qlog.debug("====================================")

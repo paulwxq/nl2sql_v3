@@ -6,10 +6,14 @@
 # 整体图调度控制
 # ------------------------------------------------------------------------------
 graph_control:
-  enabled: true                      # 是否启用 NL2SQL 父图
-  total_timeout: 120                 # 父图总超时（秒）
-  fast_path_enabled: true            # 是否启用 Fast Path
-  complex_path_enabled: false        # 是否启用 Complex Path（Phase 2）
+# total_timeout: 120                 # 父图总超时（秒），目前尚未实现。
+
+
+# ------------------------------------------------------------------------------
+# 路由覆盖配置（调试/测试用）
+# ------------------------------------------------------------------------------
+routing:
+  force_complexity: null  # null | simple | complex
 
 
 # ------------------------------------------------------------------------------
@@ -30,7 +34,7 @@ router:
 planner:
   # LLM 配置（引用全局 llm_profiles 注册表）
   # llm_profile: qwen3_max
-  llm_profile: qwen3_5_plus
+  llm_profile: qwen_plus
   temperature: 0  # 确定性输出
 
   # 问题拆分配置
@@ -95,6 +99,9 @@ summarizer:
   max_rows_in_prompt: 20  # 提示词中最多包含多少行数据
   use_template: false  # 是否使用模板（true不调用LLM）
   enable_chart_suggestion: false  # Phase 2: 是否生成图表建议
+  llm_retry:
+    max_attempts: 3
+    delays_seconds: [1, 2, 3]
 
 # ------------------------------------------------------------------------------
 # 对话历史配置（Phase 1 + Phase 2 共享）

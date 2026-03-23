@@ -17,6 +17,7 @@ logger = get_module_logger("router")
 
 # 配置缓存（模块级别加载一次）
 _router_config_cache = None
+_routing_config_cache = None
 
 
 def _get_router_config() -> Dict[str, Any]:
@@ -32,6 +33,16 @@ def _get_router_config() -> Dict[str, Any]:
         full_config = load_config(config_path)
         _router_config_cache = full_config["router"]
     return _router_config_cache
+
+
+def _get_routing_config() -> Dict[str, Any]:
+    """获取路由覆盖配置（带缓存）"""
+    global _routing_config_cache
+    if _routing_config_cache is None:
+        config_path = "src/modules/nl2sql_father/config/nl2sql_father_graph.yaml"
+        full_config = load_config(config_path)
+        _routing_config_cache = full_config.get("routing", {})
+    return _routing_config_cache
 
 
 def router_node(state: NL2SQLFatherState) -> Dict[str, Any]:
@@ -57,6 +68,22 @@ def router_node(state: NL2SQLFatherState) -> Dict[str, Any]:
     # 日志
     query_logger = with_query_id(logger, query_id)
     query_logger.info("Router 开始判定问题复杂度")
+
+    # 路由覆盖（调试/测试用）
+    routing_config = _get_routing_config()
+    force_complexity = routing_config.get("force_complexity")
+    if force_complexity in ("simple", "complex"):
+        query_logger.info(f"Router 使用配置强制复杂度: {force_complexity}")
+        return {
+            "complexity": force_complexity,
+            "router_reason": f"forced_by_config:{force_complexity}",
+            "router_latency_ms": 0.0,
+            "path_taken": "fast" if force_complexity == "simple" else "complex",
+        }
+    if force_complexity is not None:
+        query_logger.warning(
+            f"routing.force_complexity 配置非法: {force_complexity}，将回退到 LLM 判定"
+        )
 
     # 加载配置
     config = _get_router_config()

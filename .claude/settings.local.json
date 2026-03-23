@@ -37,7 +37,16 @@
       "Bash(fuser:*)",
       "Bash(.venv-wsl/bin/pip show:*)",
       "WebSearch",
-      "WebFetch(domain:help.aliyun.com)"
+      "WebFetch(domain:help.aliyun.com)",
+      "WebFetch(domain:github.com)",
+      "mcp__plugin_context7_context7__resolve-library-id",
+      "WebFetch(domain:docs.langchain.com)",
+      "mcp__plugin_context7_context7__query-docs",
+      "WebFetch(domain:www.langchain.com)",
+      "WebFetch(domain:www.marktechpost.com)",
+      "WebFetch(domain:deepwiki.com)",
+      "WebFetch(domain:pypi.org)",
+      "WebFetch(domain:medium.com)"
     ],
     "deny": [],
     "ask": []

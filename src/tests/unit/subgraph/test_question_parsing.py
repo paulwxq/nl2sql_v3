@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 from src.modules.sql_generation.subgraph.nodes.question_parsing import (
     QuestionParsingAgent,
+    _format_dependencies_for_parsing,
     question_parsing_node,
 )
 
@@ -104,6 +105,45 @@ class TestQuestionParsingAgent:
 
         assert result["time"] is None
 
+    def test_parse_with_rewrite_includes_dependencies(self, agent):
+        """测试 parse_with_rewrite 支持依赖结果上下文"""
+        mock_response = MagicMock()
+        mock_response.content = """{
+            "rewritten_query": "查询服务区ID为 BJ001 的订单总额",
+            "parse_result": {
+                "keywords": ["服务区ID", "订单总额"],
+                "time": null,
+                "metric": {"text": "订单总额", "is_aggregate_candidate": true},
+                "dimensions": [{"text": "BJ001", "role": "value", "evidence": "依赖结果"}],
+                "intent": {"task": "plain_agg", "topn": null},
+                "signals": []
+            }
+        }"""
+        agent._llm.invoke = MagicMock(return_value=mock_response)
+
+        dependencies_results = {
+            "sq1": {
+                "question": "查询北京门店",
+                "execution_result": {
+                    "columns": ["store_id", "store_name"],
+                    "rows": [["BJ001", "北京朝阳店"]],
+                },
+            }
+        }
+
+        rewritten_query, parse_result = agent.parse_with_rewrite(
+            "查询这些门店的订单总额",
+            dependencies_results=dependencies_results,
+        )
+
+        assert rewritten_query == "查询服务区ID为 BJ001 的订单总额"
+        assert parse_result["dimensions"][0]["text"] == "BJ001"
+        messages = agent._llm.invoke.call_args.args[0]
+        user_prompt = messages[1].content
+        assert "Dependency results" in user_prompt
+        assert "store_id" in user_prompt
+        assert "BJ001" in user_prompt
+
 
 class TestQuestionParsingNode:
     """测试 question_parsing_node 节点函数"""
@@ -171,6 +211,48 @@ class TestQuestionParsingNode:
             assert result["parse_result"]["keywords"] == ["销售额"]
             assert result["parsing_source"] == "llm"
             assert result["rewritten_query"] == "查询销售额"
+            assert mock_agent_instance.parse_with_rewrite.call_args.kwargs["dependencies_results"] == {}
+
+    def test_internal_parsing_passes_dependencies_results(self, mock_config):
+        """测试内部解析会透传 dependencies_results"""
+        state = {
+            "query_id": "test-002-deps",
+            "query": "查询这些门店的订单总额",
+            "dependencies_results": {
+                "sq1": {
+                    "question": "查询北京门店",
+                    "execution_result": {
+                        "columns": ["store_id"],
+                        "rows": [["BJ001"]],
+                    },
+                }
+            },
+        }
+
+        with patch(
+            "src.modules.sql_generation.subgraph.nodes.question_parsing.QuestionParsingAgent"
+        ) as mock_agent:
+            mock_agent_instance = MagicMock()
+            mock_agent_instance.parse_with_rewrite.return_value = (
+                "查询门店ID为 BJ001 的订单总额",
+                {
+                    "keywords": ["订单总额"],
+                    "time": None,
+                    "metric": {"text": "订单总额"},
+                    "dimensions": [],
+                    "intent": {"task": "plain_agg"},
+                    "signals": [],
+                },
+            )
+            mock_agent.return_value = mock_agent_instance
+
+            result = question_parsing_node(state)
+
+            assert result["rewritten_query"] == "查询门店ID为 BJ001 的订单总额"
+            assert (
+                mock_agent_instance.parse_with_rewrite.call_args.kwargs["dependencies_results"]
+                == state["dependencies_results"]
+            )
 
     def test_internal_parser_disabled(self, mock_config):
         """测试禁用内部解析"""
@@ -240,6 +322,66 @@ class TestQuestionParsingNode:
             assert "error" in result
             assert result["error_type"] == "parsing_failed"
             assert result["rewritten_query"] == state["query"]
+
+
+class TestDependencyFormatter:
+    """测试依赖结果格式化"""
+
+    def test_format_dependencies_empty(self):
+        """测试空依赖返回空字符串"""
+        assert _format_dependencies_for_parsing({}) == ""
+        assert _format_dependencies_for_parsing(None) == ""
+
+    def test_format_dependencies_empty_rows(self):
+        """测试空结果会明确标记为空"""
+        text = _format_dependencies_for_parsing(
+            {
+                "sq1": {
+                    "question": "查询门店",
+                    "execution_result": {
+                        "columns": ["store_id"],
+                        "rows": [],
+                    },
+                }
+            }
+        )
+        assert "result: empty" in text
+
+    def test_format_dependencies_truncates_long_values(self):
+        """测试长文本会被截断"""
+        long_value = "x" * 200
+        text = _format_dependencies_for_parsing(
+            {
+                "sq1": {
+                    "question": long_value,
+                    "execution_result": {
+                        "columns": ["description"],
+                        "rows": [[long_value]],
+                    },
+                }
+            },
+            max_cell_len=20,
+        )
+        assert "..." in text
+
+    def test_format_dependencies_limits_rows(self):
+        """测试最多只保留指定行数"""
+        text = _format_dependencies_for_parsing(
+            {
+                "sq1": {
+                    "question": "查询门店",
+                    "execution_result": {
+                        "columns": ["store_id"],
+                        "rows": [["A"], ["B"], ["C"], ["D"]],
+                    },
+                }
+            },
+            max_rows=2,
+        )
+        assert "    - [A]" in text
+        assert "    - [B]" in text
+        assert "    - [C]" not in text
+        assert "showing_first=2" in text
 
 
 _RETRIEVER_MODULE = "src.tools.schema_retrieval.retriever"
