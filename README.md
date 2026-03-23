@@ -403,9 +403,9 @@ uv run pytest src/tests/unit/ --cov=src --cov-report=term-missing
 - [x] 向量数据库后端可切换（pgvector / Milvus）
 - [x] 基于 PostgreSQL 的对话历史持久化
 - [x] 多层 SQL 验证 + 自动重试
-- [ ] **Phase 2 — Complex Path**：多步依赖 SQL 查询，支持并行执行
+- [x] **Phase 2 — Complex Path**：多步依赖 SQL 查询，支持并行执行
 - [ ] 流式 API 响应
-- [ ] Web 界面（Streamlit）
+- [x] Web 界面（Streamlit）
 - [ ] LangSmith 可观测性集成
 
 ---
